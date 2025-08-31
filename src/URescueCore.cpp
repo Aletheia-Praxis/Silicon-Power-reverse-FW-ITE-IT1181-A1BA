@@ -1,0 +1,340 @@
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "URescueCore.h"
+#include "FileOperations.h"
+#include "ResourceManager.h"
+#include "MemoryManager.h"
+#include "SystemManager.h"
+#include "ErrorHandler.h"
+#include "Utilities.h"
+
+// Global program variables
+static URESCUE_CONTEXT g_urescueContext = {0};
+static BOOL g_bInitialized = FALSE;
+
+// Program initialization function (decompiled from the main function)
+BOOL InitializeURescue()
+{
+    LogMessage("Initializing URescue application");
+    
+    if (g_bInitialized) {
+        LogWarning("URescue already initialized");
+        return TRUE;
+    }
+    
+    // Clearing the context
+    memset(&g_urescueContext, 0, sizeof(URESCUE_CONTEXT));
+    
+    // Getting system information
+    if (!GetDeviceInfo(&g_urescueContext.deviceInfo)) {
+        LogError("Failed to get device information");
+        return FALSE;
+    }
+    
+    // Checking administrator rights
+    g_urescueContext.isAdministrator = IsAdministrator();
+    
+    // Initializing the program state
+    g_urescueContext.applicationState = URESCUE_STATE_INITIALIZED;
+    g_urescueContext.lastError = ERROR_SUCCESS;
+    
+    // Loading settings from the registry
+    LoadSettingsFromRegistry(SETTINGS_REGISTRY_VALUE, 
+                            &g_urescueContext.settings, 
+                            sizeof(URESCUE_SETTINGS));
+    
+    g_bInitialized = TRUE;
+    LogMessage("URescue initialized successfully");
+    return TRUE;
+}
+
+// Program deinitialization function
+void DeinitializeURescue()
+{
+    LogMessage("Deinitializing URescue application");
+    
+    if (!g_bInitialized) {
+        LogWarning("URescue not initialized");
+        return;
+    }
+    
+    // Saving settings to the registry
+    SaveSettingsToRegistry(SETTINGS_REGISTRY_VALUE, 
+                          &g_urescueContext.settings, 
+                          sizeof(URESCUE_SETTINGS));
+    
+    // Releasing resources
+    if (g_urescueContext.pFirmware) {
+        FreeFirmwareMemory(g_urescueContext.pFirmware);
+        g_urescueContext.pFirmware = NULL;
+    }
+    
+    if (g_urescueContext.pBootCode) {
+        FreeFirmwareMemory(g_urescueContext.pBootCode);
+        g_urescueContext.pBootCode = NULL;
+    }
+    
+    if (g_urescueContext.pSDK) {
+        FreeFirmwareMemory(g_urescueContext.pSDK);
+        g_urescueContext.pSDK = NULL;
+    }
+    
+    // Closing the device
+    if (g_urescueContext.hDevice && g_urescueContext.hDevice != INVALID_HANDLE_VALUE) {
+        CloseUSBDevice(g_urescueContext.hDevice);
+        g_urescueContext.hDevice = INVALID_HANDLE_VALUE;
+    }
+    
+    g_urescueContext.applicationState = URESCUE_STATE_UNINITIALIZED;
+    g_bInitialized = FALSE;
+    
+    LogMessage("URescue deinitialized successfully");
+}
+
+// Firmware loading function
+BOOL LoadFirmware(LPCSTR firmwarePath)
+{
+    LogMessage("Loading firmware from: %s", firmwarePath);
+    
+    if (!g_bInitialized) {
+        LogError("URescue not initialized");
+        return FALSE;
+    }
+    
+    // Freeing the previous firmware
+    if (g_urescueContext.pFirmware) {
+        FreeFirmwareMemory(g_urescueContext.pFirmware);
+        g_urescueContext.pFirmware = NULL;
+    }
+    
+    // Loading firmware from file
+    LPVOID pFirmware;
+    DWORD firmwareSize;
+    
+    if (!LoadFirmwareFromFile(firmwarePath, &pFirmware, &firmwareSize)) {
+        LogError("Failed to load firmware from file");
+        return FALSE;
+    }
+    
+    // Allocating memory for the firmware
+    LPVOID pAlignedFirmware = AllocateFirmwareMemory(firmwareSize);
+    if (!pAlignedFirmware) {
+        LogError("Failed to allocate firmware memory");
+        FreeMemory(pFirmware);
+        return FALSE;
+    }
+    
+    // Copying the firmware
+    if (!CopyFirmware(pAlignedFirmware, pFirmware, firmwareSize)) {
+        LogError("Failed to copy firmware");
+        FreeFirmwareMemory(pAlignedFirmware);
+        FreeMemory(pFirmware);
+        return FALSE;
+    }
+    
+    g_urescueContext.pFirmware = pAlignedFirmware;
+    g_urescueContext.firmwareSize = firmwareSize;
+    
+    FreeMemory(pFirmware);
+    
+    LogMessage("Firmware loaded successfully: %lu bytes", firmwareSize);
+    return TRUE;
+}
+
+// Function to load firmware from resources
+BOOL LoadFirmwareFromResources()
+{
+    LogMessage("Loading firmware from resources");
+    
+    if (!g_bInitialized) {
+        LogError("URescue not initialized");
+        return FALSE;
+    }
+    
+    // Loading BootCode
+    if (!LoadBootCodeFromResource(&g_urescueContext.pBootCode, &g_urescueContext.bootCodeSize)) {
+        LogError("Failed to load BootCode from resources");
+        return FALSE;
+    }
+    
+    // Loading SDK
+    if (!LoadSDKFromResource(&g_urescueContext.pSDK, &g_urescueContext.sdkSize)) {
+        LogError("Failed to load SDK from resources");
+        return FALSE;
+    }
+    
+    LogMessage("Firmware loaded from resources successfully");
+    return TRUE;
+}
+
+// Function to connect to the device
+BOOL ConnectToDevice(LPCSTR devicePath)
+{
+    LogMessage("Connecting to device: %s", devicePath);
+    
+    if (!g_bInitialized) {
+        LogError("URescue not initialized");
+        return FALSE;
+    }
+    
+    // Closing the previous connection
+    if (g_urescueContext.hDevice && g_urescueContext.hDevice != INVALID_HANDLE_VALUE) {
+        CloseUSBDevice(g_urescueContext.hDevice);
+        g_urescueContext.hDevice = INVALID_HANDLE_VALUE;
+    }
+    
+    // Connecting to the device
+    HANDLE hDevice = InitializeUSBDevice(devicePath);
+    if (!hDevice) {
+        LogError("Failed to initialize USB device");
+        return FALSE;
+    }
+    
+    // Initializing the controller
+    if (!InitializeITEController(hDevice)) {
+        LogError("Failed to initialize ITE controller");
+        CloseUSBDevice(hDevice);
+        return FALSE;
+    }
+    
+    g_urescueContext.hDevice = hDevice;
+    g_urescueContext.applicationState = URESCUE_STATE_CONNECTED;
+    
+    LogMessage("Connected to device successfully");
+    return TRUE;
+}
+
+// Function to disconnect from the device
+void DisconnectFromDevice()
+{
+    LogMessage("Disconnecting from device");
+    
+    if (g_urescueContext.hDevice && g_urescueContext.hDevice != INVALID_HANDLE_VALUE) {
+        CloseUSBDevice(g_urescueContext.hDevice);
+        g_urescueContext.hDevice = INVALID_HANDLE_VALUE;
+    }
+    
+    g_urescueContext.applicationState = URESCUE_STATE_INITIALIZED;
+    
+    LogMessage("Disconnected from device");
+}
+
+// Firmware writing function
+BOOL WriteFirmware()
+{
+    LogMessage("Writing firmware to device");
+    
+    if (!g_bInitialized) {
+        LogError("URescue not initialized");
+        return FALSE;
+    }
+    
+    if (!g_urescueContext.hDevice || g_urescueContext.hDevice == INVALID_HANDLE_VALUE) {
+        LogError("No device connected");
+        return FALSE;
+    }
+    
+    if (!g_urescueContext.pFirmware || g_urescueContext.firmwareSize == 0) {
+        LogError("No firmware loaded");
+        return FALSE;
+    }
+    
+    // Setting the write mode
+    if (!SetControllerMode(g_urescueContext.hDevice, ITE_MODE_FLASH)) {
+        LogError("Failed to set flash mode");
+        return FALSE;
+    }
+    
+    // Writing the firmware
+    if (!WriteFirmwareToDevice(g_urescueContext.hDevice, 
+                              g_urescueContext.pFirmware, 
+                              g_urescueContext.firmwareSize)) {
+        LogError("Failed to write firmware");
+        SetControllerMode(g_urescueContext.hDevice, ITE_MODE_NORMAL);
+        return FALSE;
+    }
+    
+    // Returning to normal mode
+    SetControllerMode(g_urescueContext.hDevice, ITE_MODE_NORMAL);
+    
+    LogMessage("Firmware written successfully");
+    return TRUE;
+}
+
+// Firmware verification function
+BOOL VerifyFirmware()
+{
+    LogMessage("Verifying firmware");
+    
+    if (!g_bInitialized) {
+        LogError("URescue not initialized");
+        return FALSE;
+    }
+    
+    if (!g_urescueContext.hDevice || g_urescueContext.hDevice == INVALID_HANDLE_VALUE) {
+        LogError("No device connected");
+        return FALSE;
+    }
+    
+    if (!g_urescueContext.pFirmware || g_urescueContext.firmwareSize == 0) {
+        LogError("No firmware loaded");
+        return FALSE;
+    }
+    
+    // Firmware verification
+    if (!VerifyFirmwareOnDevice(g_urescueContext.hDevice, 
+                               g_urescueContext.pFirmware, 
+                               g_urescueContext.firmwareSize)) {
+        LogError("Firmware verification failed");
+        return FALSE;
+    }
+    
+    LogMessage("Firmware verification successful");
+    return TRUE;
+}
+
+// Function to get the program context
+PURESCUE_CONTEXT GetURescueContext()
+{
+    return &g_urescueContext;
+}
+
+// Function to get the program state
+URESCUE_STATE GetURescueState()
+{
+    return g_urescueContext.applicationState;
+}
+
+// Function to set the last error
+void SetURescueError(DWORD errorCode)
+{
+    g_urescueContext.lastError = errorCode;
+    SetLastErrorWrapper(errorCode);
+}
+
+// Function to get the last error
+DWORD GetURescueError()
+{
+    return g_urescueContext.lastError;
+}
+
+// Settings update function
+BOOL UpdateSettings(PURESCUE_SETTINGS pSettings)
+{
+    if (!pSettings) {
+        LogError("Invalid settings parameter");
+        return FALSE;
+    }
+    
+    memcpy(&g_urescueContext.settings, pSettings, sizeof(URESCUE_SETTINGS));
+    
+    // Saving settings to the registry
+    SaveSettingsToRegistry(SETTINGS_REGISTRY_VALUE, 
+                          &g_urescueContext.settings, 
+                          sizeof(URESCUE_SETTINGS));
+    
+    LogMessage("Settings updated successfully");
+    return TRUE;
+}
