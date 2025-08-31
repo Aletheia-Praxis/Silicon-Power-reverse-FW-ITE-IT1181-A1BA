@@ -334,3 +334,4 @@ Win64/
 $RECYCLE.BIN/
 /*.Rcheck/
 /*.tar.gz
+ghidra_mcp_bridge.log
