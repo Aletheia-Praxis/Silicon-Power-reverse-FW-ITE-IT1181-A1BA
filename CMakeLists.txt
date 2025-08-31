@@ -27,6 +27,12 @@ set(SOURCES
     src/Dialogs.cpp
     src/Globals.cpp
     src/Utilities.cpp
+    src/FileOperations.cpp
+    src/ResourceManager.cpp
+    src/MemoryManager.cpp
+    src/SystemManager.cpp
+    src/ErrorHandler.cpp
+    src/URescueCore.cpp
 )
 
 # Creating executable file
