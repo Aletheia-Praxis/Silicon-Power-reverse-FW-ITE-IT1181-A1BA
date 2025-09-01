@@ -9,6 +9,7 @@
 #include "SystemManager.h"
 #include "ErrorHandler.h"
 #include "Utilities.h"
+#include "FirmwareManager.h"
 
 // Global program variables
 static URESCUE_CONTEXT g_urescueContext = {0};
@@ -27,6 +28,10 @@ BOOL InitializeURescue()
     // Clearing the context
     memset(&g_urescueContext, 0, sizeof(URESCUE_CONTEXT));
     
+    // Resolve module and temp directories
+    GetModuleDirectoryA(g_urescueContext.moduleDir, sizeof(g_urescueContext.moduleDir));
+    GetTempLongPathA(g_urescueContext.tempDir, sizeof(g_urescueContext.tempDir));
+
     // Getting system information
     if (!GetDeviceInfo(&g_urescueContext.deviceInfo)) {
         LogError("Failed to get device information");
@@ -36,6 +41,15 @@ BOOL InitializeURescue()
     // Checking administrator rights
     g_urescueContext.isAdministrator = IsAdministrator();
     
+    // Build DB paths from module dir
+    BuildDatabasePathsA(g_urescueContext.moduleDir,
+                        g_urescueContext.flashDbPath, sizeof(g_urescueContext.flashDbPath),
+                        g_urescueContext.ctrlDbPath, sizeof(g_urescueContext.ctrlDbPath));
+
+    // Try read device selection
+    CHAR selectedDevice[64] = {0};
+    ReadDeviceSelectionFromIni(selectedDevice, sizeof(selectedDevice));
+
     // Initializing the program state
     g_urescueContext.applicationState = URESCUE_STATE_INITIALIZED;
     g_urescueContext.lastError = ERROR_SUCCESS;

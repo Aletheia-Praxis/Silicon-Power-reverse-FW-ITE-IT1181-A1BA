@@ -49,6 +49,13 @@ typedef struct _URESCUE_CONTEXT {
     // SDK
     LPVOID pSDK;
     DWORD sdkSize;
+
+    // Paths
+    CHAR moduleDir[MAX_PATH];
+    CHAR tempDir[MAX_PATH];
+    CHAR flashDbPath[MAX_PATH];
+    CHAR ctrlDbPath[MAX_PATH];
+    CHAR binFilePath[MAX_PATH];
 } URESCUE_CONTEXT, *PURESCUE_CONTEXT;
 
 // Main application functions (decompiled from Ghidra)
