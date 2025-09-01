@@ -4,6 +4,7 @@
 #include <string.h>
 #include "FirmwareManager.h"
 #include "USBDevice.h"
+#include "Utilities.h"
 
 // Firmware loading function
 BOOL LoadFirmware(LPCSTR firmwarePath, LPVOID* ppBuffer, DWORD* pSize)
@@ -49,6 +50,37 @@ BOOL LoadFirmware(LPCSTR firmwarePath, LPVOID* ppBuffer, DWORD* pSize)
     *ppBuffer = pBuffer;
     *pSize = fileSize;
     return TRUE;
+}
+
+// Build SetDBPath / GetBinFilePath equivalents
+BOOL BuildDatabasePathsA(LPCSTR baseDir, LPSTR outFlashFdb, DWORD outFlashFdbSize,
+                         LPSTR outCtrlCdb, DWORD outCtrlCdbSize)
+{
+    if (!baseDir || !outFlashFdb || !outCtrlCdb) return FALSE;
+    if (!JoinPathA(outFlashFdb, outFlashFdbSize, baseDir, "Bin\\FlashSSD_D.fdb")) return FALSE;
+    if (!JoinPathA(outCtrlCdb, outCtrlCdbSize, baseDir, "Bin\\CtrlSSD.cdb")) return FALSE;
+    return TRUE;
+}
+
+BOOL BuildBinPathA(LPCSTR baseDir, BYTE familyHint, BYTE binIndex,
+                   BOOL isA1BA, LPSTR outBin, DWORD outBinSize)
+{
+    if (!baseDir || !outBin) return FALSE;
+    CHAR subdir[64] = {0};
+    // familyHint: 0x76 -> 1176, else 1181; variant: A0AA or A1BA
+    if (isA1BA) {
+        strcpy_s(subdir, sizeof(subdir), "1181\\DownGrade\\A1BA");
+    } else {
+        if (familyHint == 0x76) strcpy_s(subdir, sizeof(subdir), "1176\\DownGrade\\A0AA");
+        else strcpy_s(subdir, sizeof(subdir), "1181\\DownGrade\\A0AA");
+    }
+    CHAR binName[64] = {0};
+    if (binIndex == 0xFF) strcpy_s(binName, sizeof(binName), "u181s00.bin");
+    else sprintf_s(binName, sizeof(binName), "u181s%02x.bin", (unsigned)binIndex);
+    CHAR dir[MAX_PATH] = {0};
+    if (!JoinPathA(dir, sizeof(dir), baseDir, "Bin")) return FALSE;
+    if (!JoinPathA(dir, sizeof(dir), dir, subdir)) return FALSE;
+    return JoinPathA(outBin, outBinSize, dir, binName);
 }
 
 // Firmware writing function to the device
