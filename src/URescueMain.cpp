@@ -2,16 +2,43 @@
 #include <afxcmn.h>
 #include <afxinet.h>
 #include "URescueMain.h"
+#include "iTEUFDrs.h"
+#include "Utilities.h"
 
-// Main function of the URescue program
+// Global iTEUFDrs instance
+static iTEUFDrs* g_pURescueApp = nullptr;
+
+// Main function of the URescue program (decompiled from FUN_004845e0)
 int FUN_004845e0(void)
 {
+    LogMessage("URescue application starting...");
+    
+    // Get module directory for SDK loading
+    CHAR moduleDir[MAX_PATH];
+    if (!GetModuleDirectoryA(moduleDir, sizeof(moduleDir))) {
+        LogError("Failed to get module directory");
+        return -1;
+    }
+    
+    // Initialize main URescue object (equivalent to iTEUFDrs constructor call)
+    g_pURescueApp = new iTEUFDrs(moduleDir);
+    if (!g_pURescueApp || !g_pURescueApp->IsInitialized()) {
+        LogError("Failed to initialize iTEUFDrs: Error code %d", 
+                 g_pURescueApp ? g_pURescueApp->GetLastError() : 0);
+        delete g_pURescueApp;
+        g_pURescueApp = nullptr;
+        return -1;
+    }
+    
     // Initialize MFC application
     CWinApp app;
     
     // Create the main window
     CMainFrame* pMainFrame = new CMainFrame();
     if (!pMainFrame) {
+        LogError("Failed to create main frame window");
+        delete g_pURescueApp;
+        g_pURescueApp = nullptr;
         return -1;
     }
     
@@ -19,8 +46,17 @@ int FUN_004845e0(void)
     pMainFrame->ShowWindow(SW_SHOW);
     pMainFrame->UpdateWindow();
     
+    LogMessage("URescue application initialized successfully");
+    
     // Run the message loop
-    return app.Run();
+    int result = app.Run();
+    
+    // Cleanup
+    delete g_pURescueApp;
+    g_pURescueApp = nullptr;
+    
+    LogMessage("URescue application exiting with code %d", result);
+    return result;
 }
 
 // MFC WinMain function
