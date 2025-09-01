@@ -4,6 +4,7 @@
 #include <string.h>
 #include <winreg.h>
 #include <sysinfoapi.h>
+#include <shlwapi.h>
 #include "SystemManager.h"
 #include "Utilities.h"
 
@@ -365,4 +366,16 @@ BOOL GetWindowsDirectoryPath(LPSTR lpBuffer, DWORD nSize)
     
     LogMessage("Windows directory: %s", lpBuffer);
     return TRUE;
+}
+
+// Read Device.ini -> [Device] SelectDevice
+BOOL ReadDeviceSelectionFromIni(LPSTR lpOut, DWORD nSize)
+{
+    if (!lpOut || nSize == 0) return FALSE;
+    CHAR moduleDir[MAX_PATH] = {0};
+    if (!GetModuleDirectoryA(moduleDir, sizeof(moduleDir))) return FALSE;
+    CHAR iniPath[MAX_PATH] = {0};
+    if (!JoinPathA(iniPath, sizeof(iniPath), moduleDir, "Device.ini")) return FALSE;
+    DWORD read = GetPrivateProfileStringA("Device", "SelectDevice", "", lpOut, nSize, iniPath);
+    return read > 0;
 }

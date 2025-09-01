@@ -53,6 +53,9 @@ BOOL GetSystemDirectoryPath(LPSTR lpBuffer, DWORD nSize);
 
 BOOL GetWindowsDirectoryPath(LPSTR lpBuffer, DWORD nSize);
 
+// Device.ini helpers
+BOOL ReadDeviceSelectionFromIni(LPSTR lpOut, DWORD nSize);
+
 // Constants for system operations
 #define URESCUE_REGISTRY_KEY "Software\\URescue"
 #define SETTINGS_REGISTRY_VALUE "Settings"
