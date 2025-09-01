@@ -20,6 +20,9 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 set(SOURCES
     src/main.cpp
     src/URescueMain.cpp
+    src/iTEUFDrs.cpp
+    src/SDKLoader.cpp
+    src/SDKAPIs.cpp
     src/USBDevice.cpp
     src/FirmwareManager.cpp
     src/ITEController.cpp
