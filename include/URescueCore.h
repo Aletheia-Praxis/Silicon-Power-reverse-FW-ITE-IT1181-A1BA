@@ -3,6 +3,7 @@
 #include <windows.h>
 #include "SystemManager.h"
 #include "ITEController.h"
+#include "SDKLoader.h"
 
 // Application states
 typedef enum _URESCUE_STATE {

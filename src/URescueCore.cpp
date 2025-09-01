@@ -14,6 +14,7 @@
 // Global program variables
 static URESCUE_CONTEXT g_urescueContext = {0};
 static BOOL g_bInitialized = FALSE;
+static HMODULE g_hSdk = NULL;
 
 // Program initialization function (decompiled from the main function)
 BOOL InitializeURescue()
@@ -49,6 +50,16 @@ BOOL InitializeURescue()
     // Try read device selection
     CHAR selectedDevice[64] = {0};
     ReadDeviceSelectionFromIni(selectedDevice, sizeof(selectedDevice));
+
+    // Build default bin path (fallbacks). Here we don't yet know family/index, use defaults
+    // familyHint 0x81 (1181), binIndex 0x00, isA1BA = TRUE by default per version tag
+    BuildBinPathA(g_urescueContext.moduleDir, 0x81, 0x00, TRUE,
+                  g_urescueContext.binFilePath, sizeof(g_urescueContext.binFilePath));
+
+    // Load SDK
+    if (!Load181FlashSDK(g_urescueContext.moduleDir, &g_hSdk)) {
+        LogWarning("181FlashSDK.dll not loaded; some features may be unavailable");
+    }
 
     // Initializing the program state
     g_urescueContext.applicationState = URESCUE_STATE_INITIALIZED;
@@ -101,6 +112,12 @@ void DeinitializeURescue()
         g_urescueContext.hDevice = INVALID_HANDLE_VALUE;
     }
     
+    // Unload SDK
+    if (g_hSdk) {
+        Unload181FlashSDK(g_hSdk);
+        g_hSdk = NULL;
+    }
+
     g_urescueContext.applicationState = URESCUE_STATE_UNINITIALIZED;
     g_bInitialized = FALSE;
     
