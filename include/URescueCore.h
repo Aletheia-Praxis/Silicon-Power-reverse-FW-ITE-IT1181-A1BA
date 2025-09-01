@@ -4,6 +4,7 @@
 #include "SystemManager.h"
 #include "ITEController.h"
 #include "SDKLoader.h"
+#include "DeviceStructures.h"
 
 // Application states
 typedef enum _URESCUE_STATE {
