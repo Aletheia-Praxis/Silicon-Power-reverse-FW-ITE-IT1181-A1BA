@@ -183,3 +183,46 @@ BOOL CreateBackup(LPCSTR sourcePath, LPCSTR backupPath)
     // Copying the file
     return CopyFileA(sourcePath, backupPath, TRUE);
 }
+
+// Get directory of current module (exe) as ANSI path
+BOOL GetModuleDirectoryA(LPSTR buffer, DWORD size)
+{
+    if (!buffer || size == 0) return FALSE;
+    DWORD len = GetModuleFileNameA(NULL, buffer, size);
+    if (len == 0 || len >= size) return FALSE;
+    for (LONG i = (LONG)len - 1; i >= 0; --i) {
+        if (buffer[i] == '\\' || buffer[i] == '/') { buffer[i] = '\0'; break; }
+    }
+    return TRUE;
+}
+
+// Get temp path converted to long path (ANSI)
+BOOL GetTempLongPathA(LPSTR buffer, DWORD size)
+{
+    if (!buffer || size == 0) return FALSE;
+    CHAR tmp[MAX_PATH];
+    DWORD len = GetTempPathA((DWORD)sizeof(tmp), tmp);
+    if (len == 0) return FALSE;
+    DWORD out = GetLongPathNameA(tmp, buffer, size);
+    if (out == 0 || out >= size) {
+        // fallback to tmp if long path not available
+        if (strlen(tmp) + 1 > size) return FALSE;
+        strcpy_s(buffer, size, tmp);
+    }
+    return TRUE;
+}
+
+// Safe join a + b into outBuffer with backslash
+BOOL JoinPathA(LPSTR outBuffer, DWORD size, LPCSTR a, LPCSTR b)
+{
+    if (!outBuffer || size == 0 || !a || !b) return FALSE;
+    size_t la = strlen(a);
+    size_t lb = strlen(b);
+    BOOL needSlash = (la > 0 && a[la - 1] != '\\' && a[la - 1] != '/');
+    size_t total = la + (needSlash ? 1 : 0) + lb + 1;
+    if (total > size) return FALSE;
+    strcpy_s(outBuffer, size, a);
+    if (needSlash) strcat_s(outBuffer, size, "\\");
+    strcat_s(outBuffer, size, b);
+    return TRUE;
+}
