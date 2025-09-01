@@ -1,69 +1,78 @@
 #pragma once
-
 #include <windows.h>
-#include "SDKLoader.h"
-#include "Utilities.h"
+#include "SDKAPIs.h"
+#include "DeviceStructures.h"
 
-// Main application class (decompiled from iTEUFDrs constructor FUN_0040d690)
-class iTEUFDrs {
+// Forward declarations
+BOOL InitializeParaValue();
+BOOL CheckDriveExist();
+BOOL OpenDriveHandleAgain();
+BOOL SetDeviceID();
+BOOL VolumePairController();
+BOOL CheckSystemReadyIO(BYTE volumeIndex, DWORD deviceId);
+BOOL LoadBankC(BYTE volumeIndex, DWORD deviceId);
+BOOL GetBCMInformation(BYTE volumeIndex, DWORD deviceId);
+BOOL LoadBankData(BYTE volumeIndex, DWORD deviceId);
+BOOL FormatDeviceString(LPSTR buffer, DWORD size, LPCSTR format, ...);
+
+// iTEUFDrs class (decompiled from FUN_0040d690)
+class iTEUFDrs
+{
 public:
-    // Constructor (decompiled from FUN_0040d690)
     iTEUFDrs(LPCSTR basePath);
-    
-    // Destructor
     ~iTEUFDrs();
-    
-    // Status getters
+
     BOOL IsInitialized() const { return m_isInitialized; }
     DWORD GetLastError() const { return m_lastError; }
     
-    // SDK handle getter
-    HMODULE GetSDKHandle() const { return m_hSDK; }
-    
-private:
-    // Virtual function table pointer (first member)
-    void** m_vtable;
-    
-    // Status flags
-    BOOL m_isInitialized;        // offset +4 (param_1 + 1)
-    BYTE m_errorCode;            // offset +5 (param_1 + 5) 
-    BYTE m_initialized;          // offset +6
-    BYTE m_reserved1;            // offset +7
-    
-    // Base path for SDK (offset +0x46c = 1132)
-    CHAR m_basePath[260];        // param_1 + 0x11b = path buffer
-    
-    // SDK handle  
-    HMODULE m_hSDK;              // param_1[0x21f] = SDK handle
-    
-    // Large data structures (from memory layout analysis)
-    BYTE m_reserved2[0x200];     // param_1 + 2, size 0x200
-    BYTE m_reserved3[0x40];      // offset 0x6aca, size 0x40  
-    BYTE m_reserved4[0x40];      // param_1 + 0x82, size 0x40
-    BYTE m_reserved5[0x800];     // param_1 + 0x41ace, size 0x800
-    BYTE m_reserved6[0x100000];  // param_1 + 0x41cd0, size 0x100000
-    
-    // Status and configuration
-    DWORD m_config1;             // param_1[0x97]
-    DWORD m_config2;             // param_1[0x98] 
-    DWORD m_config3;             // param_1[0x99]
-    DWORD m_config4;             // param_1[0x9a]
-    DWORD m_settings;            // param_1[0x81cd2] = 4
-    
-    // Device status flags
-    BOOL m_deviceReady;          // param_1 + 0x881
-    BOOL m_deviceConnected;      // param_1 + 0x882
-    BOOL m_flashReady;           // param_1 + 0x885
-    BOOL m_systemReady;          // param_1 + 0x886 = 1
-    BOOL m_bufferReady;          // param_1 + 0x6b37
-    BOOL m_controllerReady;      // param_1 + 0x81cd0
-
-    DWORD m_lastError;
-    
-    // Private initialization methods
-    BOOL InitializeSDK();
+    // Device information methods
     BOOL GetDeviceInfo();
-    void InitializeMemory();
+    BOOL InitializeParaValue();
+    BOOL CheckDriveExist();
+    BOOL OpenDriveHandleAgain();
+    BOOL SetDeviceID();
+    BOOL VolumePairController();
+    
+    // Device access methods
+    BOOL CheckSystemReadyIO(BYTE volumeIndex, DWORD deviceId);
+    BOOL LoadBankC(BYTE volumeIndex, DWORD deviceId);
+    BOOL GetBCMInformation(BYTE volumeIndex, DWORD deviceId);
+    BOOL LoadBankData(BYTE volumeIndex, DWORD deviceId);
+    
+    // Utility methods
+    BOOL FormatDeviceString(LPSTR buffer, DWORD size, LPCSTR format, ...);
+
+private:
+    // Members based on decompiled structure
+    void* m_vtable; // 0x00
+    BOOL m_isInitialized; // 0x04
+    DWORD m_lastError; // 0x08
+    CHAR m_basePath[MAX_PATH]; // 0x0C
+    HMODULE m_hSDK; // 0x110
+    SDK_APIS m_sdkApis; // Structure to hold all bound SDK function pointers
+    
+    // Device information structure
+    DEVICE_INFO m_deviceInfo;
+
+    // Internal initialization functions
+    BOOL InitializeSDK();
+    void InitializeMembers();
+    BOOL InitializeDeviceStructures();
+    
+    // Device detection functions
+    BOOL DetectPhysicalDrives();
+    BOOL DetectLogicalVolumes();
+    BOOL ProcessDeviceInquiry(HANDLE hDevice, BYTE volumeIndex);
+    BOOL IdentifyDeviceFamily(LPCSTR inquiryString, BYTE volumeIndex);
+    
+    // Bank management functions
+    BOOL InitializeBankStructures();
+    BOOL LoadBankInformation(BYTE volumeIndex);
+    BOOL CopyBankData(BYTE volumeIndex);
+    
+    // String formatting functions
+    BOOL FormatDeviceIdentification();
+    BOOL ConcatenateBankInfo();
 };
 
 // Error codes for iTEUFDrs
