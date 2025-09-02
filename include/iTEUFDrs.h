@@ -111,6 +111,13 @@ private:
 
     void updateCISBuffer();
 
+    // New functions based on decompilation analysis
+    BOOL NotifyFwSegmentInfo(BYTE volumeIndex, DWORD deviceId);
+    BOOL ScanMassBlocks(BYTE volumeIndex, DWORD deviceId, BYTE mode);
+    BOOL IsCEChannelEnabled(BYTE volumeIndex, BYTE ce, BYTE ch);
+    void UpdateDeviceStatusFromScan(BYTE volumeIndex, BYTE ce, BYTE ch, BYTE* scanData);
+    void ProcessBadBlocks(BYTE volumeIndex, BYTE ce, BYTE ch, DWORD deviceId, BYTE mode);
+
     // SDK wrappers (names inferred from usage in 0x0040c640)
     BOOL flhScanMassBlocksPerChip(DWORD ctx, BYTE ce, BYTE ch, int rtPtr, void* outBuf, BYTE mode, BYTE* outFlag, int* outRet);
     BOOL flhGetScanResult(DWORD ctx, BYTE ce, BYTE ch, int rtPtr, void* outBuf);

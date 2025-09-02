@@ -5,6 +5,14 @@
 #include <stdio.h>
 #include <string.h>
 
+// Typedefs for SDK calls (best-effort based on decompilation patterns)
+typedef int (__stdcall *PFN_FLH_SCAN_MASS_BLOCKS_PER_CHIP)(DWORD ctx, BYTE ce, BYTE ch, int rtPtr, void* outBuf, BYTE mode, BYTE* outFlag, int* outRet);
+typedef int (__stdcall *PFN_FLH_SCAN_E2NAND)(DWORD ctx, BYTE ce, BYTE ch, int rtPtr, void* outBuf);
+typedef int (__stdcall *PFN_MP_ERASE_SYSTEM_TABLE)(DWORD ctx, int rtPtr, void* blockMap);
+typedef int (__stdcall *PFN_FLH_ARRANGE_SEGMENT_PARA)(BYTE* outBuf, void* segmentInfo);
+typedef int (__stdcall *PFN_FLH_INIT_CTRL)(DWORD ctx, BYTE* segmentParams, void* bankInfo);
+typedef int (__stdcall *PFN_FLH_BLOCK_ERASE)(DWORD ctx, DWORD handle, int rtPtr);
+
 // Constructor implementation (decompiled from FUN_0040d690)
 iTEUFDrs::iTEUFDrs(LPCSTR basePath)
     : m_vtable(nullptr)
@@ -1588,4 +1596,237 @@ BOOL iTEUFDrs::GetBinFilePath(BYTE volumeIndex, LPCSTR fileName, LPSTR filePath,
     
     LogMessage("GetBinFilePath: Built path: %s", filePath);
     return TRUE;
+}
+
+BOOL iTEUFDrs::NotifyFwSegmentInfo(BYTE volumeIndex, DWORD deviceId)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount) return FALSE;
+    
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    
+    // Check if already notified
+    if (volume.fwSegmentNotified) {
+        LogMessage("NotifyFwSegmentInfo: Already notified for volume %d", volumeIndex);
+        return TRUE;
+    }
+    
+    // Initialize segment parameters buffer
+    BYTE segmentParams[128];
+    memset(segmentParams, 0, sizeof(segmentParams));
+    
+    // Build device path
+    CHAR devicePath[8];
+    buildVolumePath((char)volume.volumeLetter, devicePath);
+    
+    // Open device handle
+    HANDLE hDevice = CreateFileA(devicePath, GENERIC_READ | GENERIC_WRITE, 
+                                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hDevice == INVALID_HANDLE_VALUE) {
+        LogError("NotifyFwSegmentInfo: Failed to open device %s", devicePath);
+        return FALSE;
+    }
+    
+    BOOL result = FALSE;
+    
+    // Arrange segment parameters
+    PFN_FLH_ARRANGE_SEGMENT_PARA pArrangeSeg = (PFN_FLH_ARRANGE_SEGMENT_PARA)g_FLH_ArrangeSegmentPara;
+    if (pArrangeSeg) {
+        pArrangeSeg(segmentParams, &volume.segmentInfo);
+    }
+    
+    // Initialize controller with segment info
+    PFN_FLH_INIT_CTRL pInitCtrl = (PFN_FLH_INIT_CTRL)g_FLH_InitCTRL;
+    if (pInitCtrl) {
+        int initResult = pInitCtrl(deviceId, segmentParams, &volume.bankInfo);
+        if (initResult != 1) {
+            LogError("NotifyFwSegmentInfo: FLH_InitCTRL failed for volume %d", volumeIndex);
+        } else {
+            volume.fwSegmentNotified = TRUE;
+            result = TRUE;
+            LogMessage("NotifyFwSegmentInfo: Successfully notified FW segment info for volume %d", volumeIndex);
+        }
+    } else {
+        LogError("NotifyFwSegmentInfo: FLH_InitCTRL not bound");
+    }
+    
+    CloseHandle(hDevice);
+    return result;
+}
+
+BOOL iTEUFDrs::ScanMassBlocks(BYTE volumeIndex, DWORD deviceId, BYTE mode)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount) return FALSE;
+    
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    
+    // Allocate scan buffer (1MB)
+    BYTE* scanBuffer = (BYTE*)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, 0x100000);
+    if (!scanBuffer) {
+        LogError("ScanMassBlocks: Failed to allocate scan buffer");
+        return FALSE;
+    }
+    
+    BOOL result = FALSE;
+    
+    // Build device path
+    CHAR devicePath[8];
+    buildVolumePath((char)volume.volumeLetter, devicePath);
+    
+    // Open device handle
+    HANDLE hDevice = CreateFileA(devicePath, GENERIC_READ | GENERIC_WRITE, 
+                                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hDevice == INVALID_HANDLE_VALUE) {
+        LogError("ScanMassBlocks: Failed to open device %s", devicePath);
+        HeapFree(GetProcessHeap(), 0, scanBuffer);
+        return FALSE;
+    }
+    
+    // Initialize scan parameters
+    DWORD ceCount = 8;  // Number of CE (Chip Enable)
+    DWORD chCount = 2;  // Number of channels
+    DWORD blockCount = volume.blockCount;
+    
+    // Scan through all CE and channels
+    for (BYTE ce = 0; ce < ceCount; ce++) {
+        for (BYTE ch = 0; ch < chCount; ch++) {
+            // Check if this CE/CH combination is enabled
+            if (!IsCEChannelEnabled(volumeIndex, ce, ch)) {
+                continue;
+            }
+            
+            LogMessage("ScanMassBlocks: Scanning CE=%d CH=%d", ce, ch);
+            
+            // Call FLH_HandleMassBlocksPerChip
+            PFN_FLH_SCAN_MASS_BLOCKS_PER_CHIP pScan = (PFN_FLH_SCAN_MASS_BLOCKS_PER_CHIP)g_VDR_MassBlocksProcess;
+            if (pScan) {
+                BYTE outFlag = 0;
+                int outRet = 0;
+                DWORD bufferOffset = (ch + ce * 2) * 0x10000;
+                
+                // Clear scan buffer for this CE/CH
+                memset(scanBuffer + bufferOffset, 0, 0x10000);
+                
+                int scanResult = pScan(deviceId, ce, ch, volumeIndex, 
+                                      scanBuffer + bufferOffset, mode, &outFlag, &outRet);
+                if (scanResult == 0) {
+                    LogError("ScanMassBlocks: FLH_HandleMassBlocksPerChip failed CE=%d CH=%d", ce, ch);
+                    continue;
+                }
+                
+                // Process scan results
+                if (outFlag != 0) {
+                    // Update device status based on scan results
+                    UpdateDeviceStatusFromScan(volumeIndex, ce, ch, scanBuffer + bufferOffset);
+                }
+                
+                // For TLC devices, perform additional E2NAND scan
+                if ((volume.deviceFlags & 0x38) == 0x18) { // TLC flag
+                    memset(scanBuffer, 0, 0x10000);
+                    
+                    PFN_FLH_SCAN_E2NAND pE2Scan = (PFN_FLH_SCAN_E2NAND)g_FLH_ScanE2NANDBlockPerChip;
+                    if (pE2Scan) {
+                        int e2Result = pE2Scan(deviceId, ce, ch, volumeIndex, scanBuffer);
+                        if (e2Result != 0) {
+                            // Mark blocks as used based on E2NAND data
+                            for (DWORD i = 0; i < 0x10000; i++) {
+                                if (scanBuffer[i] != 0) {
+                                    volume.blockMap[ce][ch][i] |= 0x55; // Mark as used
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Process bad blocks
+            ProcessBadBlocks(volumeIndex, ce, ch, deviceId, mode);
+        }
+    }
+    
+    // For repair modes, perform additional operations
+    if (mode >= 3) {
+        // Erase system table if needed
+        PFN_MP_ERASE_SYSTEM_TABLE pEraseTable = (PFN_MP_ERASE_SYSTEM_TABLE)g_MP_EraseSystemTable;
+        if (pEraseTable) {
+            pEraseTable(deviceId, volumeIndex, volume.blockMap);
+        }
+    }
+    
+    // For specific modes, perform CPU reset
+    if (mode == 2 || mode == 3) {
+        PFN_FLH_CPU_RESET pCpuReset = (PFN_FLH_CPU_RESET)g_FLH_CPUReset;
+        if (pCpuReset) {
+            pCpuReset(0, volumeIndex, deviceId);
+        }
+    }
+    
+    result = TRUE;
+    
+    // Cleanup
+    CloseHandle(hDevice);
+    HeapFree(GetProcessHeap(), 0, scanBuffer);
+    
+    LogMessage("ScanMassBlocks: Completed for volume %d, mode %d", volumeIndex, mode);
+    return result;
+}
+
+// Helper functions for device operations
+BOOL iTEUFDrs::IsCEChannelEnabled(BYTE volumeIndex, BYTE ce, BYTE ch)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount) return FALSE;
+    
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    
+    // Check CE mask and channel mask
+    BYTE ceMask = volume.ceMask;
+    BYTE chMask = volume.chMask;
+    
+    return ((ceMask & (1 << ce)) != 0) && ((chMask & (1 << ch)) != 0);
+}
+
+void iTEUFDrs::UpdateDeviceStatusFromScan(BYTE volumeIndex, BYTE ce, BYTE ch, BYTE* scanData)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount) return;
+    
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    DWORD bufferOffset = (ch + ce * 2) * 0x10000;
+    
+    // Update block map based on scan data
+    for (DWORD i = 0; i < 0x10000; i++) {
+        volume.blockMap[ce][ch][i] |= scanData[i];
+    }
+    
+    LogMessage("UpdateDeviceStatusFromScan: Updated CE=%d CH=%d for volume %d", ce, ch, volumeIndex);
+}
+
+void iTEUFDrs::ProcessBadBlocks(BYTE volumeIndex, BYTE ce, BYTE ch, DWORD deviceId, BYTE mode)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount) return;
+    
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    
+    // Process each block in this CE/CH
+    for (DWORD block = 0; block < volume.blockCount; block++) {
+        // Check if block is marked as bad
+        if (volume.blockMap[ce][ch][block] != 0) {
+            LogMessage("ProcessBadBlocks: Found bad block CE=%d CH=%d Block=%d", ce, ch, block);
+            
+            // For repair modes, attempt block erase
+            if (mode >= 4) {
+                PFN_FLH_BLOCK_ERASE pErase = (PFN_FLH_BLOCK_ERASE)g_FLH_BlockErase;
+                if (pErase) {
+                    DWORD blockAddr = ConvertBlockAddress(volume.hDevice, (WORD)block);
+                    int eraseResult = pErase(deviceId, ce, ch, blockAddr);
+                    if (eraseResult == 1) {
+                        LogMessage("ProcessBadBlocks: Successfully erased bad block CE=%d CH=%d Block=%d", ce, ch, block);
+                        volume.blockMap[ce][ch][block] = 0; // Mark as good
+                    } else {
+                        LogError("ProcessBadBlocks: Failed to erase bad block CE=%d CH=%d Block=%d", ce, ch, block);
+                    }
+                }
+            }
+        }
+    }
 }
