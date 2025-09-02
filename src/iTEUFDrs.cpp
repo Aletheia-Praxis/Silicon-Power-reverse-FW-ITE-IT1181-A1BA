@@ -12,6 +12,8 @@ typedef int (__stdcall *PFN_MP_ERASE_SYSTEM_TABLE)(DWORD ctx, int rtPtr, void* b
 typedef int (__stdcall *PFN_FLH_ARRANGE_SEGMENT_PARA)(BYTE* outBuf, void* segmentInfo);
 typedef int (__stdcall *PFN_FLH_INIT_CTRL)(DWORD ctx, BYTE* segmentParams, void* bankInfo);
 typedef int (__stdcall *PFN_FLH_BLOCK_ERASE)(DWORD ctx, DWORD handle, int rtPtr);
+typedef int (__stdcall *PFN_FLH_READISP)(DWORD deviceId, BYTE* buffer, DWORD bufferSize, BYTE lunIndex, BYTE* bcmInfo, BYTE mode);
+typedef int (__stdcall *PFN_ADDR_READCIS)(DWORD deviceId, DWORD* buffer, DWORD lunId, BYTE* bcmInfo);
 
 // Constructor implementation (decompiled from FUN_0040d690)
 iTEUFDrs::iTEUFDrs(LPCSTR basePath)
@@ -1055,10 +1057,169 @@ BOOL iTEUFDrs::LoadBankC2(BYTE volumeIndex, DWORD deviceId) { return TRUE; }
 BOOL iTEUFDrs::GetBCMInformation2(BYTE volumeIndex, DWORD deviceId) { return TRUE; }
 BOOL iTEUFDrs::LoadBankData2(BYTE volumeIndex, DWORD deviceId) { return TRUE; }
 BOOL iTEUFDrs::LoadBankData3(BYTE volumeIndex, DWORD deviceId) { return TRUE; }
-BOOL iTEUFDrs::GetMPInfo(BYTE volumeIndex, DWORD deviceId) { return TRUE; }
-BOOL iTEUFDrs::GetLunArrayData(BYTE volumeIndex, DWORD deviceId) { return TRUE; }
-void iTEUFDrs::CalculateCapacity(BYTE volumeIndex) { }
-void iTEUFDrs::CalculateRealCapacity(BYTE volumeIndex) { }
+BOOL iTEUFDrs::GetMPInfo(BYTE volumeIndex, DWORD deviceId)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount) return FALSE;
+    
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    
+    // Check if BCM is loaded
+    if (!volume.bcmLoaded) {
+        LogError("GetMPInfo: BCM not loaded for volume %d", volumeIndex);
+        return FALSE;
+    }
+    
+    // Allocate buffer for ISP data (64KB)
+    BYTE* ispBuffer = (BYTE*)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, 0x10000);
+    if (!ispBuffer) {
+        LogError("GetMPInfo: Failed to allocate ISP buffer");
+        return FALSE;
+    }
+    
+    BOOL result = FALSE;
+    
+    // Build device path
+    CHAR devicePath[8];
+    buildVolumePath((char)volume.volumeLetter, devicePath);
+    
+    // Open device handle
+    HANDLE hDevice = CreateFileA(devicePath, GENERIC_READ | GENERIC_WRITE, 
+                                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hDevice == INVALID_HANDLE_VALUE) {
+        LogError("GetMPInfo: Failed to open device %s", devicePath);
+        HeapFree(GetProcessHeap(), 0, ispBuffer);
+        return FALSE;
+    }
+    
+    // Read first ISP data
+    PFN_FLH_READISP pReadISP = (PFN_FLH_READISP)g_FLH_ReadISPData;
+    if (pReadISP) {
+        int readResult = pReadISP(deviceId, ispBuffer, 0x10000, 0, volume.bcmInfo, 1);
+        if (readResult == 0) {
+            LogError("GetMPInfo: Read 1st ISP data failed for volume %d", volumeIndex);
+            
+            // Try reading second ISP data
+            readResult = pReadISP(deviceId, ispBuffer, 0x10000, 1, volume.bcmInfo, 1);
+            if (readResult == 0) {
+                LogError("GetMPInfo: Read 2nd ISP data failed for volume %d", volumeIndex);
+                CloseHandle(hDevice);
+                HeapFree(GetProcessHeap(), 0, ispBuffer);
+                return FALSE;
+            }
+        }
+        
+        // Extract MP information from ISP data
+        // Based on decompiled code, these are at specific offsets
+        volume.mpInfo.majorVersion = ispBuffer[0xF1FC];
+        volume.mpInfo.minorVersion = ispBuffer[0xF1FD];
+        
+        // Extract vendor/product information
+        memcpy(volume.mpInfo.vendorInfo, &ispBuffer[0xF1F0], 4);
+        memcpy(volume.mpInfo.productInfo, &ispBuffer[0xF1F4], 12);
+        
+        // Set MP info loaded flag
+        volume.mpInfoLoaded = TRUE;
+        result = TRUE;
+        
+        LogMessage("GetMPInfo: Successfully loaded MP info for volume %d", volumeIndex);
+    } else {
+        LogError("GetMPInfo: FLH_ReadISPData not bound");
+    }
+    
+    CloseHandle(hDevice);
+    HeapFree(GetProcessHeap(), 0, ispBuffer);
+    return result;
+}
+
+BOOL iTEUFDrs::GetLunArrayData(BYTE volumeIndex, DWORD deviceId)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount) return FALSE;
+    
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    
+    // Check if BCM is loaded
+    if (!volume.bcmLoaded) {
+        LogError("GetLunArrayData: BCM not loaded for volume %d", volumeIndex);
+        return FALSE;
+    }
+    
+    // Allocate buffer for LUN array data (64KB)
+    BYTE* lunArrayBuffer = (BYTE*)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, 0x10000);
+    if (!lunArrayBuffer) {
+        LogError("GetLunArrayData: Failed to allocate LUN array buffer");
+        return FALSE;
+    }
+    
+    BOOL result = FALSE;
+    
+    // Build device path
+    CHAR devicePath[8];
+    buildVolumePath((char)volume.volumeLetter, devicePath);
+    
+    // Open device handle
+    HANDLE hDevice = CreateFileA(devicePath, GENERIC_READ | GENERIC_WRITE, 
+                                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hDevice == INVALID_HANDLE_VALUE) {
+        LogError("GetLunArrayData: Failed to open device %s", devicePath);
+        HeapFree(GetProcessHeap(), 0, lunArrayBuffer);
+        return FALSE;
+    }
+    
+    // Read LUN array data
+    PFN_ADDR_READCIS pReadLUNArray = (PFN_ADDR_READCIS)g_ADDR_ReadCIS;
+    if (pReadLUNArray) {
+        int readResult = pReadLUNArray(deviceId, lunArrayBuffer, 0, volume.bcmInfo);
+        if (readResult == 0) {
+            // Extract LUN array data
+            for (int i = 0; i < 0x10000; i++) {
+                volume.lunArray[i] = lunArrayBuffer[i];
+            }
+            result = TRUE;
+            LogMessage("GetLunArrayData: Successfully read LUN array data for volume %d", volumeIndex);
+        } else {
+            LogError("GetLunArrayData: Failed to read LUN array data for volume %d", volumeIndex);
+        }
+    } else {
+        LogError("GetLunArrayData: g_ADDR_ReadCIS not bound");
+    }
+    
+    CloseHandle(hDevice);
+    HeapFree(GetProcessHeap(), 0, lunArrayBuffer);
+    return result;
+}
+
+void iTEUFDrs::CalculateCapacity(BYTE volumeIndex)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount) return;
+    
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    
+    // Calculate capacity based on LUN array data
+    DWORD lbaMax = 0, blkSize = 0;
+    if (readCapacity(volumeIndex, &lbaMax, &blkSize)) {
+        volume.capacity = lbaMax * blkSize;
+        LogMessage("CalculateCapacity: Calculated capacity for volume %d: %lu bytes", volumeIndex, volume.capacity);
+    } else {
+        LogError("CalculateCapacity: Failed to read capacity for volume %d", volumeIndex);
+    }
+}
+
+void iTEUFDrs::CalculateRealCapacity(BYTE volumeIndex)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount) return;
+    
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    
+    // Calculate real capacity based on LUN array data
+    DWORD realCapacity = 0;
+    for (int i = 0; i < 0x10000; i++) {
+        realCapacity += volume.lunArray[i] * blkSize;
+    }
+    volume.realCapacity = realCapacity;
+    LogMessage("CalculateRealCapacity: Calculated real capacity for volume %d: %lu bytes", volumeIndex, volume.realCapacity);
+}
 
 // Format device string (decompiled from FUN_004094a0)
 BOOL iTEUFDrs::FormatDeviceString(LPSTR buffer, DWORD size, LPCSTR format, ...)
