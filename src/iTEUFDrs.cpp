@@ -1749,8 +1749,8 @@ BOOL iTEUFDrs::GetBinFilePath(BYTE volumeIndex, LPCSTR fileName, LPSTR filePath,
         return FALSE;
     }
     
-    // Build path: moduleDir\fileName
-    if (sprintf_s(filePath, pathSize, "%s\\%s", moduleDir, fileName) <= 0) {
+    // Build path: moduleDir\\fileName
+    if (sprintf_s(filePath, pathSize, "%s\\\\%s", moduleDir, fileName) <= 0) {
         LogError("GetBinFilePath: Failed to format file path");
         return FALSE;
     }
@@ -1790,25 +1790,24 @@ BOOL iTEUFDrs::NotifyFwSegmentInfo(BYTE volumeIndex, DWORD deviceId)
     
     BOOL result = FALSE;
     
-    // Arrange segment parameters
-    PFN_FLH_ARRANGE_SEGMENT_PARA pArrangeSeg = (PFN_FLH_ARRANGE_SEGMENT_PARA)g_FLH_ArrangeSegmentPara;
-    if (pArrangeSeg) {
-        pArrangeSeg(segmentParams, &volume.segmentInfo);
-    }
-    
-    // Initialize controller with segment info
-    PFN_FLH_INIT_CTRL pInitCtrl = (PFN_FLH_INIT_CTRL)g_FLH_InitCTRL;
-    if (pInitCtrl) {
-        int initResult = pInitCtrl(deviceId, segmentParams, &volume.bankInfo);
-        if (initResult != 1) {
-            LogError("NotifyFwSegmentInfo: FLH_InitCTRL failed for volume %d", volumeIndex);
+    // Initialize controller
+    if (m_sdkApis.FLH_InitCTRL) {
+        int initResult = m_sdkApis.FLH_InitCTRL(deviceId, segmentParams, &volume.banks[0]);
+        if (initResult == 1) {
+            // Arrange segment parameters
+            if (m_sdkApis.FLH_ArrangeSegmentPara) {
+                int arrangeResult = m_sdkApis.FLH_ArrangeSegmentPara(segmentParams, &volume.segmentInfo);
+                if (arrangeResult == 1) {
+                    volume.fwSegmentNotified = TRUE;
+                    result = TRUE;
+                    LogMessage("NotifyFwSegmentInfo: Successfully notified for volume %d", volumeIndex);
+                } else {
+                    LogError("NotifyFwSegmentInfo: Failed to arrange segment parameters");
+                }
+            }
         } else {
-            volume.fwSegmentNotified = TRUE;
-            result = TRUE;
-            LogMessage("NotifyFwSegmentInfo: Successfully notified FW segment info for volume %d", volumeIndex);
+            LogError("NotifyFwSegmentInfo: Failed to initialize controller");
         }
-    } else {
-        LogError("NotifyFwSegmentInfo: FLH_InitCTRL not bound");
     }
     
     CloseHandle(hDevice);
@@ -1844,122 +1843,79 @@ BOOL iTEUFDrs::ScanMassBlocks(BYTE volumeIndex, DWORD deviceId, BYTE mode)
         return FALSE;
     }
     
-    // Initialize scan parameters
-    DWORD ceCount = 8;  // Number of CE (Chip Enable)
-    DWORD chCount = 2;  // Number of channels
-    DWORD blockCount = volume.blockCount;
-    
-    // Scan through all CE and channels
-    for (BYTE ce = 0; ce < ceCount; ce++) {
-        for (BYTE ch = 0; ch < chCount; ch++) {
-            // Check if this CE/CH combination is enabled
+    // Scan each CE and channel
+    for (BYTE ce = 0; ce < 8; ce++) {
+        for (BYTE ch = 0; ch < 2; ch++) {
+            // Check if CE/Channel is enabled
             if (!IsCEChannelEnabled(volumeIndex, ce, ch)) {
                 continue;
             }
             
-            LogMessage("ScanMassBlocks: Scanning CE=%d CH=%d", ce, ch);
-            
-            // Call FLH_HandleMassBlocksPerChip
-            PFN_FLH_SCAN_MASS_BLOCKS_PER_CHIP pScan = (PFN_FLH_SCAN_MASS_BLOCKS_PER_CHIP)g_VDR_MassBlocksProcess;
-            if (pScan) {
+            // Scan mass blocks per chip
+            if (m_sdkApis.FLH_ScanMassBlocksPerChip) {
                 BYTE outFlag = 0;
                 int outRet = 0;
-                DWORD bufferOffset = (ch + ce * 2) * 0x10000;
                 
-                // Clear scan buffer for this CE/CH
-                memset(scanBuffer + bufferOffset, 0, 0x10000);
+                int scanResult = m_sdkApis.FLH_ScanMassBlocksPerChip(deviceId, ce, ch, 
+                                                                    (int)&volume.banks[0], 
+                                                                    scanBuffer, mode, &outFlag, &outRet);
                 
-                int scanResult = pScan(deviceId, ce, ch, volumeIndex, 
-                                      scanBuffer + bufferOffset, mode, &outFlag, &outRet);
-                if (scanResult == 0) {
-                    LogError("ScanMassBlocks: FLH_HandleMassBlocksPerChip failed CE=%d CH=%d", ce, ch);
-                    continue;
-                }
-                
-                // Process scan results
-                if (outFlag != 0) {
-                    // Update device status based on scan results
-                    UpdateDeviceStatusFromScan(volumeIndex, ce, ch, scanBuffer + bufferOffset);
-                }
-                
-                // For TLC devices, perform additional E2NAND scan
-                if ((volume.deviceFlags & 0x38) == 0x18) { // TLC flag
-                    memset(scanBuffer, 0, 0x10000);
+                if (scanResult == 1) {
+                    // Update device status from scan
+                    UpdateDeviceStatusFromScan(volumeIndex, ce, ch, scanBuffer);
                     
-                    PFN_FLH_SCAN_E2NAND pE2Scan = (PFN_FLH_SCAN_E2NAND)g_FLH_ScanE2NANDBlockPerChip;
-                    if (pE2Scan) {
-                        int e2Result = pE2Scan(deviceId, ce, ch, volumeIndex, scanBuffer);
-                        if (e2Result != 0) {
-                            // Mark blocks as used based on E2NAND data
-                            for (DWORD i = 0; i < 0x10000; i++) {
-                                if (scanBuffer[i] != 0) {
-                                    volume.blockMap[ce][ch][i] |= 0x55; // Mark as used
-                                }
-                            }
-                        }
+                    // Process bad blocks if any
+                    if (outFlag != 0) {
+                        ProcessBadBlocks(volumeIndex, ce, ch, deviceId, mode);
                     }
+                    
+                    result = TRUE;
+                } else {
+                    LogError("flh_ScanMassBlocksPerChip fail. CE=%d Channel=%d", ce, ch);
                 }
             }
-            
-            // Process bad blocks
-            ProcessBadBlocks(volumeIndex, ce, ch, deviceId, mode);
         }
     }
     
-    // For repair modes, perform additional operations
-    if (mode >= 3) {
-        // Erase system table if needed
-        PFN_MP_ERASE_SYSTEM_TABLE pEraseTable = (PFN_MP_ERASE_SYSTEM_TABLE)g_MP_EraseSystemTable;
-        if (pEraseTable) {
-            pEraseTable(deviceId, volumeIndex, volume.blockMap);
-        }
-    }
-    
-    // For specific modes, perform CPU reset
-    if (mode == 2 || mode == 3) {
-        PFN_FLH_CPU_RESET pCpuReset = (PFN_FLH_CPU_RESET)g_FLH_CPUReset;
-        if (pCpuReset) {
-            pCpuReset(0, volumeIndex, deviceId);
-        }
-    }
-    
-    result = TRUE;
-    
-    // Cleanup
     CloseHandle(hDevice);
     HeapFree(GetProcessHeap(), 0, scanBuffer);
-    
-    LogMessage("ScanMassBlocks: Completed for volume %d, mode %d", volumeIndex, mode);
     return result;
 }
 
-// Helper functions for device operations
 BOOL iTEUFDrs::IsCEChannelEnabled(BYTE volumeIndex, BYTE ce, BYTE ch)
 {
     if (volumeIndex >= m_deviceInfo.volumeCount) return FALSE;
     
     DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
     
-    // Check CE mask and channel mask
-    BYTE ceMask = volume.ceMask;
-    BYTE chMask = volume.chMask;
+    // Check CE mask
+    if (!(volume.ceMask & (1 << ce))) {
+        return FALSE;
+    }
     
-    return ((ceMask & (1 << ce)) != 0) && ((chMask & (1 << ch)) != 0);
+    // Check channel mask
+    if (!(volume.chMask & (1 << ch))) {
+        return FALSE;
+    }
+    
+    return TRUE;
 }
 
 void iTEUFDrs::UpdateDeviceStatusFromScan(BYTE volumeIndex, BYTE ce, BYTE ch, BYTE* scanData)
 {
-    if (volumeIndex >= m_deviceInfo.volumeCount) return;
+    if (volumeIndex >= m_deviceInfo.volumeCount || !scanData) return;
     
     DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
-    DWORD bufferOffset = (ch + ce * 2) * 0x10000;
     
     // Update block map based on scan data
-    for (DWORD i = 0; i < 0x10000; i++) {
-        volume.blockMap[ce][ch][i] |= scanData[i];
+    // This is a simplified implementation - actual logic would depend on scan data format
+    for (int i = 0; i < 0x10000; i++) {
+        if (scanData[i] != 0) {
+            volume.blockMap[ce][ch][i] = scanData[i];
+        }
     }
     
-    LogMessage("UpdateDeviceStatusFromScan: Updated CE=%d CH=%d for volume %d", ce, ch, volumeIndex);
+    LogMessage("UpdateDeviceStatusFromScan: Updated block map for CE=%d, CH=%d", ce, ch);
 }
 
 void iTEUFDrs::ProcessBadBlocks(BYTE volumeIndex, BYTE ce, BYTE ch, DWORD deviceId, BYTE mode)
@@ -1968,26 +1924,423 @@ void iTEUFDrs::ProcessBadBlocks(BYTE volumeIndex, BYTE ce, BYTE ch, DWORD device
     
     DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
     
-    // Process each block in this CE/CH
-    for (DWORD block = 0; block < volume.blockCount; block++) {
-        // Check if block is marked as bad
-        if (volume.blockMap[ce][ch][block] != 0) {
-            LogMessage("ProcessBadBlocks: Found bad block CE=%d CH=%d Block=%d", ce, ch, block);
-            
-            // For repair modes, attempt block erase
-            if (mode >= 4) {
-                PFN_FLH_BLOCK_ERASE pErase = (PFN_FLH_BLOCK_ERASE)g_FLH_BlockErase;
-                if (pErase) {
-                    DWORD blockAddr = ConvertBlockAddress(volume.hDevice, (WORD)block);
-                    int eraseResult = pErase(deviceId, ce, ch, blockAddr);
-                    if (eraseResult == 1) {
-                        LogMessage("ProcessBadBlocks: Successfully erased bad block CE=%d CH=%d Block=%d", ce, ch, block);
-                        volume.blockMap[ce][ch][block] = 0; // Mark as good
-                    } else {
-                        LogError("ProcessBadBlocks: Failed to erase bad block CE=%d CH=%d Block=%d", ce, ch, block);
-                    }
+    // Process bad blocks using SDK
+    if (m_sdkApis.FLH_BlockErase) {
+        for (DWORD block = 0; block < volume.blockCount; block++) {
+            if (volume.blockMap[ce][ch][block] == 0xFF) { // Bad block marker
+                int eraseResult = m_sdkApis.FLH_BlockErase(deviceId, ch, ce, block, volume.hDevice);
+                if (eraseResult != 1) {
+                    LogError("ProcessBadBlocks: Failed to erase bad block %d", block);
                 }
             }
         }
     }
+    
+    LogMessage("ProcessBadBlocks: Processed bad blocks for CE=%d, CH=%d", ce, ch);
+}
+
+BOOL iTEUFDrs::GetDeviceInfoMain(BYTE volumeIndex, DWORD deviceId)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount) return FALSE;
+    
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    
+    LogMessage("GetDeviceInfo CheckDriveExist OK.");
+    
+    // Set device ID
+    SetDeviceID(volumeIndex, deviceId);
+    LogMessage("GetDeviceInfo SetDeviceID OK.");
+    
+    // Pair volume with controller
+    VolumePairController(volumeIndex, deviceId);
+    LogMessage("GetDeviceInfo VolumePairController OK.");
+    
+    // Process each bank
+    for (BYTE bankIndex = 0; bankIndex < MAX_BANKS; bankIndex++) {
+        DEVICE_BANK_INFO& bank = volume.banks[bankIndex];
+        
+        // Check if bank is valid
+        if (bank.bankType > 1) {
+            // Use different controller if available
+            if (volume.controllerType == 5) {
+                bank.bankType = 2; // Use controller 2
+            }
+        }
+        
+        // Check drive existence
+        BOOL driveExists = FALSE;
+        if (m_forcedMode) {
+            driveExists = CheckDriveExistInternal(volumeIndex);
+        } else {
+            driveExists = CheckDriveExist(volumeIndex);
+        }
+        
+        if (!driveExists) {
+            bank.isValid = FALSE;
+            continue;
+        }
+        
+        // Mark bank as found
+        bank.isValid = TRUE;
+        
+        // Check if system is ready
+        if (!volume.systemReady) {
+            if (bank.bankType == '?') {
+                LogError("Check system ready IO fail ....");
+                goto cleanup;
+            }
+            
+            // Set current bank
+            m_deviceInfo.currentVolume = volumeIndex;
+            
+            // Check system ready
+            CheckSystemReadyIO(volumeIndex, deviceId);
+            
+            // Load Bank C
+            LoadBankC(volumeIndex, deviceId);
+            
+            // Get BCM information
+            BOOL bcmLoaded = GetBCMInformation(volumeIndex, deviceId);
+            bank.bcmLoaded = bcmLoaded;
+            volume.systemReady = TRUE;
+            
+            if (!bcmLoaded) {
+                goto cleanup;
+            }
+        }
+        
+        // Get flash method
+        BOOL flashMethodOk = GetFlashMethod(volumeIndex, deviceId);
+        if (flashMethodOk) {
+            bank.flashMethodValid = TRUE;
+        }
+        
+        // Set current bank
+        m_deviceInfo.currentVolume = volumeIndex;
+        
+        // Check system ready
+        CheckSystemReadyIO(volumeIndex, deviceId);
+        
+        // Load Bank C
+        LoadBankC(volumeIndex, deviceId);
+        
+        // Get BCM information if not already loaded
+        if (!bank.bcmLoaded) {
+            BOOL bcmLoaded = GetBCMInformation(volumeIndex, deviceId);
+            bank.bcmLoaded = bcmLoaded;
+            if (!bcmLoaded) {
+                goto cleanup;
+            }
+        }
+        
+        // Notify FW segment info
+        bank.fwSegmentNotified = TRUE;
+        BOOL segmentNotified = NotifyFwSegmentInfo(volumeIndex, deviceId);
+        if (!segmentNotified) {
+            MessageBoxA(NULL, "Load BankC fail (Path not exist?)", "Error", MB_OK);
+            goto cleanup;
+        }
+        
+        // Read BCM using SDK
+        if (m_sdkApis.FLH_ReadBCM) {
+            int result = m_sdkApis.FLH_ReadBCM(&bank.bcmInfo, volume.hDevice);
+            if (result != 1) {
+                switch (result) {
+                    case 0:
+                        MessageBoxA(NULL, "Get BCM information CMD fail", "Error", MB_OK);
+                        break;
+                    case 0x3F:
+                        MessageBoxA(NULL, "Get BCM information IO fail", "Error", MB_OK);
+                        break;
+                    case 0x72:
+                        MessageBoxA(NULL, "Get BCM information fail", "Error", MB_OK);
+                        break;
+                    case 0x74:
+                        MessageBoxA(NULL, "Notify fw to park at runtime BCM information fail", "Error", MB_OK);
+                        break;
+                }
+                goto cleanup;
+            }
+        }
+        
+        // Copy BCM data to different locations
+        memcpy(&bank.bcmData[0x1000], &bank.bcmInfo[0x100], 0x400);
+        memcpy(&bank.bcmData[0x2000], &bank.bcmInfo[0x500], 0x400);
+        
+        // Copy bank parameters
+        bank.bankId = bank.bcmInfo[0x4C];
+        bank.bankType = bank.bcmInfo[0x4D];
+        bank.bankSize = bank.bcmInfo[0x4B];
+        
+        // Load bank data based on type
+        if (!bank.bcmLoaded) {
+            LoadBankData2(volumeIndex, deviceId);
+        } else {
+            LoadBankData3(volumeIndex, deviceId);
+        }
+        
+        // Get LUN array data
+        GetLunArrayData(volumeIndex, deviceId);
+        
+        // Check if repair mode is enabled
+        if (m_repairMode && m_deviceInfo.repairMode) {
+            goto cleanup;
+        }
+        
+        // Check if need to load bank
+        BOOL needLoadBank = CheckNeedLoadBank(volumeIndex, deviceId);
+        if (!needLoadBank) {
+            LoadBankData(volumeIndex, deviceId);
+        } else {
+            LoadBankData2(volumeIndex, deviceId);
+        }
+        
+        // Get MP info
+        BOOL mpInfoLoaded = GetMPInfo(volumeIndex, deviceId);
+        if (!mpInfoLoaded) {
+            // Clear device name
+            memset(&m_deviceInfo.deviceName, 0, sizeof(m_deviceInfo.deviceName));
+            strcpy_s(m_deviceInfo.deviceName, sizeof(m_deviceInfo.deviceName), " NONE");
+            m_deviceInfo.isInitialized = FALSE;
+        } else {
+            // Format device string
+            FormatDeviceString(m_deviceInfo.deviceString, sizeof(m_deviceInfo.deviceString),
+                              " %s - %s ", volume.vendorName, volume.productName);
+            m_deviceInfo.isInitialized = TRUE;
+        }
+        
+        // Check if ISP is loaded
+        if (!m_deviceInfo.isInitialized && m_deviceInfo.ispLoaded) {
+            LogMessage("DoRepairDevice No System (!ISPLoad)");
+            m_deviceInfo.repairMode = TRUE;
+        } else {
+            LogMessage("DoRepairDevice System Yes bISPLoaded");
+            m_deviceInfo.repairMode = FALSE;
+        }
+        
+        // Mark bank as processed
+        bank.isProcessed = TRUE;
+        
+        // Update device status
+        UpdateDeviceStatus(volumeIndex, deviceId);
+        
+        // Find first valid bank
+        m_deviceInfo.selectedVolume = 0xFF;
+        for (BYTE i = 0; i < m_deviceInfo.volumeCount; i++) {
+            if (m_deviceInfo.volumes[i].banks[0].isProcessed) {
+                m_deviceInfo.selectedVolume = i;
+                break;
+            }
+        }
+        
+        // Initialize device parameters
+        memset(&m_deviceInfo.deviceParams, 0, sizeof(m_deviceInfo.deviceParams));
+        m_deviceInfo.deviceParams[0] = 0;
+        m_deviceInfo.deviceParams[1] = 0;
+        m_deviceInfo.deviceParams[2] = 0;
+        
+        // Update device parameters
+        UpdateDeviceParameters(deviceId);
+        
+        // Format device identification string
+        DEVICE_VOLUME_INFO& selectedVolume = m_deviceInfo.volumes[m_deviceInfo.selectedVolume];
+        FormatDeviceString(m_deviceInfo.deviceString, sizeof(m_deviceInfo.deviceString),
+                          " %s%s , ( %C )\\n%s", selectedVolume.vendorName, 
+                          selectedVolume.productName, selectedVolume.volumeLetter,
+                          m_deviceInfo.deviceParams);
+        
+        // Copy device path
+        memcpy(m_deviceInfo.devicePath, &selectedVolume.vendorName, 8);
+        
+        // Process device parameters
+        memset(&m_deviceInfo.deviceParams, 0, 0xFF);
+        
+        for (BYTE i = 1; i < 4; i++) {
+            BYTE param = selectedVolume.banks[0].bcmInfo[0x9A6 + i];
+            if (param == 0xFF) break;
+            
+            // Format parameter string
+            CHAR paramStr[0x100];
+            FormatDeviceString(paramStr, sizeof(paramStr), "( %C )", 
+                              m_deviceInfo.volumes[param].volumeLetter);
+            
+            // Concatenate to device string
+            strcat_s(m_deviceInfo.deviceString, sizeof(m_deviceInfo.deviceString), paramStr);
+        }
+        
+        break; // Process only first valid bank
+    }
+    
+cleanup:
+    // Mark bank as processed
+    volume.banks[0].isProcessed = TRUE;
+    
+    // Update device status
+    UpdateDeviceStatus(volumeIndex, deviceId);
+    
+    return TRUE;
+}
+
+BOOL iTEUFDrs::GetFlashMethod(BYTE volumeIndex, DWORD deviceId)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount) return FALSE;
+    
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    DEVICE_BANK_INFO& bank = volume.banks[0];
+    
+    // Initialize flash data buffer
+    BYTE flashData[0xE40];
+    memset(flashData, 0, sizeof(flashData));
+    
+    // Setup database paths
+    setupDatabasePaths();
+    
+    // Get flash parameters from BCM
+    BYTE ce = bank.bcmInfo[0x9A6];
+    BYTE ch = bank.bcmInfo[0xA4C];
+    BYTE lun = bank.bcmInfo[0xA4D];
+    BYTE controller = bank.bcmInfo[0xA4B];
+    
+    // Copy BCM data to local buffers
+    DWORD* bcmBuffer1 = (DWORD*)&bank.bcmInfo[0xF32];
+    DWORD* bcmBuffer2 = (DWORD*)&bank.bcmInfo[0x1332];
+    
+    DWORD localBuffer1[0x100];
+    DWORD localBuffer2[0x54];
+    
+    // Copy first buffer
+    for (int i = 0; i < 0x100; i++) {
+        localBuffer1[i] = bcmBuffer1[i];
+    }
+    
+    // Copy second buffer
+    for (int i = 0; i < 0x54; i++) {
+        localBuffer2[i] = bcmBuffer2[i];
+    }
+    
+    // Get flash data from database using SDK
+    if (m_sdkApis.FLH_GetFlashDataFromDataBase) {
+        BOOL result = m_sdkApis.FLH_GetFlashDataFromDataBase(deviceId, flashData, 
+                                                           m_deviceInfo.deviceData, 
+                                                           m_deviceInfo.devicePath);
+        
+        // Copy flash data to BCM buffer
+        for (int i = 0; i < 0x390; i++) {
+            ((DWORD*)&bank.bcmInfo[0xA26])[i] = ((DWORD*)flashData)[i];
+        }
+        
+        if (!result) {
+            LogError(" (GetFlashMethod) Get Flash fail");
+            return FALSE;
+        }
+        
+        // Extract flash method from flash data
+        bank.flashMethod = flashData[0xA2E] & 0x0F;
+        
+        // Copy flash data to bank data
+        for (int i = 0; i < 0x390; i++) {
+            ((DWORD*)&bank.bankData[0x1866])[i] = ((DWORD*)flashData)[i];
+        }
+        
+        // Set bank parameters
+        bank.bankSize = *(WORD*)&flashData[0xE3E];
+        bank.bankOffset = 0;
+        bank.bankId = 0;
+        
+        // Check if device is ready
+        if (!volume.systemReady) {
+            LogMessage("Device is not ready....");
+        } else {
+            // Get flash data from memory
+            if (m_sdkApis.FLH_GetFlashDataFromMemory) {
+                BOOL memoryResult = m_sdkApis.FLH_GetFlashDataFromMemory(deviceId, flashData);
+                bank.flashDataFromMemory = memoryResult;
+                
+                // Check root table validity
+                BYTE rootTableValid = flashData[0xDFE];
+                BYTE rootTableType = flashData[0xDFD];
+                
+                if (rootTableValid > 8 || rootTableType > 2) {
+                    LogError("Root table is strange....");
+                    bank.flashDataFromMemory = FALSE;
+                }
+            }
+            
+            // Copy flash data back to BCM if valid
+            if (bank.flashDataFromMemory) {
+                for (int i = 0; i < 0x390; i++) {
+                    ((DWORD*)&bank.bcmInfo[0xA26])[i] = ((DWORD*)flashData)[i];
+                }
+                
+                // Copy additional parameters
+                bank.bankSize = *(WORD*)&flashData[0xAA2];
+                bank.bankOffset = *(WORD*)&flashData[0xAA4];
+            }
+        }
+    }
+    
+    // Update device parameters
+    UpdateDeviceParameters(deviceId);
+    UpdateDeviceStatus(deviceId, volume.volumeLetter);
+    
+    return TRUE;
+}
+
+BOOL iTEUFDrs::CheckNeedLoadBank(BYTE volumeIndex, DWORD deviceId)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount) return FALSE;
+    
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    DEVICE_BANK_INFO& bank = volume.banks[0];
+    
+    // Initialize LUN configuration buffer
+    DWORD lunConfig[16];
+    memset(lunConfig, 0, sizeof(lunConfig));
+    
+    // Read LUN configuration using SDK
+    if (m_sdkApis.VDR_ReadWriteLUNConfig) {
+        int result = m_sdkApis.VDR_ReadWriteLUNConfig(0, lunConfig, &bank.bcmInfo[0xA26], deviceId);
+        
+        if (result == 0) {
+            LogError(" (GetLunArrayData) Get Lun information fail");
+            m_deviceInfo.lunArrayLoaded = FALSE;
+            return FALSE;
+        }
+        
+        // Copy LUN configuration to bank data
+        for (int i = 0; i < 16; i++) {
+            ((DWORD*)&bank.lunArray[0x9AE])[i] = lunConfig[i];
+        }
+        
+        m_deviceInfo.lunArrayLoaded = TRUE;
+        return TRUE;
+    }
+    
+    return FALSE;
+}
+
+void iTEUFDrs::UpdateDeviceParameters(DWORD deviceId)
+{
+    // Update device parameters based on device ID
+    // This function updates device-specific parameters
+    LogMessage("UpdateDeviceParameters: device 0x%08X", deviceId);
+    
+    // Update device flags and parameters based on device ID
+    // Implementation would depend on specific device requirements
+}
+
+void iTEUFDrs::UpdateDeviceStatus(DWORD deviceId, BYTE volumeLetter)
+{
+    // Update device status based on device ID and volume letter
+    LogMessage("UpdateDeviceStatus: device 0x%08X, volume %C", deviceId, volumeLetter);
+    
+    // Update device status flags and parameters
+    // Implementation would depend on specific device requirements
+}
+
+BOOL iTEUFDrs::LoadBankData(BYTE volumeIndex, DWORD deviceId)
+{
+    // Load bank data - implementation would depend on specific requirements
+    LogMessage("LoadBankData: volume %d, device 0x%08X", volumeIndex, deviceId);
+    return TRUE;
 }

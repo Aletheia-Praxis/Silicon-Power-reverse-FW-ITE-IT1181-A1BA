@@ -117,6 +117,14 @@ private:
     BOOL IsCEChannelEnabled(BYTE volumeIndex, BYTE ce, BYTE ch);
     void UpdateDeviceStatusFromScan(BYTE volumeIndex, BYTE ce, BYTE ch, BYTE* scanData);
     void ProcessBadBlocks(BYTE volumeIndex, BYTE ce, BYTE ch, DWORD deviceId, BYTE mode);
+    
+    // Additional functions from decompilation analysis
+    BOOL GetDeviceInfoMain(BYTE volumeIndex, DWORD deviceId);
+    BOOL GetFlashMethod(BYTE volumeIndex, DWORD deviceId);
+    BOOL CheckNeedLoadBank(BYTE volumeIndex, DWORD deviceId);
+    void UpdateDeviceParameters(DWORD deviceId);
+    void UpdateDeviceStatus(DWORD deviceId, BYTE volumeLetter);
+    BOOL LoadBankData(BYTE volumeIndex, DWORD deviceId);
 
     // SDK wrappers (names inferred from usage in 0x0040c640)
     BOOL flhScanMassBlocksPerChip(DWORD ctx, BYTE ce, BYTE ch, int rtPtr, void* outBuf, BYTE mode, BYTE* outFlag, int* outRet);
