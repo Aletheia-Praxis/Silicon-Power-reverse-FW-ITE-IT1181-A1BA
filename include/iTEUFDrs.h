@@ -101,6 +101,8 @@ private:
     BOOL FormatDeviceString(LPSTR buffer, DWORD size, LPCSTR format, ...);
 
     BOOL fetchInquiryData(BYTE volumeIndex, BYTE* outBuffer, DWORD bufferSize);
+
+    void updateCISBuffer();
 };
 
 // Error codes for iTEUFDrs

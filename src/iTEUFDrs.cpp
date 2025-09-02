@@ -1010,3 +1010,18 @@ BOOL iTEUFDrs::RunInitializationChain()
     LogMessage("iTEUFDrs: RunInitializationChain done");
     return TRUE;
 }
+
+void iTEUFDrs::updateCISBuffer()
+{
+    // Produce version string like "81.0.X.X-mmdd" or from 4-part version if available
+    time_t now = time(NULL);
+    struct tm t;
+    localtime_s(&t, &now);
+    char mmdd[8];
+    strftime(mmdd, sizeof(mmdd), "%m%d", &t);
+    char version[32] = {0};
+    // Placeholder: if SDK/registry provides 4-part version, format it; else fallback
+    _snprintf_s(version, sizeof(version), _TRUNCATE, "81.0.X.X-%s", mmdd);
+    // Store into a dedicated buffer area if present; otherwise log
+    LOG_INFO("updateCISBuffer: %s", version);
+}
