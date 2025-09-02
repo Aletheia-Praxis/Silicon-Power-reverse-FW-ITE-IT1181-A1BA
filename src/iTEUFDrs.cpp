@@ -1167,3 +1167,73 @@ void iTEUFDrs::flhCPUReset(int rtPtr, DWORD handle, DWORD ctx)
     if (!p) { LOG_WARNING("g_FLH_CPUReset not bound"); return; }
     p(rtPtr, handle, ctx);
 }
+
+typedef int (__stdcall *PFN_STD_READCAP)(DWORD* outLbaMax, DWORD* outBlockSize, HANDLE deviceHandle);
+typedef int (__stdcall *PFN_STD_LOGREAD)(DWORD lba, BYTE* buffer, DWORD bytes, HANDLE deviceHandle);
+
+BOOL iTEUFDrs::readCapacity(BYTE volumeIndex, DWORD* outLbaMax, DWORD* outBlockSize)
+{
+    if (!outLbaMax || !outBlockSize) return FALSE;
+    if (volumeIndex >= m_deviceInfo.volumeCount) return FALSE;
+
+    DEVICE_VOLUME_INFO& v = m_deviceInfo.volumes[volumeIndex];
+    char path[8];
+    path[0] = '\\'; path[1] = '\\'; path[2] = '.'; path[3] = '\\'; path[4] = (char)v.volumeLetter; path[5] = ':'; path[6] = '\0';
+
+    HANDLE h = CreateFileA(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                           NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) {
+        LOG_WARNING("readCapacity: open failed for %s", path);
+        return FALSE;
+    }
+
+    PFN_STD_READCAP pReadCap = (PFN_STD_READCAP)g_STD_ReadCapacity;
+    BOOL ok = FALSE;
+    if (pReadCap) {
+        DWORD lbaMax = 0, blkSize = 0;
+        int ret = pReadCap(&lbaMax, &blkSize, h);
+        ok = (ret != 0);
+        if (ok) {
+            *outLbaMax = lbaMax;
+            *outBlockSize = blkSize;
+        } else {
+            LOG_WARNING("STD_ReadCapacity returned 0 for %s", path);
+        }
+    } else {
+        LOG_WARNING("g_STD_ReadCapacity not bound");
+    }
+
+    CloseHandle(h);
+    return ok;
+}
+
+BOOL iTEUFDrs::logicalRead(BYTE volumeIndex, DWORD lba, BYTE* outBuffer, DWORD bytes)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount || !outBuffer || bytes == 0) return FALSE;
+    DEVICE_VOLUME_INFO& v = m_deviceInfo.volumes[volumeIndex];
+
+    char path[8];
+    path[0] = '\\'; path[1] = '\\'; path[2] = '.'; path[3] = '\\'; path[4] = (char)v.volumeLetter; path[5] = ':'; path[6] = '\0';
+
+    HANDLE h = CreateFileA(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                           NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) {
+        LOG_WARNING("logicalRead: open failed for %s", path);
+        return FALSE;
+    }
+
+    PFN_STD_LOGREAD pLogRead = (PFN_STD_LOGREAD)g_STD_LogicalRead;
+    BOOL ok = FALSE;
+    if (pLogRead) {
+        int ret = pLogRead(lba, outBuffer, bytes, h);
+        ok = (ret != 0);
+        if (!ok) {
+            LOG_WARNING("STD_LogicalRead failed for %s lba=%lu bytes=%lu", path, (unsigned long)lba, (unsigned long)bytes);
+        }
+    } else {
+        LOG_WARNING("g_STD_LogicalRead not bound");
+    }
+
+    CloseHandle(h);
+    return ok;
+}
