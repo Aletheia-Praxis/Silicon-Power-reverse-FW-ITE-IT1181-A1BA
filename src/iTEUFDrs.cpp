@@ -851,3 +851,89 @@ BOOL iTEUFDrs::DetectLogicalVolumes()
     LogMessage("iTEUFDrs: Detecting logical volumes");
     return TRUE;
 }
+
+// High-level orchestration: mirrors FUN_0040d022
+BOOL iTEUFDrs::GetDeviceInfoInternal()
+{
+    return RunInitializationChain();
+}
+
+BOOL iTEUFDrs::RunInitializationChain()
+{
+    LogMessage("iTEUFDrs: RunInitializationChain start");
+
+    if (!InitializeParaValue()) {
+        LogError("InitializeParaValue failed");
+        return FALSE;
+    }
+
+    if (!CheckDriveExist()) {
+        LogWarning("No drives detected");
+        return FALSE;
+    }
+
+    if (!SetDeviceID()) {
+        LogError("SetDeviceID failed");
+        return FALSE;
+    }
+
+    VolumePairController();
+
+    BYTE controllerCount = m_controllerCount;
+    for (BYTE ci = 0; ci < controllerCount; ++ci) {
+        BYTE volIndex = GetVolumeIndexForController(ci);
+        DWORD deviceId = GetDeviceIdForController(ci);
+
+        if (volIndex == 0xFF || deviceId == 0xFFFFFFFF) {
+            LogWarning("Controller %u pairing incomplete", ci);
+            continue;
+        }
+
+        // open/check handle per mode
+        BOOL opened = m_forcedMode ? OpenDriveHandleAgain(volIndex)
+                                   : CheckDriveExistInternal(volIndex);
+        if (!opened) {
+            LogWarning("Controller %u volume %u handle open failed", ci, volIndex);
+            continue;
+        }
+
+        // Check system ready and supporting artifacts
+        if (!CheckSystemReadyIO(volIndex, deviceId)) {
+            LogWarning("SystemReadyIO failed (vol=%u, dev=%u)", volIndex, (UINT)deviceId);
+            continue;
+        }
+
+        if (!LoadBankC(volIndex, deviceId)) {
+            LogWarning("LoadBankC failed (vol=%u)", volIndex);
+            continue;
+        }
+
+        if (!GetBCMInformation(volIndex, deviceId)) {
+            LogWarning("ISP_InitCode/BCM init failed (vol=%u)", volIndex);
+            continue;
+        }
+
+        if (!LoadBankData(volIndex, deviceId)) {
+            LogWarning("LoadBankData failed (vol=%u)", volIndex);
+            continue;
+        }
+
+        // Extended flow per FUN_0040d022
+        LoadBankC2(volIndex, deviceId);
+        GetBCMInformation2(volIndex, deviceId);
+        LoadBankData2(volIndex, deviceId);
+        LoadBankData3(volIndex, deviceId);
+        GetMPInfo(volIndex, deviceId);
+
+        if (!GetLunArrayData(volIndex, deviceId)) {
+            CalculateCapacity(volIndex);
+        } else {
+            CalculateRealCapacity(volIndex);
+        }
+
+        LogMessage("Controller %u processed", ci);
+    }
+
+    LogMessage("iTEUFDrs: RunInitializationChain done");
+    return TRUE;
+}
