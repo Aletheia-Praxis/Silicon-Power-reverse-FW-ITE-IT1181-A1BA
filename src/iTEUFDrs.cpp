@@ -584,3 +584,270 @@ BOOL iTEUFDrs::ConcatenateBankInfo()
     
     return TRUE;
 }
+
+// Get volume info by index
+const DEVICE_VOLUME_INFO* iTEUFDrs::GetVolumeInfo(BYTE index) const
+{
+    if (index >= MAX_VOLUMES) {
+        return nullptr;
+    }
+    return &m_deviceInfo.volumes[index];
+}
+
+// Get controller data by index
+const CONTROLLER_DATA* iTEUFDrs::GetControllerData(BYTE index) const
+{
+    if (index >= MAX_CONTROLLERS) {
+        return nullptr;
+    }
+    return &m_controllerData[index];
+}
+
+// Set device IDs for volumes (decompiled from FUN_0040ae40)
+BOOL iTEUFDrs::SetDeviceID()
+{
+    if (m_deviceInfo.volumeCount == 0) {
+        return TRUE; // No volumes to process
+    }
+    
+    for (BYTE volumeIndex = 0; volumeIndex < m_deviceInfo.volumeCount; volumeIndex++) {
+        DEVICE_VOLUME_INFO* volumeInfo = &m_deviceInfo.volumes[volumeIndex];
+        
+        BOOL driveExists;
+        if (m_forcedMode) {
+            driveExists = OpenDriveHandleAgain(volumeIndex);
+        } else {
+            driveExists = CheckDriveExistInternal(volumeIndex);
+        }
+        
+        if (!driveExists) {
+            continue;
+        }
+        
+        // Find available device ID slot
+        BYTE deviceId = 0xFF;
+        for (BYTE i = 0; i < 0xFF; i++) {
+            BOOL slotTaken = FALSE;
+            for (BYTE j = 0; j < MAX_VOLUMES; j++) {
+                if (m_deviceInfo.volumes[j].deviceId == i) {
+                    slotTaken = TRUE;
+                    break;
+                }
+            }
+            if (!slotTaken) {
+                deviceId = i;
+                break;
+            }
+        }
+        
+        if (deviceId == 0xFF) {
+            LogError("iTEUFDrs: Over DeviceID Table Max value");
+            CloseHandle(volumeInfo->hVolume);
+            return FALSE;
+        }
+        
+        // Set the device ID
+        volumeInfo->deviceId = deviceId;
+        LogMessage("iTEUFDrs: Volume %d assigned device ID %d", volumeIndex, deviceId);
+        
+        CloseHandle(volumeInfo->hVolume);
+    }
+    
+    return TRUE;
+}
+
+// Pair volumes with controllers (decompiled from FUN_00408430)
+void iTEUFDrs::VolumePairController()
+{
+    BOOL volumeUsed[MAX_VOLUMES] = {FALSE};
+    m_controllerCount = 0;
+    
+    for (BYTE volumeIndex = 0; volumeIndex < m_deviceInfo.volumeCount && m_controllerCount < MAX_CONTROLLERS; volumeIndex++) {
+        if (volumeUsed[volumeIndex]) {
+            continue;
+        }
+        
+        DEVICE_VOLUME_INFO* baseVolume = &m_deviceInfo.volumes[volumeIndex];
+        CONTROLLER_DATA* controller = &m_controllerData[m_controllerCount];
+        
+        // Start a new controller group
+        controller->volumeIndexes[0] = volumeIndex;
+        controller->volumeCount = 1;
+        volumeUsed[volumeIndex] = TRUE;
+        
+        // Find other volumes with the same controller type
+        BYTE volumeCount = 1;
+        for (BYTE otherIndex = volumeIndex + 1; otherIndex < m_deviceInfo.volumeCount && volumeCount < 4; otherIndex++) {
+            if (volumeUsed[otherIndex]) {
+                continue;
+            }
+            
+            DEVICE_VOLUME_INFO* otherVolume = &m_deviceInfo.volumes[otherIndex];
+            if (otherVolume->controllerType == baseVolume->controllerType) {
+                controller->volumeIndexes[volumeCount] = otherIndex;
+                volumeCount++;
+                volumeUsed[otherIndex] = TRUE;
+            }
+        }
+        
+        controller->volumeCount = volumeCount;
+        controller->productId = m_deviceInfo.volumes[controller->volumeIndexes[0]].productId;
+        controller->isValid = TRUE;
+        
+        LogMessage("iTEUFDrs: Controller %d paired with %d volumes", m_controllerCount, volumeCount);
+        m_controllerCount++;
+    }
+}
+
+// Get volume index for controller
+BYTE iTEUFDrs::GetVolumeIndexForController(BYTE controllerIndex) const
+{
+    if (controllerIndex >= m_controllerCount) {
+        return 0xFF;
+    }
+    return m_controllerData[controllerIndex].volumeIndexes[0];
+}
+
+// Get device ID for controller
+DWORD iTEUFDrs::GetDeviceIdForController(BYTE controllerIndex) const
+{
+    if (controllerIndex >= m_controllerCount) {
+        return 0xFFFFFFFF;
+    }
+    BYTE volumeIndex = m_controllerData[controllerIndex].volumeIndexes[0];
+    return m_deviceInfo.volumes[volumeIndex].deviceId;
+}
+
+// Check system ready IO (decompiled from FUN_004095e0)
+BOOL iTEUFDrs::CheckSystemReadyIO(BYTE volumeIndex, DWORD deviceId)
+{
+    LogMessage("iTEUFDrs: Checking system ready IO for volume %d, device %d", volumeIndex, deviceId);
+    
+    // Clear binary file path buffer
+    CHAR binFilePath[MAX_PATH + 4] = {0};
+    CHAR fileName[MAX_PATH] = {0};
+    
+    // Get volume info
+    if (volumeIndex >= m_deviceInfo.volumeCount) {
+        LogError("iTEUFDrs: Invalid volume index %d", volumeIndex);
+        return FALSE;
+    }
+    
+    DEVICE_VOLUME_INFO* volumeInfo = &m_deviceInfo.volumes[volumeIndex];
+    
+    // Determine bin file name based on controller type
+    if (deviceId == 0xFF) {
+        strcpy_s(fileName, sizeof(fileName), "u181s00.bin");
+    } else {
+        sprintf_s(fileName, sizeof(fileName), "u181s%02x.bin", (BYTE)deviceId);
+    }
+    
+    // Build full path to bin file
+    LPCSTR pathFormat;
+    if (volumeInfo->isA1BA) {
+        pathFormat = "%s\\Bin\\1181\\DownGrade\\A1BA\\%s";
+    } else {
+        if (volumeInfo->controllerType == 2) {
+            pathFormat = "%s\\Bin\\1176\\DownGrade\\A0AA\\%s";
+        } else {
+            pathFormat = "%s\\Bin\\1181\\DownGrade\\A0AA\\%s";
+        }
+    }
+    
+    int result = FormatDeviceString(binFilePath, sizeof(binFilePath), pathFormat, m_basePath, fileName);
+    if (result != 0) {
+        LogError("iTEUFDrs: GetBinFilePath: Formatted String Buffer fails.");
+        return FALSE;
+    }
+    
+    // Check if bin file exists
+    if (binFilePath[0] == '\0') {
+        LogError("iTEUFDrs: Bin file path = %s", binFilePath);
+        return FALSE;
+    }
+    
+    // Try to open the file
+    HANDLE hFile = CreateFileA(binFilePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        LogError("iTEUFDrs: Cannot open bin file: %s", binFilePath);
+        return FALSE;
+    }
+    
+    CloseHandle(hFile);
+    LogMessage("iTEUFDrs: System ready IO check passed for %s", binFilePath);
+    return TRUE;
+}
+
+// Load Bank C information (placeholder implementations for remaining functions)
+BOOL iTEUFDrs::LoadBankC(BYTE volumeIndex, DWORD deviceId)
+{
+    LogMessage("iTEUFDrs: Loading Bank C for volume %d, device %d", volumeIndex, deviceId);
+    // Implementation would call SDK functions for bank loading
+    return TRUE;
+}
+
+BOOL iTEUFDrs::GetBCMInformation(BYTE volumeIndex, DWORD deviceId)
+{
+    LogMessage("iTEUFDrs: Getting BCM information for volume %d, device %d", volumeIndex, deviceId);
+    // Implementation would call SDK functions for BCM data
+    return TRUE;
+}
+
+BOOL iTEUFDrs::LoadBankData(BYTE volumeIndex, DWORD deviceId)
+{
+    LogMessage("iTEUFDrs: Loading bank data for volume %d, device %d", volumeIndex, deviceId);
+    // Implementation would call SDK functions for bank data loading
+    return TRUE;
+}
+
+// Additional function placeholders
+BOOL iTEUFDrs::LoadBankC2(BYTE volumeIndex, DWORD deviceId) { return TRUE; }
+BOOL iTEUFDrs::GetBCMInformation2(BYTE volumeIndex, DWORD deviceId) { return TRUE; }
+BOOL iTEUFDrs::LoadBankData2(BYTE volumeIndex, DWORD deviceId) { return TRUE; }
+BOOL iTEUFDrs::LoadBankData3(BYTE volumeIndex, DWORD deviceId) { return TRUE; }
+BOOL iTEUFDrs::GetMPInfo(BYTE volumeIndex, DWORD deviceId) { return TRUE; }
+BOOL iTEUFDrs::GetLunArrayData(BYTE volumeIndex, DWORD deviceId) { return TRUE; }
+void iTEUFDrs::CalculateCapacity(BYTE volumeIndex) { }
+void iTEUFDrs::CalculateRealCapacity(BYTE volumeIndex) { }
+
+// Format device string (decompiled from FUN_004094a0)
+BOOL iTEUFDrs::FormatDeviceString(LPSTR buffer, DWORD size, LPCSTR format, ...)
+{
+    if (size == 0 || size > 0x7FFFFFFF) {
+        return FALSE;
+    }
+    
+    va_list args;
+    va_start(args, format);
+    
+    DWORD actualSize = size - 1;
+    int result = _vsnprintf_s(buffer, actualSize, _TRUNCATE, format, args);
+    
+    va_end(args);
+    
+    if (result < 0 || (DWORD)result >= actualSize) {
+        buffer[actualSize] = '\0';
+        return FALSE;
+    }
+    
+    if ((DWORD)result == actualSize) {
+        buffer[actualSize] = '\0';
+    }
+    
+    return TRUE;
+}
+
+// Helper functions
+BOOL iTEUFDrs::DetectPhysicalDrives()
+{
+    // Implementation for detecting physical drives
+    LogMessage("iTEUFDrs: Detecting physical drives");
+    return TRUE;
+}
+
+BOOL iTEUFDrs::DetectLogicalVolumes()
+{
+    // Implementation for detecting logical volumes
+    LogMessage("iTEUFDrs: Detecting logical volumes");
+    return TRUE;
+}
