@@ -425,21 +425,73 @@ BOOL iTEUFDrs::DetectPhysicalDrives()
 
 BOOL iTEUFDrs::DetectLogicalVolumes()
 {
-    LogMessage("DetectLogicalVolumes: scanning logical volumes");
-    
-    // Scan logical volumes A-Z
-    for (char drive = 'A'; drive <= 'Z'; drive++) {
-        CHAR drivePath[MAX_PATH];
-        sprintf_s(drivePath, "%c:\\", drive);
-        
-        UINT driveType = GetDriveTypeA(drivePath);
-        if (driveType == DRIVE_FIXED || driveType == DRIVE_REMOVABLE) {
-            // Check if this is an ITE device
-            // Implementation would check device properties
+    LOG_INFO("DetectLogicalVolumes: start");
+    for (BYTE idx = 0; idx < m_deviceInfo.volumeCount; ++idx) {
+        DEVICE_VOLUME_INFO& v = m_deviceInfo.volumes[idx];
+        // Reopen handle for inquiry
+        char path[8];
+        path[0] = '\\'; path[1] = '\\'; path[2] = '.'; path[3] = '\\'; path[4] = (char)v.volumeLetter; path[5] = ':'; path[6] = '\0';
+        HANDLE h = CreateFileA(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                               NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (h == INVALID_HANDLE_VALUE) {
+            continue;
         }
+        v.hDevice = h;
+        BYTE inq[176];
+        memset(inq, 0, sizeof(inq));
+        if (!fetchInquiryData(idx, inq, sizeof(inq))) {
+            LOG_WARNING("Inquiry failed for %C", v.volumeLetter);
+            SafeCloseHandle(v.hDevice);
+            continue;
+        }
+        // Save vendor/product (offsets 8..15 and 16..31 like SCSI INQUIRY standard)
+        for (int i = 0; i < 8; ++i) {
+            BYTE c = inq[8 + i];
+            v.vendorName[i] = (c == 0) ? ' ' : (char)c;
+        }
+        v.vendorName[8] = '\0';
+        for (int i = 0; i < 16; ++i) {
+            BYTE c = inq[16 + i];
+            v.productName[i] = (c == 0) ? ' ' : (char)c;
+        }
+        v.productName[16] = '\0';
+        // Build ASCII inquiry string for substring search
+        char asciiBuf[256];
+        int off = 0;
+        for (int i = 8; i < 36 && off < 200; ++i) {
+            char c = (char)inq[i];
+            asciiBuf[off++] = (c == 0) ? ' ' : c;
+        }
+        asciiBuf[off] = '\0';
+        std::string s(asciiBuf);
+        // Detect controller and flags
+        v.controllerType = 200; // not supported by default
+        v.a1baFlag = 0xFF;
+        if (s.find("1181") != std::string::npos) {
+            v.familyType = 0x1181;
+            v.controllerType = 0;
+            if (s.find("A0AA") != std::string::npos) v.a1baFlag = 0;
+            else if (s.find("A1BA") != std::string::npos) { v.controllerType = 1; v.a1baFlag = 1; }
+        } else if (s.find("1176") != std::string::npos) {
+            v.familyType = 0x1176;
+            v.controllerType = 2;
+            v.a1baFlag = (s.find("A0AA") != std::string::npos) ? 0 : 0xFF;
+        }
+        // Copy raw inquiry
+        memcpy(v.inquiryData, inq, sizeof(v.inquiryData));
+        SafeCloseHandle(v.hDevice);
     }
-    
+    LOG_INFO("DetectLogicalVolumes: done");
     return TRUE;
+}
+
+BOOL iTEUFDrs::fetchInquiryData(BYTE volumeIndex, BYTE* outBuffer, DWORD bufferSize)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount || !outBuffer || bufferSize < 0xB0) return FALSE;
+    DEVICE_VOLUME_INFO& v = m_deviceInfo.volumes[volumeIndex];
+    // Here we should use SDK_APIS to issue INQUIRY; as a placeholder, attempt DeviceIoControl SCSI pass-through could be added later
+    // For now, return FALSE to avoid pretending data
+    return FALSE;
 }
 
 BOOL iTEUFDrs::ProcessDeviceInquiry(HANDLE hDevice, BYTE volumeIndex)
