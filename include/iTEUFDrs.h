@@ -125,6 +125,9 @@ private:
     void UpdateDeviceParameters(DWORD deviceId);
     void UpdateDeviceStatus(DWORD deviceId, BYTE volumeLetter);
     BOOL LoadBankData(BYTE volumeIndex, DWORD deviceId);
+    BOOL LoadBankData2(BYTE volumeIndex, DWORD deviceId);
+    BOOL LoadBankData3(BYTE volumeIndex, DWORD deviceId);
+    BOOL GetBinFileVersion(BYTE volumeIndex, DWORD deviceId);
 
     // SDK wrappers (names inferred from usage in 0x0040c640)
     BOOL flhScanMassBlocksPerChip(DWORD ctx, BYTE ce, BYTE ch, int rtPtr, void* outBuf, BYTE mode, BYTE* outFlag, int* outRet);

@@ -14,6 +14,12 @@ typedef int (__stdcall *PFN_FLH_INIT_CTRL)(DWORD ctx, BYTE* segmentParams, void*
 typedef int (__stdcall *PFN_FLH_BLOCK_ERASE)(DWORD ctx, DWORD handle, int rtPtr);
 typedef int (__stdcall *PFN_FLH_READISP)(DWORD deviceId, BYTE* buffer, DWORD bufferSize, BYTE lunIndex, BYTE* bcmInfo, BYTE mode);
 typedef int (__stdcall *PFN_ADDR_READCIS)(DWORD deviceId, DWORD* buffer, DWORD lunId, BYTE* bcmInfo);
+typedef int (__stdcall *PFN_FLH_GETFLASHDATAFROMDATABASE)(DWORD deviceId, BYTE* flashData, BYTE* deviceData, CHAR* devicePath);
+typedef int (__stdcall *PFN_FLH_GETFLASHDATAFROMMEMORY)(DWORD deviceId, BYTE* flashData);
+typedef int (__stdcall *PFN_VDR_READWRITELUNCONFIG)(DWORD mode, DWORD* buffer, BYTE* bcmInfo, DWORD deviceId);
+typedef int (__stdcall *PFN_FLH_FINDROOTTABLE)(DWORD deviceId, DWORD* rootTableEntries, BYTE* bcmInfo, DWORD mode);
+typedef int (__stdcall *PFN_VDR_ROOTFUNC)(DWORD address, DWORD mode, DWORD param1, DWORD param2, DWORD param3, BYTE* buffer, BYTE* bcmInfo, DWORD deviceId);
+typedef int (__stdcall *PFN_VDR_READSYSADDR)(DWORD* sysAddrData, BYTE* bcmInfo, DWORD deviceId);
 
 // Constructor implementation (decompiled from FUN_0040d690)
 iTEUFDrs::iTEUFDrs(LPCSTR basePath)
@@ -1759,14 +1765,90 @@ BOOL iTEUFDrs::GetBinFilePath(BYTE volumeIndex, LPCSTR fileName, LPSTR filePath,
     return TRUE;
 }
 
+BOOL iTEUFDrs::GetBinFileVersion(BYTE volumeIndex, DWORD deviceId)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount) return FALSE;
+    
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    DEVICE_BANK_INFO& bank = volume.banks[0];
+    
+    // Initialize version information
+    memset(&bank.versionInfo, 0, sizeof(bank.versionInfo));
+    memset(bank.versionString, 0, sizeof(bank.versionString));
+    
+    // Get binary file path
+    CHAR binFilePath[MAX_PATH];
+    if (!GetBinFilePath(volumeIndex, "firmware.bin", binFilePath, sizeof(binFilePath))) {
+        LogError("GetBinFileVersion: Failed to get binary file path");
+        return FALSE;
+    }
+    
+    // Open binary file
+    FILE* file = fopen(binFilePath, "rb");
+    if (!file) {
+        LogError("(GetBinFileVersion) Can't open Binary file");
+        return FALSE;
+    }
+    
+    // Read version information from file
+    BYTE versionData[0x40];
+    memset(versionData, 0xFF, sizeof(versionData));
+    
+    // Seek to version offset (0xF1E0)
+    if (fseek(file, 0xF1E0, SEEK_SET) != 0) {
+        LogError("GetBinFileVersion: Failed to seek to version offset");
+        fclose(file);
+        return FALSE;
+    }
+    
+    // Read version data
+    size_t bytesRead = fread(versionData, 1, sizeof(versionData), file);
+    fclose(file);
+    
+    if (bytesRead == sizeof(versionData)) {
+        // Parse version information
+        // Look for "ITEu" signature
+        char* iteuSignature = strstr((char*)versionData, "ITEu");
+        if (iteuSignature && (iteuSignature - (char*)versionData) != -1) {
+            // Extract version information from parsed data
+            // This is a simplified implementation - actual parsing would depend on file format
+            bank.versionInfo.major = *(DWORD*)&versionData[0x10];
+            bank.versionInfo.minor = *(DWORD*)&versionData[0x14];
+            bank.versionInfo.build = *(DWORD*)&versionData[0x18];
+            bank.versionInfo.revision = *(DWORD*)&versionData[0x1C];
+            bank.versionInfo.date = *(DWORD*)&versionData[0x20];
+            bank.versionInfo.time = *(DWORD*)&versionData[0x24];
+            bank.versionInfo.checksum = *(DWORD*)&versionData[0x28];
+            bank.versionInfo.flags = *(WORD*)&versionData[0x2C];
+            bank.versionInfo.reserved = versionData[0x2E];
+            bank.versionInfo.size = *(DWORD*)&versionData[0x30];
+            bank.versionInfo.offset = *(DWORD*)&versionData[0x34];
+            
+            // Format version string
+            if (sprintf_s(bank.versionString, sizeof(bank.versionString), " %s%s", 
+                         (char*)&versionData[0x10], (char*)&versionData[0x14]) <= 0) {
+                LogError("GetBinFileVersion: Formatted String Buffer fails.");
+                return FALSE;
+            }
+            
+            LogMessage("GetBinFileVersion: Successfully parsed version: %s", bank.versionString);
+            return TRUE;
+        }
+    }
+    
+    LogError("GetBinFileVersion: Failed to parse version information");
+    return FALSE;
+}
+
 BOOL iTEUFDrs::NotifyFwSegmentInfo(BYTE volumeIndex, DWORD deviceId)
 {
     if (volumeIndex >= m_deviceInfo.volumeCount) return FALSE;
     
     DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    DEVICE_BANK_INFO& bank = volume.banks[0];
     
     // Check if already notified
-    if (volume.fwSegmentNotified) {
+    if (bank.fwSegmentNotified) {
         LogMessage("NotifyFwSegmentInfo: Already notified for volume %d", volumeIndex);
         return TRUE;
     }
@@ -1775,43 +1857,27 @@ BOOL iTEUFDrs::NotifyFwSegmentInfo(BYTE volumeIndex, DWORD deviceId)
     BYTE segmentParams[128];
     memset(segmentParams, 0, sizeof(segmentParams));
     
-    // Build device path
-    CHAR devicePath[8];
-    buildVolumePath((char)volume.volumeLetter, devicePath);
-    
-    // Open device handle
-    HANDLE hDevice = CreateFileA(devicePath, GENERIC_READ | GENERIC_WRITE, 
-                                FILE_SHARE_READ | FILE_SHARE_WRITE,
-                                NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hDevice == INVALID_HANDLE_VALUE) {
-        LogError("NotifyFwSegmentInfo: Failed to open device %s", devicePath);
-        return FALSE;
-    }
-    
-    BOOL result = FALSE;
-    
-    // Initialize controller
-    if (m_sdkApis.FLH_InitCTRL) {
-        int initResult = m_sdkApis.FLH_InitCTRL(deviceId, segmentParams, &volume.banks[0]);
-        if (initResult == 1) {
-            // Arrange segment parameters
-            if (m_sdkApis.FLH_ArrangeSegmentPara) {
-                int arrangeResult = m_sdkApis.FLH_ArrangeSegmentPara(segmentParams, &volume.segmentInfo);
-                if (arrangeResult == 1) {
-                    volume.fwSegmentNotified = TRUE;
-                    result = TRUE;
+    // Arrange segment parameters using SDK
+    if (m_sdkApis.FLH_ArrangeSegmentPara) {
+        int arrangeResult = m_sdkApis.FLH_ArrangeSegmentPara(segmentParams, &bank.bankData[0x1866]);
+        if (arrangeResult == 1) {
+            // Initialize controller with segment parameters
+            if (m_sdkApis.FLH_InitCTRL) {
+                int initResult = m_sdkApis.FLH_InitCTRL(deviceId, segmentParams, &bank.bcmInfo[0xA26]);
+                if (initResult == 1) {
+                    bank.fwSegmentNotified = TRUE;
                     LogMessage("NotifyFwSegmentInfo: Successfully notified for volume %d", volumeIndex);
+                    return TRUE;
                 } else {
-                    LogError("NotifyFwSegmentInfo: Failed to arrange segment parameters");
+                    LogError("Notify Fw segment information fail");
                 }
             }
         } else {
-            LogError("NotifyFwSegmentInfo: Failed to initialize controller");
+            LogError("NotifyFwSegmentInfo: Failed to arrange segment parameters");
         }
     }
     
-    CloseHandle(hDevice);
-    return result;
+    return FALSE;
 }
 
 BOOL iTEUFDrs::ScanMassBlocks(BYTE volumeIndex, DWORD deviceId, BYTE mode)
@@ -2342,5 +2408,132 @@ BOOL iTEUFDrs::LoadBankData(BYTE volumeIndex, DWORD deviceId)
 {
     // Load bank data - implementation would depend on specific requirements
     LogMessage("LoadBankData: volume %d, device 0x%08X", volumeIndex, deviceId);
+    return TRUE;
+}
+
+BOOL iTEUFDrs::LoadBankData2(BYTE volumeIndex, DWORD deviceId)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount) return FALSE;
+    
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    DEVICE_BANK_INFO& bank = volume.banks[0];
+    
+    // Initialize local variables
+    DWORD rootTableEntries[3] = {0, 0, 0};
+    DWORD rootTableCount = 0;
+    DWORD rootTableOffsets[3] = {0, 0, 0};
+    WORD rootTableData[182];
+    DWORD rootTableAddresses[3];
+    
+    // Find root table using SDK
+    if (m_sdkApis.FLH_FindRootTable) {
+        BYTE result = m_sdkApis.FLH_FindRootTable(deviceId, rootTableEntries, &bank.bcmInfo[0xA26], 0);
+        if (result != 0) {
+            // Process root table entries
+            for (DWORD i = 0; i < result; i++) {
+                rootTableOffsets[i] = 1;
+                rootTableAddresses[i] = rootTableEntries[i];
+            }
+        }
+    }
+    
+    // Process root table if found
+    if (rootTableCount != 0) {
+        for (DWORD i = 0; i < rootTableCount; i++) {
+            // Initialize buffer for root table data
+            BYTE rootTableBuffer[0x200];
+            memset(rootTableBuffer, 0, sizeof(rootTableBuffer));
+            
+            // Read root table data using SDK
+            if (m_sdkApis.VDR_RootFunc) {
+                int readResult = m_sdkApis.VDR_RootFunc(rootTableAddresses[i], 1, 0x40, 1, 0x200, 
+                                                       rootTableBuffer, &bank.bcmInfo[0xA26], deviceId);
+                if (readResult == 1) {
+                    // Process root table data
+                    DWORD* rootTablePtr = (DWORD*)rootTableBuffer;
+                    WORD* rootTableWords = (WORD*)&rootTableBuffer[0x170];
+                    
+                    // Process each entry in root table
+                    for (int j = 0; j < 2; j++) {
+                        // Get root table entry
+                        DWORD rootTableEntry = ProcessRootTableEntry(rootTablePtr[j], deviceId, &bank.bcmInfo[0xA26]);
+                        
+                        // Check if entry is valid (0x12 type)
+                        if (rootTableEntry == 0x12) {
+                            rootTableAddresses[j] = rootTableEntry;
+                            bank.rootTableValid[j] = TRUE;
+                        }
+                        
+                        // Process root table word
+                        WORD rootTableWord = ConvertAddress(rootTableWords[j - 2]);
+                        DWORD convertedAddress = ConvertBlockAddress(&bank.bcmInfo[0xA26], rootTableWord);
+                        
+                        // Check if converted address is valid (0x13 type)
+                        if (convertedAddress == 0x13) {
+                            rootTableAddresses[j] = convertedAddress;
+                            bank.rootTableValid[j + 2] = TRUE;
+                        }
+                        
+                        // Process next root table word
+                        rootTableWord = ConvertAddress(rootTableWords[j]);
+                        convertedAddress = ConvertBlockAddress(&bank.bcmInfo[0xA26], rootTableWord);
+                        
+                        // Check if converted address is valid (0x13 type)
+                        if (convertedAddress == 0x13) {
+                            rootTableAddresses[j + 2] = convertedAddress;
+                            bank.rootTableValid[j + 4] = TRUE;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    
+    return TRUE;
+}
+
+BOOL iTEUFDrs::LoadBankData3(BYTE volumeIndex, DWORD deviceId)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount) return FALSE;
+    
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    DEVICE_BANK_INFO& bank = volume.banks[0];
+    
+    // Initialize local variables
+    DWORD sysAddrData[5] = {0, 0, 0, 0, 0};
+    WORD rootTableData[22];
+    
+    // Read system address data using SDK
+    if (m_sdkApis.VDR_ReadSysAddr) {
+        int readResult = m_sdkApis.VDR_ReadSysAddr(sysAddrData, &bank.bcmInfo[0xA26], deviceId);
+        if (readResult != 0) {
+            // Process system address data
+            for (int i = 0; i < 2; i++) {
+                // Get system address entry
+                DWORD sysAddrEntry = ProcessRootTableEntry(sysAddrData[i], deviceId, &bank.bcmInfo[0xA26]);
+                DWORD sysAddrEntry2 = sysAddrData[i + 2];
+                
+                // Store system address data
+                bank.sysAddrData[i] = sysAddrEntry;
+                bank.sysAddrData[i + 2] = ProcessRootTableEntry(sysAddrEntry2, deviceId, &bank.bcmInfo[0xA26]);
+                bank.sysAddrValid[i] = TRUE;
+                bank.sysAddrValid[i + 2] = TRUE;
+                
+                // Process root table word
+                WORD rootTableWord = ConvertAddress(rootTableData[i - 2]);
+                DWORD convertedAddress = ConvertBlockAddress(&bank.bcmInfo[0xA26], rootTableWord);
+                bank.sysAddrData[i + 10] = convertedAddress;
+                bank.sysAddrValid[i + 10] = TRUE;
+                
+                // Process next root table word
+                rootTableWord = ConvertAddress(rootTableData[i]);
+                convertedAddress = ConvertBlockAddress(&bank.bcmInfo[0xA26], rootTableWord);
+                bank.sysAddrData[i + 18] = convertedAddress;
+                bank.sysAddrValid[i + 18] = TRUE;
+            }
+        }
+    }
+    
     return TRUE;
 }

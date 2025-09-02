@@ -82,6 +82,16 @@ typedef struct _DEVICE_BANK_INFO {
     DWORD dataSize;                  // Actual data size
     BOOL isValid;                    // Bank validity flag
     DWORD checksum;                  // Bank checksum
+    BOOL isProcessed;                // Bank processed flag
+    BOOL bcmLoaded;                  // BCM loaded flag
+    BOOL fwSegmentNotified;          // FW segment notified flag
+    BOOL flashMethodValid;           // Flash method valid flag
+    BOOL flashDataFromMemory;        // Flash data from memory flag
+    BYTE flashMethod;                // Flash method
+    BYTE bcmInfo[0xE40];             // BCM information buffer
+    BOOL rootTableValid[6];          // Root table validity flags
+    DWORD sysAddrData[20];           // System address data
+    BOOL sysAddrValid[20];           // System address validity flags
 } DEVICE_BANK_INFO, *PDEVICE_BANK_INFO;
 
 // Device information structure (based on decompiled code analysis)
@@ -116,6 +126,9 @@ typedef struct _DEVICE_INFO {
     BYTE deviceData[0x1000];  // Additional device data
     CHAR devicePath[MAX_PATH]; // Device path
     HANDLE hDevice;            // Device handle
+    BYTE deviceParams[0xFF];   // Device parameters
+    BOOL lunArrayLoaded;       // LUN array loaded flag
+    BOOL repairMode;           // Repair mode flag
     
 } DEVICE_INFO, *PDEVICE_INFO;
 
