@@ -379,27 +379,48 @@ BOOL iTEUFDrs::FormatDeviceString(LPSTR buffer, DWORD size, LPCSTR format, ...)
 // Additional private methods implementation
 BOOL iTEUFDrs::DetectPhysicalDrives()
 {
-    LogMessage("DetectPhysicalDrives: scanning physical drives");
-    
-    // Scan physical drives 1-8
-    for (int i = 1; i <= 8; i++) {
-        CHAR drivePath[MAX_PATH];
-        sprintf_s(drivePath, "\\\\.\\PhysicalDrive%d", i);
-        
-        HANDLE hDrive = CreateFileA(drivePath, GENERIC_READ | GENERIC_WRITE,
-                                   FILE_SHARE_READ | FILE_SHARE_WRITE,
-                                   NULL, OPEN_EXISTING, 0, NULL);
-        
-        if (hDrive != INVALID_HANDLE_VALUE) {
-            // Process device inquiry
-            if (ProcessDeviceInquiry(hDrive, i - 1)) {
-                m_deviceInfo.volumeCount++;
-            }
-            CloseHandle(hDrive);
+    LOG_INFO("DetectPhysicalDrives: start");
+    m_deviceInfo.volumeCount = 0;
+    const char driveLetters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    for (int i = 0; i < 26 && m_deviceInfo.volumeCount < MAX_VOLUMES; ++i) {
+        char letter = driveLetters[i];
+        char path[8];
+        path[0] = '\\'; path[1] = '\\'; path[2] = '.'; path[3] = '\\'; path[4] = letter; path[5] = ':'; path[6] = '\0';
+        UINT dtype;
+        {
+            char typePath[4];
+            typePath[0] = letter; typePath[1] = ':'; typePath[2] = '\\'; typePath[3] = '\0';
+            dtype = GetDriveTypeA(typePath);
         }
+        HANDLE h = CreateFileA(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                               NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (h == INVALID_HANDLE_VALUE) {
+            continue;
+        }
+        BYTE idx = m_deviceInfo.volumeCount;
+        DEVICE_VOLUME_INFO& v = m_deviceInfo.volumes[idx];
+        v.volumeIndex = idx;
+        v.volumeLetter = (BYTE)letter;
+        v.hDevice = h;
+        v.driveType = dtype;
+        v.isInitialized = TRUE;
+        v.deviceFound = TRUE;
+        // Default family until deeper probe
+        v.familyType = 0x1181;
+        v.a1baFlag = 0xFF; // unknown
+        // Vendor/Product placeholders
+        memset(v.vendorName, ' ', sizeof(v.vendorName));
+        memset(v.productName, ' ', sizeof(v.productName));
+        v.vendorName[sizeof(v.vendorName)-1] = '\0';
+        v.productName[sizeof(v.productName)-1] = '\0';
+        // Fill inquiryData minimally
+        memset(v.inquiryData, 0, sizeof(v.inquiryData));
+        // Close handle now; subsequent steps reopen as needed
+        SafeCloseHandle(v.hDevice);
+        ++m_deviceInfo.volumeCount;
     }
-    
-    return TRUE;
+    LOG_INFO("DetectPhysicalDrives: found %u", (unsigned)m_deviceInfo.volumeCount);
+    return m_deviceInfo.volumeCount > 0;
 }
 
 BOOL iTEUFDrs::DetectLogicalVolumes()
