@@ -1050,3 +1050,28 @@ void iTEUFDrs::updateCISBuffer()
     // Store into a dedicated buffer area if present; otherwise log
     LOG_INFO("updateCISBuffer: %s", version);
 }
+
+static inline bool testBit(byte mask, byte bit) { return ((mask >> (bit & 7)) & 1) == 1; }
+
+BOOL iTEUFDrs::scanMassBlocks(BYTE mode)
+{
+    LOG_INFO("scanMassBlocks: mode=%u", (unsigned)mode);
+    // Preconditions: selected volume index present in device info
+    if (m_deviceInfo.selectedVolume >= m_deviceInfo.volumeCount) return FALSE;
+    DEVICE_VOLUME_INFO& v = m_deviceInfo.volumes[m_deviceInfo.selectedVolume];
+    // Placeholder structure projections
+    BYTE ceMask = 0xFF; // from root table flags
+    BYTE chMask = 0xFF; // from root table flags
+    // Zero target bitmaps (like param_1 + 0x107340 region)
+    // Note: here we only log actions to avoid large memory regions.
+    for (BYTE ce = 0; ce < 8; ++ce) {
+        if (!testBit(ceMask, ce)) continue;
+        for (BYTE ch = 0; ch < 2; ++ch) {
+            if (!testBit(chMask, ch)) continue;
+            LOG_DEBUG("scanMassBlocks: CE=%u CH=%u", ce, ch);
+            // Example SDK flow: flh_ScanMassBlocksPerChip, flh_GetScanResult, erase/retry
+            // if (m_sdkApis.FLH_ScanMassBlocksPerChip) { ... }
+        }
+    }
+    return TRUE;
+}

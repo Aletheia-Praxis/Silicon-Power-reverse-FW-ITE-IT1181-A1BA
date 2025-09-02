@@ -106,6 +106,9 @@ private:
 
     // SetDBPath (FUN_004098f0)
     BOOL setupDatabasePaths();
+
+    // Mass blocks scan (FUN_0040c640)
+    BOOL scanMassBlocks(BYTE mode);
 };
 
 // Error codes for iTEUFDrs
