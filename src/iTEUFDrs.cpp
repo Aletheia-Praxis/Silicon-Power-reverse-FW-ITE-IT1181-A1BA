@@ -1237,3 +1237,166 @@ BOOL iTEUFDrs::logicalRead(BYTE volumeIndex, DWORD lba, BYTE* outBuffer, DWORD b
     CloseHandle(h);
     return ok;
 }
+
+typedef int (__stdcall *PFN_VDR_SYSREADY)(void* ctx, HANDLE deviceHandle);
+typedef int (__stdcall *PFN_FLH_READBCM)(void* outBuf, HANDLE deviceHandle);
+typedef int (__stdcall *PFN_FLH_READSPARE)(DWORD ch, DWORD ce, DWORD block, DWORD page, BYTE* outBuf, HANDLE deviceHandle);
+typedef int (__stdcall *PFN_FLH_BLOCKERASE)(DWORD ch, DWORD ce, DWORD block, HANDLE deviceHandle);
+typedef int (__stdcall *PFN_FLH_CPURESET)(HANDLE deviceHandle);
+typedef int (__stdcall *PFN_VDR_F_RST)(HANDLE deviceHandle);
+
+static inline void buildVolumePath(char letter, char (&path)[8])
+{
+    path[0] = '\\'; path[1] = '\\'; path[2] = '.'; path[3] = '\\'; path[4] = letter; path[5] = ':'; path[6] = '\0';
+}
+
+BOOL iTEUFDrs::checkSystemReady(BYTE volumeIndex)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount) return FALSE;
+    DEVICE_VOLUME_INFO& v = m_deviceInfo.volumes[volumeIndex];
+    char path[8]; buildVolumePath((char)v.volumeLetter, path);
+
+    HANDLE h = CreateFileA(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                           NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) {
+        LOG_WARNING("checkSystemReady: open failed for %s", path);
+        return FALSE;
+    }
+
+    PFN_VDR_SYSREADY pCheck = (PFN_VDR_SYSREADY)g_VDR_CheckSYSReady;
+    BOOL ok = FALSE;
+    if (pCheck) {
+        BYTE ctx[0xE40];
+        memset(ctx, 0, sizeof(ctx));
+        ok = (pCheck(ctx, h) != 0);
+    } else {
+        LOG_WARNING("g_VDR_CheckSYSReady not bound");
+    }
+    CloseHandle(h);
+    return ok;
+}
+
+BOOL iTEUFDrs::readBCM(BYTE volumeIndex, BYTE* outBuf, DWORD bufSize)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount || !outBuf || bufSize == 0) return FALSE;
+    DEVICE_VOLUME_INFO& v = m_deviceInfo.volumes[volumeIndex];
+    char path[8]; buildVolumePath((char)v.volumeLetter, path);
+
+    HANDLE h = CreateFileA(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                           NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) {
+        LOG_WARNING("readBCM: open failed for %s", path);
+        return FALSE;
+    }
+
+    PFN_FLH_READBCM pReadBCM = (PFN_FLH_READBCM)g_FLH_ReadBCM;
+    BOOL ok = FALSE;
+    if (pReadBCM) {
+        ok = (pReadBCM(outBuf, h) == 1);
+        if (!ok) LOG_WARNING("FLH_ReadBCM failed for %s", path);
+    } else {
+        LOG_WARNING("g_FLH_ReadBCM not bound");
+    }
+    CloseHandle(h);
+    return ok;
+}
+
+BOOL iTEUFDrs::readSpare(BYTE volumeIndex, DWORD ch, DWORD ce, DWORD block, DWORD page, BYTE* outBuf, DWORD bufSize)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount || !outBuf || bufSize == 0) return FALSE;
+    DEVICE_VOLUME_INFO& v = m_deviceInfo.volumes[volumeIndex];
+    char path[8]; buildVolumePath((char)v.volumeLetter, path);
+
+    HANDLE h = CreateFileA(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                           NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) {
+        LOG_WARNING("readSpare: open failed for %s", path);
+        return FALSE;
+    }
+
+    PFN_FLH_READSPARE pReadSpare = (PFN_FLH_READSPARE)g_FLH_ReadSpare;
+    BOOL ok = FALSE;
+    if (pReadSpare) {
+        ok = (pReadSpare(ch, ce, block, page, outBuf, h) != 0);
+        if (!ok) LOG_WARNING("FLH_ReadSpare failed ch=%lu ce=%lu blk=%lu pg=%lu", (unsigned long)ch, (unsigned long)ce, (unsigned long)block, (unsigned long)page);
+    } else {
+        LOG_WARNING("g_FLH_ReadSpare not bound");
+    }
+    CloseHandle(h);
+    return ok;
+}
+
+BOOL iTEUFDrs::blockErase(BYTE volumeIndex, DWORD ch, DWORD ce, DWORD block)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount) return FALSE;
+    DEVICE_VOLUME_INFO& v = m_deviceInfo.volumes[volumeIndex];
+    char path[8]; buildVolumePath((char)v.volumeLetter, path);
+
+    HANDLE h = CreateFileA(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                           NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) {
+        LOG_WARNING("blockErase: open failed for %s", path);
+        return FALSE;
+    }
+
+    PFN_FLH_BLOCKERASE pErase = (PFN_FLH_BLOCKERASE)g_FLH_BlockErase;
+    BOOL ok = FALSE;
+    if (pErase) {
+        ok = (pErase(ch, ce, block, h) != 0);
+        if (!ok) LOG_WARNING("FLH_BlockErase failed ch=%lu ce=%lu blk=%lu", (unsigned long)ch, (unsigned long)ce, (unsigned long)block);
+    } else {
+        LOG_WARNING("g_FLH_BlockErase not bound");
+    }
+    CloseHandle(h);
+    return ok;
+}
+
+BOOL iTEUFDrs::cpuReset(BYTE volumeIndex)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount) return FALSE;
+    DEVICE_VOLUME_INFO& v = m_deviceInfo.volumes[volumeIndex];
+    char path[8]; buildVolumePath((char)v.volumeLetter, path);
+
+    HANDLE h = CreateFileA(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                           NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) {
+        LOG_WARNING("cpuReset: open failed for %s", path);
+        return FALSE;
+    }
+
+    PFN_FLH_CPURESET pCpuReset = (PFN_FLH_CPURESET)g_FLH_CPUReset;
+    BOOL ok = FALSE;
+    if (pCpuReset) {
+        ok = (pCpuReset(h) != 0);
+        if (!ok) LOG_WARNING("FLH_CPUReset failed for %s", path);
+    } else {
+        LOG_WARNING("g_FLH_CPUReset not bound");
+    }
+    CloseHandle(h);
+    return ok;
+}
+
+BOOL iTEUFDrs::vdrReset(BYTE volumeIndex)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount) return FALSE;
+    DEVICE_VOLUME_INFO& v = m_deviceInfo.volumes[volumeIndex];
+    char path[8]; buildVolumePath((char)v.volumeLetter, path);
+
+    HANDLE h = CreateFileA(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                           NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) {
+        LOG_WARNING("vdrReset: open failed for %s", path);
+        return FALSE;
+    }
+
+    PFN_VDR_F_RST pFRst = (PFN_VDR_F_RST)g_VDR_F_RST;
+    BOOL ok = FALSE;
+    if (pFRst) {
+        ok = (pFRst(h) != 0);
+        if (!ok) LOG_WARNING("VDR_F_RST failed for %s", path);
+    } else {
+        LOG_WARNING("g_VDR_F_RST not bound");
+    }
+    CloseHandle(h);
+    return ok;
+}
