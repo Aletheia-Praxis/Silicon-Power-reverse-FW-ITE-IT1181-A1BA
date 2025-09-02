@@ -2,6 +2,7 @@
 
 #include <windows.h>
 #include <afxwin.h>
+#include <cstdint>
 
 // Logging functions
 void LogMessage(LPCSTR format, ...);
@@ -30,3 +31,10 @@ BOOL JoinPathA(LPSTR outBuffer, DWORD size, LPCSTR a, LPCSTR b);
 #define LOG_WARNING(format, ...) LogMessage("[WARNING] " format, ##__VA_ARGS__)
 #define LOG_ERROR(format, ...) LogMessage("[ERROR] " format, ##__VA_ARGS__)
 #define LOG_DEBUG(format, ...) LogMessage("[DEBUG] " format, ##__VA_ARGS__)
+
+// Helpers decompiled and re-implemented
+void SafeCloseHandle(HANDLE& handle);
+const char* FormatCapacityLabelMB(uint32_t valueMB);
+uint32_t swap32_mixed(uint32_t value);
+uint16_t swap16(uint16_t value);
+void* alignedAllocCustom(size_t size, uint32_t alignmentMask, void** rawOut);

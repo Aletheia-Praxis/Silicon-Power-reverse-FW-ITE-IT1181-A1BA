@@ -226,3 +226,58 @@ BOOL JoinPathA(LPSTR outBuffer, DWORD size, LPCSTR a, LPCSTR b)
     strcat_s(outBuffer, size, b);
     return TRUE;
 }
+
+void SafeCloseHandle(HANDLE& handle)
+{
+    if (handle) {
+        CloseHandle(handle);
+        handle = NULL;
+    }
+}
+
+const char* FormatCapacityLabelMB(uint32_t valueMB)
+{
+    static char label[16];
+    const char* candidates[] = {
+        "128MB","256MB","512MB","1GB","2GB","4GB","8GB","16GB","32GB","64GB","128GB","256GB","512GB","1TB"
+    };
+    const uint32_t stepsMB[] = {128,256,512,1024,2048,4096,8192,16384,32768,65536,131072,262144,524288,1048576};
+    for (size_t i = 0; i < sizeof(stepsMB)/sizeof(stepsMB[0]); ++i) {
+        if (valueMB < stepsMB[i]) {
+            strcpy_s(label, sizeof(label), candidates[i]);
+            return label;
+        }
+    }
+    strcpy_s(label, sizeof(label), "2TB");
+    return label;
+}
+
+uint32_t swap32_mixed(uint32_t value)
+{
+    // mirrors FUN_00409320 pattern
+    return (value << 24) | (value >> 24) | ((value & 0x0000FF00) << 8) | ((value & 0x00FF0000) >> 8);
+}
+
+uint16_t swap16(uint16_t value)
+{
+    return (uint16_t)((value >> 8) | ((value & 0x00FF) << 8));
+}
+
+void* alignedAllocCustom(size_t size, uint32_t alignmentMask, void** rawOut)
+{
+    if (alignmentMask == 0) {
+        void* p = malloc(size);
+        if (rawOut) *rawOut = p;
+        if (!p) LogMessage("Memory allocation error.");
+        return p;
+    }
+    size_t total = size + alignmentMask;
+    void* raw = malloc(total);
+    if (rawOut) *rawOut = raw;
+    if (!raw) {
+        LogMessage("Memory allocation error.");
+        return NULL;
+    }
+    uintptr_t aligned = ((uintptr_t)raw + alignmentMask) & ~((uintptr_t)alignmentMask);
+    return (void*)aligned;
+}
