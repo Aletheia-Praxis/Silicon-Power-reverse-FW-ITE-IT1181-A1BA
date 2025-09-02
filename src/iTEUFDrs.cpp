@@ -1075,3 +1075,32 @@ BOOL iTEUFDrs::scanMassBlocks(BYTE mode)
     }
     return TRUE;
 }
+
+BOOL iTEUFDrs::flhScanMassBlocksPerChip(DWORD ctx, BYTE ce, BYTE ch, int rtPtr, void* outBuf, BYTE mode, BYTE* outFlag, int* outRet)
+{
+    LOG_DEBUG("flhScanMassBlocksPerChip: ce=%u ch=%u mode=%u", (unsigned)ce, (unsigned)ch, (unsigned)mode);
+    if (outFlag) *outFlag = 0; if (outRet) *outRet = 0; return TRUE;
+}
+
+BOOL iTEUFDrs::flhGetScanResult(DWORD ctx, BYTE ce, BYTE ch, int rtPtr, void* outBuf)
+{
+    LOG_DEBUG("flhGetScanResult: ce=%u ch=%u", (unsigned)ce, (unsigned)ch);
+    return TRUE;
+}
+
+BOOL iTEUFDrs::flhReadSpare(BYTE ch, BYTE ce, int rtPtr, void* spare, DWORD spareSize, DWORD ctx)
+{
+    LOG_DEBUG("flhReadSpare: ce=%u ch=%u size=%lu", (unsigned)ce, (unsigned)ch, (unsigned long)spareSize);
+    return TRUE;
+}
+
+BOOL iTEUFDrs::flhBlockErase(DWORD ctx, DWORD handle, int rtPtr)
+{
+    LOG_DEBUG("flhBlockErase: ctx=%lu handle=%lu", (unsigned long)ctx, (unsigned long)handle);
+    return TRUE;
+}
+
+void iTEUFDrs::flhCPUReset(int rtPtr, DWORD handle, DWORD ctx)
+{
+    LOG_DEBUG("flhCPUReset");
+}

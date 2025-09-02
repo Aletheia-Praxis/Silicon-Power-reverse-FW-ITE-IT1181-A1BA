@@ -109,6 +109,13 @@ private:
 
     // Mass blocks scan (FUN_0040c640)
     BOOL scanMassBlocks(BYTE mode);
+
+    // SDK wrappers (names inferred from usage in 0x0040c640)
+    BOOL flhScanMassBlocksPerChip(DWORD ctx, BYTE ce, BYTE ch, int rtPtr, void* outBuf, BYTE mode, BYTE* outFlag, int* outRet);
+    BOOL flhGetScanResult(DWORD ctx, BYTE ce, BYTE ch, int rtPtr, void* outBuf);
+    BOOL flhReadSpare(BYTE ch, BYTE ce, int rtPtr, void* spare, DWORD spareSize, DWORD ctx);
+    BOOL flhBlockErase(DWORD ctx, DWORD handle, int rtPtr);
+    void flhCPUReset(int rtPtr, DWORD handle, DWORD ctx);
 };
 
 // Error codes for iTEUFDrs
