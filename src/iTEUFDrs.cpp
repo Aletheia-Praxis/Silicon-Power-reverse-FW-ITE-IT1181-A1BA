@@ -1051,26 +1051,58 @@ void iTEUFDrs::updateCISBuffer()
     LOG_INFO("updateCISBuffer: %s", version);
 }
 
+// Typedefs for SDK calls (best-effort based on decompilation patterns)
+typedef int (__stdcall *PFN_FLH_SCAN_MASS_BLOCKS_PER_CHIP)(DWORD ctx, BYTE ce, BYTE ch, int rtPtr, void* outBuf, BYTE mode, BYTE* outFlag, int* outRet);
+typedef int (__stdcall *PFN_FLH_GET_SCAN_RESULT)(DWORD ctx, BYTE ce, BYTE ch, int rtPtr, void* outBuf);
+typedef int (__stdcall *PFN_FLH_READ_SPARE)(BYTE ch, BYTE ce, int rtPtr, void* spare, DWORD spareSize, DWORD ctx);
+typedef int (__stdcall *PFN_FLH_BLOCK_ERASE)(DWORD ctx, DWORD handle, int rtPtr);
+typedef void (__stdcall *PFN_FLH_CPU_RESET)(int rtPtr, DWORD handle, DWORD ctx);
+
 static inline bool testBit(byte mask, byte bit) { return ((mask >> (bit & 7)) & 1) == 1; }
 
 BOOL iTEUFDrs::scanMassBlocks(BYTE mode)
 {
     LOG_INFO("scanMassBlocks: mode=%u", (unsigned)mode);
-    // Preconditions: selected volume index present in device info
     if (m_deviceInfo.selectedVolume >= m_deviceInfo.volumeCount) return FALSE;
     DEVICE_VOLUME_INFO& v = m_deviceInfo.volumes[m_deviceInfo.selectedVolume];
-    // Placeholder structure projections
-    BYTE ceMask = 0xFF; // from root table flags
-    BYTE chMask = 0xFF; // from root table flags
-    // Zero target bitmaps (like param_1 + 0x107340 region)
-    // Note: here we only log actions to avoid large memory regions.
+
+    BYTE ceMask = 0xFF;
+    BYTE chMask = 0xFF;
+
+    PFN_FLH_SCAN_MASS_BLOCKS_PER_CHIP pScan = (PFN_FLH_SCAN_MASS_BLOCKS_PER_CHIP)g_VDR_MassBlocksProcess;
+    PFN_FLH_GET_SCAN_RESULT pGetScan = (PFN_FLH_GET_SCAN_RESULT)g_FLH_GetChannelCeNoAndMap; // placeholder mapping
+    PFN_FLH_READ_SPARE pReadSpare = (PFN_FLH_READ_SPARE)g_FLH_ReadSpare;
+    PFN_FLH_BLOCK_ERASE pErase = (PFN_FLH_BLOCK_ERASE)g_FLH_BlockErase;
+    PFN_FLH_CPU_RESET pCpuReset = (PFN_FLH_CPU_RESET)g_FLH_CPUReset;
+
+    BYTE outFlag = 0;
+    int outRet = 0;
+    BYTE tmpBuf[0x10000];
+
     for (BYTE ce = 0; ce < 8; ++ce) {
         if (!testBit(ceMask, ce)) continue;
         for (BYTE ch = 0; ch < 2; ++ch) {
             if (!testBit(chMask, ch)) continue;
             LOG_DEBUG("scanMassBlocks: CE=%u CH=%u", ce, ch);
-            // Example SDK flow: flh_ScanMassBlocksPerChip, flh_GetScanResult, erase/retry
-            // if (m_sdkApis.FLH_ScanMassBlocksPerChip) { ... }
+            if (pScan) {
+                int ok = pScan(0, ce, ch, 0, tmpBuf, mode, &outFlag, &outRet);
+                if (!ok) LOG_WARNING("flhScanMassBlocksPerChip failed: ce=%u ch=%u", ce, ch);
+            }
+            if (pGetScan) {
+                int ok2 = pGetScan(0, ce, ch, 0, tmpBuf);
+                if (!ok2) LOG_WARNING("flhGetScanResult failed: ce=%u ch=%u", ce, ch);
+            }
+            if (pReadSpare) {
+                (void)pReadSpare(ch, ce, 0, tmpBuf, 0x10, 0);
+            }
+            if (pErase) {
+                // Not erasing by default; uncomment for repair flows
+                // (void)pErase(0, 0, 0);
+            }
+            if (pCpuReset) {
+                // CPU reset in specific repair scenarios only
+                // pCpuReset(0, 0, 0);
+            }
         }
     }
     return TRUE;
@@ -1078,29 +1110,35 @@ BOOL iTEUFDrs::scanMassBlocks(BYTE mode)
 
 BOOL iTEUFDrs::flhScanMassBlocksPerChip(DWORD ctx, BYTE ce, BYTE ch, int rtPtr, void* outBuf, BYTE mode, BYTE* outFlag, int* outRet)
 {
-    LOG_DEBUG("flhScanMassBlocksPerChip: ce=%u ch=%u mode=%u", (unsigned)ce, (unsigned)ch, (unsigned)mode);
-    if (outFlag) *outFlag = 0; if (outRet) *outRet = 0; return TRUE;
+    PFN_FLH_SCAN_MASS_BLOCKS_PER_CHIP p = (PFN_FLH_SCAN_MASS_BLOCKS_PER_CHIP)g_VDR_MassBlocksProcess;
+    if (!p) { LOG_WARNING("g_VDR_MassBlocksProcess not bound"); return FALSE; }
+    return p(ctx, ce, ch, rtPtr, outBuf, mode, outFlag, outRet) != 0;
 }
 
 BOOL iTEUFDrs::flhGetScanResult(DWORD ctx, BYTE ce, BYTE ch, int rtPtr, void* outBuf)
 {
-    LOG_DEBUG("flhGetScanResult: ce=%u ch=%u", (unsigned)ce, (unsigned)ch);
-    return TRUE;
+    PFN_FLH_GET_SCAN_RESULT p = (PFN_FLH_GET_SCAN_RESULT)g_FLH_GetChannelCeNoAndMap;
+    if (!p) { LOG_WARNING("g_FLH_GetChannelCeNoAndMap not bound"); return FALSE; }
+    return p(ctx, ce, ch, rtPtr, outBuf) != 0;
 }
 
 BOOL iTEUFDrs::flhReadSpare(BYTE ch, BYTE ce, int rtPtr, void* spare, DWORD spareSize, DWORD ctx)
 {
-    LOG_DEBUG("flhReadSpare: ce=%u ch=%u size=%lu", (unsigned)ce, (unsigned)ch, (unsigned long)spareSize);
-    return TRUE;
+    PFN_FLH_READ_SPARE p = (PFN_FLH_READ_SPARE)g_FLH_ReadSpare;
+    if (!p) { LOG_WARNING("g_FLH_ReadSpare not bound"); return FALSE; }
+    return p(ch, ce, rtPtr, spare, spareSize, ctx) != 0;
 }
 
 BOOL iTEUFDrs::flhBlockErase(DWORD ctx, DWORD handle, int rtPtr)
 {
-    LOG_DEBUG("flhBlockErase: ctx=%lu handle=%lu", (unsigned long)ctx, (unsigned long)handle);
-    return TRUE;
+    PFN_FLH_BLOCK_ERASE p = (PFN_FLH_BLOCK_ERASE)g_FLH_BlockErase;
+    if (!p) { LOG_WARNING("g_FLH_BlockErase not bound"); return FALSE; }
+    return p(ctx, handle, rtPtr) != 0;
 }
 
 void iTEUFDrs::flhCPUReset(int rtPtr, DWORD handle, DWORD ctx)
 {
-    LOG_DEBUG("flhCPUReset");
+    PFN_FLH_CPU_RESET p = (PFN_FLH_CPU_RESET)g_FLH_CPUReset;
+    if (!p) { LOG_WARNING("g_FLH_CPUReset not bound"); return; }
+    p(rtPtr, handle, ctx);
 }
