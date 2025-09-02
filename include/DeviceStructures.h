@@ -20,6 +20,39 @@ typedef struct _DEVICE_VOLUME_INFO {
     CHAR vendorName[8];       // 0x22-0x29: Vendor name (8 bytes)
     CHAR productName[16];     // 0x2A-0x39: Product name (16 bytes)
     BYTE reserved3[8];        // 0x3A-0x41: Reserved
+    
+    // Device handles and state
+    HANDLE hDevice;            // Device handle
+    BOOL isInitialized;        // Initialization flag
+    BOOL deviceFound;          // Device found flag
+    
+    // Bank information
+    DEVICE_BANK_INFO banks[MAX_BANKS];
+    BOOL bcmLoaded;            // BCM loaded flag
+    BYTE bcmInfo[0xE40];       // BCM information buffer
+    
+    // Segment information
+    BYTE segmentInfo[128];     // Segment information
+    BOOL fwSegmentNotified;    // FW segment notified flag
+    
+    // MP and LUN information
+    MP_INFO mpInfo;
+    LUN_INFO lunInfo[2];
+    LUN_PARAMS lunParams;
+    BYTE lunArray[0x10000];
+    BOOL lunArrayLoaded;
+    DWORD capacity;
+    DWORD realCapacity;
+    BYTE deviceParams[16];
+    BYTE lunConfig[16];
+    
+    // Device flags and parameters
+    BYTE controllerType;       // Controller type
+    BYTE ceMask;              // CE mask
+    BYTE chMask;              // Channel mask
+    DWORD blockCount;         // Block count
+    BYTE blockMap[8][2][0x10000]; // Block map
+    DWORD deviceFlags;        // Device flags
 } DEVICE_VOLUME_INFO, *PDEVICE_VOLUME_INFO;
 
 // Version information structure
@@ -86,9 +119,37 @@ typedef struct _DEVICE_INFO {
     
 } DEVICE_INFO, *PDEVICE_INFO;
 
+// MP Information structure
+typedef struct _MP_INFO {
+    BYTE majorVersion;
+    BYTE minorVersion;
+    BYTE vendorInfo[4];
+    BYTE productInfo[12];
+    BOOL isLoaded;
+} MP_INFO, *PMP_INFO;
+
+// LUN Parameters structure
+typedef struct _LUN_PARAMS {
+    BYTE lunType;
+    BYTE lunFlags;
+    WORD capacityArray[8];
+    DWORD totalCapacity;
+    BOOL isValid;
+} LUN_PARAMS, *PLUN_PARAMS;
+
+// LUN Information structure
+typedef struct _LUN_INFO {
+    DWORD lunId;
+    BOOL isValid;
+    BOOL isLoaded;
+} LUN_INFO, *PLUN_INFO;
+
 // Device constants
 #define MAX_VOLUMES 8
 #define MAX_BANKS 24
+#define MAX_CONTROLLERS 3
+#define MAX_LUNS 2
+#define MAX_CAPACITY_ARRAYS 8
 #define VOLUME_INFO_SIZE 0x57
 #define BANK_INFO_SIZE 0x1DAA
 #define DEVICE_INFO_SIZE 0x107338
