@@ -409,17 +409,87 @@ BOOL iTEUFDrs::LoadBankC(BYTE volumeIndex, DWORD deviceId)
 
 BOOL iTEUFDrs::GetBCMInformation(BYTE volumeIndex, DWORD deviceId)
 {
-    // This function gets BCM information
-    // Implementation based on decompiled code analysis
-    LogMessage("GetBCMInformation: volume %d, device 0x%08X", volumeIndex, deviceId);
+    if (volumeIndex >= m_deviceInfo.volumeCount) return FALSE;
     
-    // Get BCM info using SDK
-    if (m_sdkApis.FLH_GetInfoFromDataBaseByID) {
-        // Call SDK function
-        return TRUE;
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    DEVICE_BANK_INFO& bank = volume.banks[0]; // Bank C
+    
+    // Check if system is ready for this volume
+    if (!CheckSystemReadyIO(volumeIndex, deviceId)) {
+        LogError("GetBCMInformation: System not ready for volume %d", volumeIndex);
+        return FALSE;
     }
     
-    return FALSE;
+    // Initialize BCM buffer
+    BYTE bcmBuffer[0xE40];
+    memset(bcmBuffer, 0, sizeof(bcmBuffer));
+    
+    // Build device path
+    CHAR devicePath[8];
+    buildVolumePath((char)volume.volumeLetter, devicePath);
+    
+    // Open device handle
+    HANDLE hDevice = CreateFileA(devicePath, GENERIC_READ | GENERIC_WRITE, 
+                                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hDevice == INVALID_HANDLE_VALUE) {
+        LogError("GetBCMInformation: Failed to open device %s", devicePath);
+        return FALSE;
+    }
+    
+    BOOL result = FALSE;
+    
+    // Call VDR_CheckSYSReady to check system ready status
+    PFN_VDR_SYSREADY pCheckSYSReady = (PFN_VDR_SYSREADY)g_VDR_CheckSYSReady;
+    if (pCheckSYSReady) {
+        int sysReadyResult = pCheckSYSReady(bcmBuffer, hDevice);
+        if (sysReadyResult == 0) {
+            // System is ready, now call VDR_SetSYSReady
+            PFN_VDR_SETSYSREADY pSetSYSReady = (PFN_VDR_SETSYSREADY)g_VDR_SetSYSReady;
+            if (pSetSYSReady) {
+                int setReadyResult = pSetSYSReady(0, bcmBuffer, hDevice);
+                if (setReadyResult != 0) {
+                    // Set ready failed
+                    LogError("GetBCMInformation: Set system ready failed for volume %d", volumeIndex);
+                } else {
+                    // Now initialize ISP code
+                    BYTE initParams[8] = {0};
+                    initParams[0] = 0xC0;  // ISP init command
+                    initParams[1] = 0xD0;  // ISP init subcommand
+                    initParams[2] = 0x00;  // Reserved
+                    initParams[3] = 0x08;  // Parameter length
+                    
+                    // Call FLH_InitCodeWithIspPath
+                    PFN_FLH_INITCODE pInitCode = (PFN_FLH_INITCODE)g_FLH_InitCodeWithIspPath;
+                    if (pInitCode) {
+                        int initResult = pInitCode(1, &initParams[1], &initParams[0], 
+                                                  &initParams[2], m_basePath, bcmBuffer, hDevice);
+                        if (initResult == 0) {
+                            LogMessage("GetBCMInformation: Successfully initialized ISP code for volume %d", volumeIndex);
+                            result = TRUE;
+                            
+                            // Store BCM information in bank structure
+                            memcpy(bank.bcmInfo, bcmBuffer, sizeof(bank.bcmInfo));
+                            bank.bcmLoaded = TRUE;
+                        } else {
+                            LogError("GetBCMInformation: ISP initialization failed for volume %d", volumeIndex);
+                        }
+                    } else {
+                        LogError("GetBCMInformation: FLH_InitCodeWithIspPath not bound");
+                    }
+                }
+            } else {
+                LogError("GetBCMInformation: VDR_SetSYSReady not bound");
+            }
+        } else {
+            LogError("GetBCMInformation: System ready check failed for volume %d", volumeIndex);
+        }
+    } else {
+        LogError("GetBCMInformation: VDR_CheckSYSReady not bound");
+    }
+    
+    CloseHandle(hDevice);
+    return result;
 }
 
 BOOL iTEUFDrs::LoadBankData(BYTE volumeIndex, DWORD deviceId)
@@ -1318,6 +1388,28 @@ typedef int (__stdcall *PFN_FLH_READSPARE)(DWORD ch, DWORD ce, DWORD block, DWOR
 typedef int (__stdcall *PFN_FLH_BLOCKERASE)(DWORD ch, DWORD ce, DWORD block, HANDLE deviceHandle);
 typedef int (__stdcall *PFN_FLH_CPURESET)(HANDLE deviceHandle);
 typedef int (__stdcall *PFN_VDR_F_RST)(HANDLE deviceHandle);
+typedef int (__stdcall *PFN_FLH_INITCODE)(DWORD mode, BYTE* param1, BYTE* param2, BYTE* param3, LPCSTR ispPath, void* ctx, HANDLE deviceHandle);
+typedef int (__stdcall *PFN_VDR_SETSYSREADY)(DWORD mode, void* ctx, HANDLE deviceHandle);
+typedef int (__stdcall *PFN_VDR_READSYSADDR)(DWORD* buffer, HANDLE deviceHandle, HANDLE reserved);
+
+// Helper functions for address conversion
+DWORD ConvertAddress(DWORD addr)
+{
+    // Simple address conversion - can be enhanced based on actual requirements
+    return addr;
+}
+
+WORD ConvertAddress(WORD addr)
+{
+    // Simple address conversion for WORD values
+    return addr;
+}
+
+DWORD ConvertBlockAddress(HANDLE hDevice, WORD blockAddr)
+{
+    // Simplified block address conversion
+    return (DWORD)blockAddr; // Fallback
+}
 
 static inline void buildVolumePath(char letter, char (&path)[8])
 {
