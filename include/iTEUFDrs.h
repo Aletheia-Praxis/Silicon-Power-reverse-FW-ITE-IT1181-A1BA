@@ -103,6 +103,9 @@ private:
     BOOL fetchInquiryData(BYTE volumeIndex, BYTE* outBuffer, DWORD bufferSize);
 
     void updateCISBuffer();
+
+    // SetDBPath (FUN_004098f0)
+    BOOL setupDatabasePaths();
 };
 
 // Error codes for iTEUFDrs

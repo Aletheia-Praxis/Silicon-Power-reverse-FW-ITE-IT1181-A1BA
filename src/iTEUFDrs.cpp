@@ -925,6 +925,31 @@ BOOL iTEUFDrs::DetectLogicalVolumes()
     return TRUE;
 }
 
+BOOL iTEUFDrs::setupDatabasePaths()
+{
+    // Build "%s\\Bin\\FlashSSD_D.fdb" and "%s\\Bin\\CtrlSSD.cdb" from base path
+    char fdb[MAX_PATH + 4] = {0};
+    char cdb[MAX_PATH + 4] = {0};
+    int r1 = FormatDeviceString(fdb, sizeof(fdb), "%s\\Bin\\FlashSSD_D.fdb", m_basePath);
+    if (r1 != 0) {
+        LogMessage("SetDBPath: Formatted String Buffer fails.");
+    }
+    int r2 = FormatDeviceString(cdb, sizeof(cdb), "%s\\Bin\\CtrlSSD.cdb", m_basePath);
+    if (r2 != 0) {
+        LogMessage("SetDBPath: Formatted String Buffer fails.");
+    }
+    // Check existence of at least one
+    if (fdb[0] != '\0') {
+        HANDLE h = CreateFileA(fdb, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (h != INVALID_HANDLE_VALUE) { CloseHandle(h); return TRUE; }
+    }
+    if (cdb[0] != '\0') {
+        HANDLE h = CreateFileA(cdb, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (h != INVALID_HANDLE_VALUE) { CloseHandle(h); return TRUE; }
+    }
+    return FALSE;
+}
+
 // High-level orchestration: mirrors FUN_0040d022
 BOOL iTEUFDrs::GetDeviceInfoInternal()
 {
@@ -952,6 +977,9 @@ BOOL iTEUFDrs::RunInitializationChain()
 
     VolumePairController();
 
+    // SetDBPath analog (FUN_004098f0)
+    setupDatabasePaths();
+
     BYTE controllerCount = m_controllerCount;
     for (BYTE ci = 0; ci < controllerCount; ++ci) {
         BYTE volIndex = GetVolumeIndexForController(ci);
@@ -962,7 +990,6 @@ BOOL iTEUFDrs::RunInitializationChain()
             continue;
         }
 
-        // open/check handle per mode
         BOOL opened = m_forcedMode ? OpenDriveHandleAgain(volIndex)
                                    : CheckDriveExistInternal(volIndex);
         if (!opened) {
@@ -970,7 +997,6 @@ BOOL iTEUFDrs::RunInitializationChain()
             continue;
         }
 
-        // Check system ready and supporting artifacts
         if (!CheckSystemReadyIO(volIndex, deviceId)) {
             LogWarning("SystemReadyIO failed (vol=%u, dev=%u)", volIndex, (UINT)deviceId);
             continue;
@@ -991,7 +1017,6 @@ BOOL iTEUFDrs::RunInitializationChain()
             continue;
         }
 
-        // Extended flow per FUN_0040d022
         LoadBankC2(volIndex, deviceId);
         GetBCMInformation2(volIndex, deviceId);
         LoadBankData2(volIndex, deviceId);
