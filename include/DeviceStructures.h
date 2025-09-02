@@ -22,31 +22,33 @@ typedef struct _DEVICE_VOLUME_INFO {
     BYTE reserved3[8];        // 0x3A-0x41: Reserved
 } DEVICE_VOLUME_INFO, *PDEVICE_VOLUME_INFO;
 
-// Device bank information structure (based on decompiled code analysis)
+// Version information structure
+typedef struct _VERSION_INFO {
+    DWORD major;        // Major version number
+    DWORD minor;        // Minor version number  
+    DWORD build;        // Build number
+    DWORD revision;     // Revision number
+    DWORD date;         // Build date
+    DWORD time;         // Build time
+    DWORD checksum;     // Checksum
+    WORD flags;         // Version flags
+    BYTE reserved;      // Reserved byte
+    DWORD size;         // Size of version data
+    DWORD offset;       // Offset to version data
+} VERSION_INFO, *PVERSION_INFO;
+
+// Bank information structure
 typedef struct _DEVICE_BANK_INFO {
-    BYTE bankIndex;           // 0x00: Bank index
-    BYTE bankStatus;          // 0x01: Bank status
-    BYTE bankType;            // 0x02: Bank type
-    BYTE bankReady;           // 0x03: Bank ready flag
-    BYTE bankLoaded;          // 0x04: Bank loaded flag
-    BYTE bankError;           // 0x05: Bank error flag
-    BYTE reserved1[2];        // 0x06-0x07: Reserved
-    DWORD bankSize;           // 0x08-0x0B: Bank size
-    DWORD bankOffset;         // 0x0C-0x0F: Bank offset
-    BYTE bankData[0x1000];    // 0x10-0x100F: Bank data (4KB)
-    BYTE bcmInfo[0x100];      // 0x1010-0x110F: BCM information
-    BYTE ispInfo[0x100];      // 0x1110-0x120F: ISP information
-    BYTE reserved2[0x100];    // 0x1210-0x130F: Reserved
-    BYTE bankPath[0x100];     // 0x1310-0x140F: Bank path
-    BYTE reserved3[0x100];    // 0x1410-0x150F: Reserved
-    BYTE reserved4[0x100];    // 0x1510-0x160F: Reserved
-    BYTE reserved5[0x100];    // 0x1610-0x170F: Reserved
-    BYTE reserved6[0x100];    // 0x1710-0x180F: Reserved
-    BYTE reserved7[0x100];    // 0x1810-0x190F: Reserved
-    BYTE reserved8[0x100];    // 0x1910-0x1A0F: Reserved
-    BYTE reserved9[0x100];    // 0x1A10-0x1B0F: Reserved
-    BYTE reserved10[0x100];   // 0x1B10-0x1C0F: Reserved
-    BYTE reserved11[0x100];   // 0x1C10-0x1D0F: Reserved
+    DWORD bankId;                    // Bank identifier
+    DWORD bankType;                  // Bank type (C, D, etc.)
+    DWORD bankSize;                  // Bank size in bytes
+    DWORD bankOffset;                // Bank offset in device
+    VERSION_INFO versionInfo;        // Version information
+    CHAR versionString[256];          // Formatted version string
+    BYTE bankData[4096];             // Bank data buffer
+    DWORD dataSize;                  // Actual data size
+    BOOL isValid;                    // Bank validity flag
+    DWORD checksum;                  // Bank checksum
 } DEVICE_BANK_INFO, *PDEVICE_BANK_INFO;
 
 // Device information structure (based on decompiled code analysis)
