@@ -485,13 +485,38 @@ BOOL iTEUFDrs::DetectLogicalVolumes()
     return TRUE;
 }
 
+typedef int (__stdcall *PFN_STD_INQUIRY)(void* outBuffer, HANDLE deviceHandle);
+
 BOOL iTEUFDrs::fetchInquiryData(BYTE volumeIndex, BYTE* outBuffer, DWORD bufferSize)
 {
     if (volumeIndex >= m_deviceInfo.volumeCount || !outBuffer || bufferSize < 0xB0) return FALSE;
     DEVICE_VOLUME_INFO& v = m_deviceInfo.volumes[volumeIndex];
-    // Here we should use SDK_APIS to issue INQUIRY; as a placeholder, attempt DeviceIoControl SCSI pass-through could be added later
-    // For now, return FALSE to avoid pretending data
-    return FALSE;
+
+    char path[8];
+    path[0] = '\\'; path[1] = '\\'; path[2] = '.'; path[3] = '\\'; path[4] = (char)v.volumeLetter; path[5] = ':'; path[6] = '\0';
+
+    HANDLE h = CreateFileA(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                           NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) {
+        LOG_WARNING("fetchInquiryData: open failed for %s", path);
+        return FALSE;
+    }
+
+    PFN_STD_INQUIRY pInquiry = (PFN_STD_INQUIRY)g_STD_Inquiry;
+    BOOL ok = FALSE;
+    if (pInquiry) {
+        memset(outBuffer, 0, bufferSize);
+        int ret = pInquiry(outBuffer, h);
+        ok = (ret != 0);
+        if (!ok) {
+            LOG_WARNING("STD_Inquiry returned 0 for %s", path);
+        }
+    } else {
+        LOG_WARNING("g_STD_Inquiry not bound");
+    }
+
+    CloseHandle(h);
+    return ok;
 }
 
 BOOL iTEUFDrs::ProcessDeviceInquiry(HANDLE hDevice, BYTE volumeIndex)
