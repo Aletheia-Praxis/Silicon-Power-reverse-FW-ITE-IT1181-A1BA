@@ -325,12 +325,86 @@ BOOL iTEUFDrs::CheckSystemReadyIO(BYTE volumeIndex, DWORD deviceId)
 
 BOOL iTEUFDrs::LoadBankC(BYTE volumeIndex, DWORD deviceId)
 {
-    // This function loads bank C
-    // Implementation based on decompiled code analysis
-    LogMessage("LoadBankC: volume %d, device 0x%08X", volumeIndex, deviceId);
+    if (volumeIndex >= m_deviceInfo.volumeCount) return FALSE;
     
-    // Load bank information
-    return LoadBankInformation(volumeIndex);
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    DEVICE_BANK_INFO& bank = volume.banks[0]; // Bank C
+    
+    // Initialize bank structure fields
+    memset(&bank, 0, sizeof(DEVICE_BANK_INFO));
+    
+    // Build file path for Bank C
+    CHAR filePath[MAX_PATH];
+    if (!GetBinFilePath(volumeIndex, "BankC.bin", filePath, sizeof(filePath))) {
+        LogError("LoadBankC: Failed to build file path for volume %d", volumeIndex);
+        return FALSE;
+    }
+    
+    // Open binary file
+    FILE* file = fopen(filePath, "rb");
+    if (!file) {
+        LogError("LoadBankC: Can't open binary file: %s", filePath);
+        return FALSE;
+    }
+    
+    // Read version information from offset 0xF1E0 (62048)
+    BYTE versionBuffer[64];
+    memset(versionBuffer, 0xFF, sizeof(versionBuffer));
+    
+    if (fseek(file, 0xF1E0, SEEK_SET) != 0) {
+        LogError("LoadBankC: Failed to seek to version offset");
+        fclose(file);
+        return FALSE;
+    }
+    
+    size_t bytesRead = fread(versionBuffer, 1, sizeof(versionBuffer), file);
+    fclose(file);
+    
+    if (bytesRead != sizeof(versionBuffer)) {
+        LogError("LoadBankC: Failed to read version data (read %zu bytes)", bytesRead);
+        return FALSE;
+    }
+    
+    // Parse version information
+    // Look for "ITEu" signature in the buffer
+    char* iteuPos = strstr((char*)versionBuffer, "ITEu");
+    if (!iteuPos || (iteuPos - (char*)versionBuffer) == -1) {
+        LogWarning("LoadBankC: ITEu signature not found in version buffer");
+        return FALSE;
+    }
+    
+    // Extract version fields from the buffer
+    // Based on the decompiled code, these are at specific offsets
+    DWORD* versionData = (DWORD*)versionBuffer;
+    
+    bank.versionInfo.major = versionData[0];      // uStack_40
+    bank.versionInfo.minor = versionData[1];      // uStack_3c  
+    bank.versionInfo.build = versionData[2];      // uStack_38
+    bank.versionInfo.revision = versionData[3];   // uStack_34
+    bank.versionInfo.date = versionData[4];       // uStack_44
+    bank.versionInfo.time = versionData[5];       // uStack_30
+    bank.versionInfo.checksum = versionData[6];   // uStack_2c
+    bank.versionInfo.flags = *(WORD*)(versionData + 7); // uStack_28
+    bank.versionInfo.reserved = *(BYTE*)(versionData + 7 + 2); // uStack_26
+    bank.versionInfo.size = versionData[8];       // uStack_24
+    bank.versionInfo.offset = versionData[9];     // uStack_20
+    
+    // Format version string
+    CHAR versionString[256];
+    if (sprintf_s(versionString, sizeof(versionString), " %s%s", 
+                  bank.versionInfo.major, bank.versionInfo.minor) <= 0) {
+        LogError("LoadBankC: Failed to format version string");
+        return FALSE;
+    }
+    
+    // Store version string in bank info
+    strncpy_s(bank.versionString, sizeof(bank.versionString), 
+              versionString, sizeof(bank.versionString) - 1);
+    
+    LogMessage("LoadBankC: Successfully loaded Bank C for volume %d, version: %s", 
+               volumeIndex, versionString);
+    
+    return TRUE;
 }
 
 BOOL iTEUFDrs::GetBCMInformation(BYTE volumeIndex, DWORD deviceId)
@@ -1399,4 +1473,27 @@ BOOL iTEUFDrs::vdrReset(BYTE volumeIndex)
     }
     CloseHandle(h);
     return ok;
+}
+
+BOOL iTEUFDrs::GetBinFilePath(BYTE volumeIndex, LPCSTR fileName, LPSTR filePath, DWORD pathSize)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount || !fileName || !filePath || pathSize == 0) {
+        return FALSE;
+    }
+    
+    // Get module directory
+    CHAR moduleDir[MAX_PATH];
+    if (!GetModuleDirectoryA(moduleDir, sizeof(moduleDir))) {
+        LogError("GetBinFilePath: Failed to get module directory");
+        return FALSE;
+    }
+    
+    // Build path: moduleDir\fileName
+    if (sprintf_s(filePath, pathSize, "%s\\%s", moduleDir, fileName) <= 0) {
+        LogError("GetBinFilePath: Failed to format file path");
+        return FALSE;
+    }
+    
+    LogMessage("GetBinFilePath: Built path: %s", filePath);
+    return TRUE;
 }
