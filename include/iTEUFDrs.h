@@ -98,17 +98,18 @@ private:
     // Helper functions
     BOOL DetectPhysicalDrives();
     BOOL DetectLogicalVolumes();
+    BOOL ProcessDeviceInquiry(HANDLE hDevice, BYTE volumeIndex);
+    BOOL IdentifyDeviceFamily(LPCSTR inquiryString, BYTE volumeIndex);
+    BOOL setupDatabasePaths(); // Added for FUN_004098f0
+    BOOL scanMassBlocks(BYTE mode); // Added for FUN_0040c640
+    BOOL fetchInquiryData(HANDLE hDevice, BYTE volumeIndex, LPVOID inquiryBuffer); // Added for STD_Inquiry
+    BOOL readCapacity(BYTE volumeIndex, LPDWORD lpCapacity); // Added for STD_ReadCapacity
+    BOOL logicalRead(BYTE volumeIndex, LPVOID lpBuffer, DWORD lba, DWORD sectors); // Added for STD_LogicalRead
+    BOOL GetBinFilePath(BYTE volumeIndex, LPCSTR fileName, LPSTR filePath, DWORD pathSize);
+
     BOOL FormatDeviceString(LPSTR buffer, DWORD size, LPCSTR format, ...);
 
-    BOOL fetchInquiryData(BYTE volumeIndex, BYTE* outBuffer, DWORD bufferSize);
-
     void updateCISBuffer();
-
-    // SetDBPath (FUN_004098f0)
-    BOOL setupDatabasePaths();
-
-    // Mass blocks scan (FUN_0040c640)
-    BOOL scanMassBlocks(BYTE mode);
 
     // SDK wrappers (names inferred from usage in 0x0040c640)
     BOOL flhScanMassBlocksPerChip(DWORD ctx, BYTE ce, BYTE ch, int rtPtr, void* outBuf, BYTE mode, BYTE* outFlag, int* outRet);
