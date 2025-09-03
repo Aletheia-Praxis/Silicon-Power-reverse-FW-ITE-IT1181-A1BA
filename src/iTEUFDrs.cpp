@@ -2345,11 +2345,71 @@ BOOL iTEUFDrs::GetFlashMethod(BYTE volumeIndex, DWORD deviceId)
         }
     }
     
+    // Update flags derived from parsed flash info (mirrors FUN_00408710/004087b0)
+    UpdateFlagsAfterFlashParse(volumeIndex);
+    UpdateHighBitFlag(volumeIndex);
+
     // Update device parameters
     UpdateDeviceParameters(deviceId);
     UpdateDeviceStatus(deviceId, volume.volumeLetter);
     
     return TRUE;
+}
+
+void iTEUFDrs::UpdateFlagsAfterFlashParse(BYTE volumeIndex)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount) return;
+
+    // Map offsets observed in decompilation to our structures:
+    // a78 * a79 -> a20; a31 bits -> a21 and 0x9fe; a3e >>5 -> 0x9f7
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    DEVICE_BANK_INFO& bank = volume.banks[0];
+
+    // Defensive guard on array bounds
+    auto readByte = [&](size_t off) -> BYTE {
+        if (off < sizeof(bank.bcmInfo)) return bank.bcmInfo[off];
+        return 0;
+    };
+
+    BYTE mult = (BYTE)( (int)(char)readByte(0xA78) * (int)(char)readByte(0xA79) );
+    // Store into a20 equivalent: choose a field; we maintain derived flags in volume.deviceParams
+    // Keep semantic: total planes per die etc.
+    volume.deviceParams[0] = mult;
+
+    // a21 = a31 & 7
+    BYTE a31 = readByte(0xA31);
+    volume.deviceParams[1] = (a31 & 0x07);
+
+    // 0x9fe = ((a31 & 0x38) == 0x08)
+    volume.deviceFlags = (volume.deviceFlags & ~0x1u) | (((a31 & 0x38) == 0x08) ? 0x1u : 0u);
+
+    // 0x9f7 = (a3e >> 5) & 1
+    BYTE a3e = readByte(0xA3E);
+    BYTE high = (a3e >> 5) & 1;
+    // Place into deviceParams[2]
+    volume.deviceParams[2] = high;
+
+    // 0x9fc flag cleared; when (a31 & 0x38) == 0x18 -> set and copy byte from 0xCC5
+    bool cond = ((a31 & 0x38) == 0x18);
+    if (cond) {
+        BYTE val = readByte(0xCC5);
+        // store in deviceParams[3]
+        volume.deviceParams[3] = val;
+    } else {
+        BYTE val = readByte(0xCC5);
+        volume.deviceParams[3] = val;
+    }
+}
+
+void iTEUFDrs::UpdateHighBitFlag(BYTE volumeIndex)
+{
+    if (volumeIndex >= m_deviceInfo.volumeCount) return;
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    DEVICE_BANK_INFO& bank = volume.banks[0];
+    BYTE a32 = (bank.bcmInfo[0xA32 < sizeof(bank.bcmInfo) ? 0xA32 : 0] );
+    BYTE highBit = (a32 >> 7) & 1;
+    // Place into a free slot of deviceParams
+    volume.deviceParams[4] = highBit;
 }
 
 BOOL iTEUFDrs::CheckNeedLoadBank(BYTE volumeIndex, DWORD deviceId)

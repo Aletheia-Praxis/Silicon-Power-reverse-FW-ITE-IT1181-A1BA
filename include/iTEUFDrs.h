@@ -129,6 +129,10 @@ private:
     BOOL LoadBankData3(BYTE volumeIndex, DWORD deviceId);
     BOOL GetBinFileVersion(BYTE volumeIndex, DWORD deviceId);
 
+    // Helpers mirrored from FUN_00408710 and FUN_004087b0
+    void UpdateFlagsAfterFlashParse(BYTE volumeIndex);
+    void UpdateHighBitFlag(BYTE volumeIndex);
+
     // SDK wrappers (names inferred from usage in 0x0040c640)
     BOOL flhScanMassBlocksPerChip(DWORD ctx, BYTE ce, BYTE ch, int rtPtr, void* outBuf, BYTE mode, BYTE* outFlag, int* outRet);
     BOOL flhGetScanResult(DWORD ctx, BYTE ce, BYTE ch, int rtPtr, void* outBuf);
