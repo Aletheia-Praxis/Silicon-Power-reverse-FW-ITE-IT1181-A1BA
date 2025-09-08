@@ -8,8 +8,8 @@
 // Global iTEUFDrs instance
 static iTEUFDrs* g_pURescueApp = nullptr;
 
-// Main function of the URescue program (decompiled from FUN_004845e0)
-int FUN_004845e0(void)
+// Main function of the URescue program
+int RunURescueApplication(void)
 {
     LogMessage("URescue application starting...");
     
@@ -68,5 +68,5 @@ int AfxWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, i
     }
     
     // Run the main function
-    return FUN_004845e0();
+    return RunURescueApplication();
 }
