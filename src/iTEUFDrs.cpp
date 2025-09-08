@@ -21,7 +21,7 @@ typedef int (__stdcall *PFN_FLH_FINDROOTTABLE)(DWORD deviceId, DWORD* rootTableE
 typedef int (__stdcall *PFN_VDR_ROOTFUNC)(DWORD address, DWORD mode, DWORD param1, DWORD param2, DWORD param3, BYTE* buffer, BYTE* bcmInfo, DWORD deviceId);
 typedef int (__stdcall *PFN_VDR_READSYSADDR)(DWORD* sysAddrData, BYTE* bcmInfo, DWORD deviceId);
 
-// Constructor implementation (decompiled from FUN_0040d690)
+// Constructor implementation (equivalent to the original FUN_0040d690)
 iTEUFDrs::iTEUFDrs(LPCSTR basePath)
     : m_vtable(nullptr)
     , m_isInitialized(FALSE)
@@ -43,18 +43,18 @@ iTEUFDrs::iTEUFDrs(LPCSTR basePath)
 
     if (!InitializeSDK()) {
         LogError("iTEUFDrs: Failed to initialize SDK.");
+        m_lastError = GetLastError(); // Store the specific error
         return;
     }
 
     // Call GetDeviceInfo (equivalent to FUN_0040cf30)
     if (!GetDeviceInfo()) {
         LogError("iTEUFDrs: GetDeviceInfo failed.");
-        m_lastError = GetLastError();
-        return;
+        // GetDeviceInfo should set its own m_lastError
+    } else {
+        LogMessage("iTEUFDrs: GetDeviceInfo OK");
+        m_isInitialized = TRUE;
     }
-
-    LogMessage("iTEUFDrs: GetDeviceInfo OK");
-    m_isInitialized = TRUE;
 }
 
 iTEUFDrs::~iTEUFDrs()
@@ -142,7 +142,7 @@ BOOL iTEUFDrs::InitializeDeviceStructures()
     return TRUE;
 }
 
-// Main GetDeviceInfo function (decompiled from FUN_0040cf30)
+// Main GetDeviceInfo function (equivalent to the original FUN_0040cf30)
 BOOL iTEUFDrs::GetDeviceInfo()
 {
     LogMessage("GetDeviceInfo: Start");

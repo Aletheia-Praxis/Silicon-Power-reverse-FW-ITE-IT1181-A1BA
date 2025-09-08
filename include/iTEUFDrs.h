@@ -29,7 +29,7 @@ typedef struct _CONTROLLER_DATA {
     BOOL bankDataLoaded;
 } CONTROLLER_DATA, *PCONTROLLER_DATA;
 
-// iTEUFDrs class (decompiled from FUN_0040d690)
+// iTEUFDrs class (represents the main application logic)
 class iTEUFDrs
 {
 public:
