@@ -256,45 +256,177 @@ BOOL iTEUFDrs::GetDeviceInfo()
 
 BOOL iTEUFDrs::InitializeParaValue()
 {
-    // This function initializes parameter values
-    // Implementation based on decompiled code analysis
+    // This function is based on the decompiled code at 0x00408370.
+    // It initializes various parameters and data structures for device management.
     LogMessage("InitializeParaValue: initializing parameters");
-    
-    // Set default values
-    m_deviceInfo.volumeCount = 0;
-    m_deviceInfo.currentVolume = 0;
-    m_deviceInfo.selectedVolume = 0xFF;
-    
+
+    // Reset controller and volume counts
+    m_controllerCount = 0;
+    m_volumeCount = 0;
+
+    // Clear and initialize the controller data structures
+    memset(m_controllerData, 0, sizeof(m_controllerData));
+
+    for (int i = 0; i < MAX_CONTROLLERS; ++i) {
+        CONTROLLER_DATA* pController = &m_controllerData[i];
+        
+        pController->isValid = TRUE; // Based on loop structure, seems it's set to valid
+        pController->deviceId = -1;
+        pController->lunId = -1;
+        pController->targetId = -1;
+        pController->pathId = -1;
+        pController->busId = -1;
+        pController->scsiId = -1;
+        pController->reserved1 = -1;
+        pController->reserved2 = -1;
+        
+        // The original code had complex loops initializing parts of a larger structure.
+        // This is a simplified interpretation based on the available structure definitions.
+        for (int j = 0; j < 4; ++j) {
+            pController->volumeIndexes[j] = 0xFF; // -1 for byte
+        }
+    }
+
+    // The original function returns a value, which seems to indicate success.
     return TRUE;
 }
 
 BOOL iTEUFDrs::CheckDriveExist()
 {
-    // This function checks if drives exist
-    // Implementation based on decompiled code analysis
     LogMessage("CheckDriveExist: checking for available drives");
-    
-    // Detect physical drives
-    if (!DetectPhysicalDrives()) {
-        return FALSE;
+    m_deviceInfo.volumeCount = 0;
+    const char driveLetters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+    // Allocate buffer for inquiry data
+    BYTE inquiryBuffer[176]; // 0xB0 bytes
+
+    for (int i = 0; i < 26 && m_deviceInfo.volumeCount < MAX_VOLUMES; ++i) {
+        char letter = driveLetters[i];
+        
+        char drivePath[4];
+        drivePath[0] = letter;
+        drivePath[1] = ':';
+        drivePath[2] = '\\';
+        drivePath[3] = '\0';
+
+        UINT driveType = GetDriveTypeA(drivePath);
+        if (driveType != DRIVE_REMOVABLE && driveType != DRIVE_FIXED) {
+            continue;
+        }
+
+        char volumePath[8];
+        volumePath[0] = '\\'; volumePath[1] = '\\'; volumePath[2] = '.'; 
+        volumePath[3] = '\\'; volumePath[4] = letter; volumePath[5] = ':'; 
+        volumePath[6] = '\0';
+
+        HANDLE hDevice = CreateFileA(volumePath, GENERIC_READ | GENERIC_WRITE, 
+                                     FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                     NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+
+        if (hDevice == INVALID_HANDLE_VALUE) {
+            continue;
+        }
+
+        // Use the bound SDK function for Inquiry
+        if (!m_sdkApis.STD_Inquiry || m_sdkApis.STD_Inquiry(inquiryBuffer, hDevice) == 0) {
+            LogWarning("CheckDriveExist: STD_Inquiry failed for %C:", letter);
+            CloseHandle(hDevice);
+            continue;
+        }
+
+        // Check for "ITEu" signature
+        char* inquiryString = (char*)inquiryBuffer;
+        if (strstr(inquiryString + 8, "ITEu") == NULL) {
+            LogMessage("CheckDriveExist: Not an ITE device: %C:", letter);
+            CloseHandle(hDevice);
+            continue;
+        }
+
+        // It's our device, populate the structure
+        BYTE volIdx = m_deviceInfo.volumeCount;
+        DEVICE_VOLUME_INFO& vol = m_deviceInfo.volumes[volIdx];
+        
+        vol.volumeIndex = volIdx;
+        vol.volumeLetter = letter;
+        vol.driveType = driveType;
+        vol.hDevice = hDevice; // Keep handle open for now
+        vol.deviceFound = TRUE;
+
+        // Copy inquiry data parts
+        memcpy(&vol.inquiryData1, inquiryBuffer + 0x24, 16);
+
+        // Copy Vendor and Product strings
+        for (int j = 0; j < 8; ++j) vol.vendorName[j] = (inquiryBuffer[8 + j] == 0) ? ' ' : inquiryBuffer[8 + j];
+        vol.vendorName[8] = '\0';
+        for (int j = 0; j < 16; ++j) vol.productName[j] = (inquiryBuffer[16 + j] == 0) ? ' ' : inquiryBuffer[16 + j];
+        vol.productName[16] = '\0';
+
+        // Identify family type
+        char* fullInquiryAscii = (char*)(inquiryBuffer + 8);
+        vol.controllerType = 200; // Default to not supported
+        if (strstr(fullInquiryAscii, "1181")) {
+            vol.familyType = DEVICE_FAMILY_1181;
+            vol.controllerType = 0; // Default for 1181
+            if (strstr(fullInquiryAscii, "A1BA")) {
+                vol.a1baFlag = DEVICE_FAMILY_A1BA;
+                vol.controllerType = 1;
+            } else if (strstr(fullInquiryAscii, "A0AA")) {
+                vol.a1baFlag = DEVICE_FAMILY_A0AA;
+            }
+        } else if (strstr(fullInquiryAscii, "1176")) {
+            vol.familyType = DEVICE_FAMILY_1176;
+            vol.controllerType = 2;
+            if (strstr(fullInquiryAscii, "A0AA")) {
+                vol.a1baFlag = DEVICE_FAMILY_A0AA;
+            }
+        }
+
+        if (vol.controllerType == 200) {
+            LogWarning("CheckDriveExist: Unsupported ITE device on %C:", letter);
+            CloseHandle(hDevice);
+            // Reset this entry, though it will be overwritten
+            memset(&vol, 0, sizeof(DEVICE_VOLUME_INFO));
+            continue;
+        }
+
+        // Get LUN and DeviceID (placeholders for now, as SDK calls are complex)
+        // This part requires the 0xE40 buffer and more SDK calls
+        // For now, let's assign defaults
+        vol.lunIndex = 0;
+        vol.deviceId = 0xFF; // Will be assigned properly in SetDeviceID
+
+        LogMessage("CheckDriveExist: Found ITE device on drive %C:", letter);
+        m_deviceInfo.volumeCount++;
+        
+        // The original code closes the handle here and re-opens later. Let's do the same.
+        CloseHandle(hDevice);
+        vol.hDevice = INVALID_HANDLE_VALUE;
     }
-    
-    // Detect logical volumes
-    if (!DetectLogicalVolumes()) {
-        return FALSE;
-    }
-    
+
     return (m_deviceInfo.volumeCount > 0);
 }
 
 BOOL iTEUFDrs::OpenDriveHandleAgain()
 {
-    // This function opens drive handles again
-    // Implementation based on decompiled code analysis
-    LogMessage("OpenDriveHandleAgain: reopening drive handles");
+    LogMessage("OpenDriveHandleAgain: re-checking physical drives");
     
-    // Re-detect drives
-    return DetectPhysicalDrives();
+    // This function appears to be a variant of CheckDriveExist, but it might be
+    // intended to scan physical drive paths directly, e.g., \\.\PhysicalDriveX
+    // The decompiled code shows it iterating through a list of "PhysicalDrive" paths.
+    // For now, we will re-use the logic from CheckDriveExist as it's safer and
+    // achieves a similar goal of re-validating device presence. A more precise
+    // implementation would require deeper analysis of the differences.
+
+    // Close any existing handles before re-opening
+    for (BYTE i = 0; i < m_deviceInfo.volumeCount; ++i) {
+        if (m_deviceInfo.volumes[i].hDevice != INVALID_HANDLE_VALUE) {
+            CloseHandle(m_deviceInfo.volumes[i].hDevice);
+            m_deviceInfo.volumes[i].hDevice = INVALID_HANDLE_VALUE;
+        }
+    }
+
+    // Re-run the drive check logic
+    return CheckDriveExist();
 }
 
 BOOL iTEUFDrs::SetDeviceID()
@@ -864,51 +996,50 @@ const CONTROLLER_DATA* iTEUFDrs::GetControllerData(BYTE index) const
 // Set device IDs for volumes (decompiled from FUN_0040ae40)
 BOOL iTEUFDrs::SetDeviceID()
 {
+    LogMessage("SetDeviceID: assigning device IDs to volumes");
     if (m_deviceInfo.volumeCount == 0) {
         return TRUE; // No volumes to process
     }
-    
-    for (BYTE volumeIndex = 0; volumeIndex < m_deviceInfo.volumeCount; volumeIndex++) {
-        DEVICE_VOLUME_INFO* volumeInfo = &m_deviceInfo.volumes[volumeIndex];
-        
-        BOOL driveExists;
-        if (m_forcedMode) {
-            driveExists = OpenDriveHandleAgain(volumeIndex);
-        } else {
-            driveExists = CheckDriveExistInternal(volumeIndex);
+
+    // This array tracks which device IDs (0-254) are already taken.
+    bool deviceIdTaken[255] = { false };
+
+    // First, mark any existing device IDs as taken.
+    for (BYTE i = 0; i < m_deviceInfo.volumeCount; i++) {
+        DEVICE_VOLUME_INFO& vol = m_deviceInfo.volumes[i];
+        if (vol.deviceFound && vol.deviceId != 0xFF && vol.deviceId < 255) {
+            deviceIdTaken[vol.deviceId] = true;
         }
-        
-        if (!driveExists) {
+    }
+
+    // Now, assign new IDs to volumes that don't have one.
+    for (BYTE i = 0; i < m_deviceInfo.volumeCount; i++) {
+        DEVICE_VOLUME_INFO& vol = m_deviceInfo.volumes[i];
+
+        // Skip if device not found or already has a valid ID
+        if (!vol.deviceFound || (vol.deviceId != 0xFF && vol.deviceId < 255)) {
             continue;
         }
-        
-        // Find available device ID slot
-        BYTE deviceId = 0xFF;
-        for (BYTE i = 0; i < 0xFF; i++) {
-            BOOL slotTaken = FALSE;
-            for (BYTE j = 0; j < MAX_VOLUMES; j++) {
-                if (m_deviceInfo.volumes[j].deviceId == i) {
-                    slotTaken = TRUE;
-                    break;
-                }
-            }
-            if (!slotTaken) {
-                deviceId = i;
+
+        // Find the first available device ID
+        BYTE newId = 0xFF;
+        for (int id = 0; id < 255; ++id) {
+            if (!deviceIdTaken[id]) {
+                newId = (BYTE)id;
                 break;
             }
         }
-        
-        if (deviceId == 0xFF) {
-            LogError("iTEUFDrs: Over DeviceID Table Max value");
-            CloseHandle(volumeInfo->hVolume);
+
+        if (newId == 0xFF) {
+            LogError("SetDeviceID: Over DeviceID Table Max value. No available IDs.");
+            // The original code would close a handle here, but we manage handles differently.
             return FALSE;
         }
-        
-        // Set the device ID
-        volumeInfo->deviceId = deviceId;
-        LogMessage("iTEUFDrs: Volume %d assigned device ID %d", volumeIndex, deviceId);
-        
-        CloseHandle(volumeInfo->hVolume);
+
+        // Assign the new ID and mark it as taken
+        vol.deviceId = newId;
+        deviceIdTaken[newId] = true;
+        LogMessage("SetDeviceID: Volume %C: assigned device ID %d", vol.volumeLetter, newId);
     }
     
     return TRUE;
@@ -917,42 +1048,55 @@ BOOL iTEUFDrs::SetDeviceID()
 // Pair volumes with controllers (decompiled from FUN_00408430)
 void iTEUFDrs::VolumePairController()
 {
-    BOOL volumeUsed[MAX_VOLUMES] = {FALSE};
-    m_controllerCount = 0;
+    LogMessage("VolumePairController: pairing volumes to controllers");
     
-    for (BYTE volumeIndex = 0; volumeIndex < m_deviceInfo.volumeCount && m_controllerCount < MAX_CONTROLLERS; volumeIndex++) {
-        if (volumeUsed[volumeIndex]) {
+    bool volumeUsed[MAX_VOLUMES] = { false };
+    m_controllerCount = 0;
+
+    for (BYTE i = 0; i < m_deviceInfo.volumeCount && m_controllerCount < MAX_CONTROLLERS; i++) {
+        if (volumeUsed[i]) {
             continue;
         }
-        
-        DEVICE_VOLUME_INFO* baseVolume = &m_deviceInfo.volumes[volumeIndex];
-        CONTROLLER_DATA* controller = &m_controllerData[m_controllerCount];
-        
+
+        DEVICE_VOLUME_INFO& baseVolume = m_deviceInfo.volumes[i];
+        if (!baseVolume.deviceFound) {
+            continue;
+        }
+
         // Start a new controller group
-        controller->volumeIndexes[0] = volumeIndex;
-        controller->volumeCount = 1;
-        volumeUsed[volumeIndex] = TRUE;
-        
-        // Find other volumes with the same controller type
-        BYTE volumeCount = 1;
-        for (BYTE otherIndex = volumeIndex + 1; otherIndex < m_deviceInfo.volumeCount && volumeCount < 4; otherIndex++) {
-            if (volumeUsed[otherIndex]) {
+        CONTROLLER_DATA& controller = m_controllerData[m_controllerCount];
+        memset(&controller, 0, sizeof(CONTROLLER_DATA)); // Clear previous data
+
+        controller.volumeIndexes[0] = i;
+        controller.volumeCount = 1;
+        volumeUsed[i] = true;
+
+        // Find other volumes belonging to the same physical device.
+        // The original code seems to group by a shared property, likely the controller type or a similar identifier.
+        // Here, we'll group by the `controllerType` we identified during `CheckDriveExist`.
+        for (BYTE j = i + 1; j < m_deviceInfo.volumeCount && controller.volumeCount < 4; j++) {
+            if (volumeUsed[j]) {
                 continue;
             }
-            
-            DEVICE_VOLUME_INFO* otherVolume = &m_deviceInfo.volumes[otherIndex];
-            if (otherVolume->controllerType == baseVolume->controllerType) {
-                controller->volumeIndexes[volumeCount] = otherIndex;
-                volumeCount++;
-                volumeUsed[otherIndex] = TRUE;
+
+            DEVICE_VOLUME_INFO& otherVolume = m_deviceInfo.volumes[j];
+            if (otherVolume.deviceFound && otherVolume.controllerType == baseVolume.controllerType) {
+                controller.volumeIndexes[controller.volumeCount] = j;
+                controller.volumeCount++;
+                volumeUsed[j] = true;
             }
         }
+
+        // Finalize controller data
+        controller.isValid = TRUE;
+        controller.controllerType = baseVolume.controllerType;
+        // The original code copies a product ID. Let's assume it's from the inquiry data.
+        // The exact field `productId` is not in DEVICE_VOLUME_INFO, so we'll use familyType as a placeholder.
+        controller.productId = baseVolume.familyType; 
         
-        controller->volumeCount = volumeCount;
-        controller->productId = m_deviceInfo.volumes[controller->volumeIndexes[0]].productId;
-        controller->isValid = TRUE;
+        LogMessage("VolumePairController: Controller %d paired with %d volumes (Type: %d)", 
+                   m_controllerCount, controller.volumeCount, controller.controllerType);
         
-        LogMessage("iTEUFDrs: Controller %d paired with %d volumes", m_controllerCount, volumeCount);
         m_controllerCount++;
     }
 }
@@ -979,60 +1123,52 @@ DWORD iTEUFDrs::GetDeviceIdForController(BYTE controllerIndex) const
 // Check system ready IO (decompiled from FUN_004095e0)
 BOOL iTEUFDrs::CheckSystemReadyIO(BYTE volumeIndex, DWORD deviceId)
 {
-    LogMessage("iTEUFDrs: Checking system ready IO for volume %d, device %d", volumeIndex, deviceId);
-    
-    // Clear binary file path buffer
-    CHAR binFilePath[MAX_PATH + 4] = {0};
-    CHAR fileName[MAX_PATH] = {0};
-    
-    // Get volume info
+    LogMessage("iTEUFDrs: Checking system ready IO for volume %d, device ID %lu", volumeIndex, deviceId);
+
     if (volumeIndex >= m_deviceInfo.volumeCount) {
-        LogError("iTEUFDrs: Invalid volume index %d", volumeIndex);
+        LogError("CheckSystemReadyIO: Invalid volume index %d", volumeIndex);
         return FALSE;
     }
-    
-    DEVICE_VOLUME_INFO* volumeInfo = &m_deviceInfo.volumes[volumeIndex];
-    
-    // Determine bin file name based on controller type
+
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    CHAR binFileName[32];
+    CHAR fullBinPath[MAX_PATH];
+
+    // Determine the .bin file name based on the device ID
     if (deviceId == 0xFF) {
-        strcpy_s(fileName, sizeof(fileName), "u181s00.bin");
+        strcpy_s(binFileName, sizeof(binFileName), "u181s00.bin");
     } else {
-        sprintf_s(fileName, sizeof(fileName), "u181s%02x.bin", (BYTE)deviceId);
+        sprintf_s(binFileName, sizeof(binFileName), "u181s%02lx.bin", deviceId);
     }
-    
-    // Build full path to bin file
-    LPCSTR pathFormat;
-    if (volumeInfo->isA1BA) {
+
+    // Determine the directory path based on controller type and family
+    const char* pathFormat;
+    if (volume.a1baFlag == DEVICE_FAMILY_A1BA) {
         pathFormat = "%s\\Bin\\1181\\DownGrade\\A1BA\\%s";
-    } else {
-        if (volumeInfo->controllerType == 2) {
+    } else { // A0AA or unknown
+        if (volume.familyType == DEVICE_FAMILY_1176) {
             pathFormat = "%s\\Bin\\1176\\DownGrade\\A0AA\\%s";
-        } else {
+        } else { // 1181 or default
             pathFormat = "%s\\Bin\\1181\\DownGrade\\A0AA\\%s";
         }
     }
-    
-    int result = FormatDeviceString(binFilePath, sizeof(binFilePath), pathFormat, m_basePath, fileName);
-    if (result != 0) {
-        LogError("iTEUFDrs: GetBinFilePath: Formatted String Buffer fails.");
+
+    // Construct the full path
+    int result = sprintf_s(fullBinPath, sizeof(fullBinPath), pathFormat, m_basePath, binFileName);
+    if (result <= 0) {
+        LogError("CheckSystemReadyIO: Failed to format bin file path.");
         return FALSE;
     }
-    
-    // Check if bin file exists
-    if (binFilePath[0] == '\0') {
-        LogError("iTEUFDrs: Bin file path = %s", binFilePath);
-        return FALSE;
-    }
-    
-    // Try to open the file
-    HANDLE hFile = CreateFileA(binFilePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+
+    // Check if the file exists by trying to open it
+    HANDLE hFile = CreateFileA(fullBinPath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile == INVALID_HANDLE_VALUE) {
-        LogError("iTEUFDrs: Cannot open bin file: %s", binFilePath);
+        LogError("CheckSystemReadyIO: Bin file not found at path: %s", fullBinPath);
         return FALSE;
     }
-    
+
     CloseHandle(hFile);
-    LogMessage("iTEUFDrs: System ready IO check passed for %s", binFilePath);
+    LogMessage("CheckSystemReadyIO: System ready check passed. Found bin file: %s", fullBinPath);
     return TRUE;
 }
 
