@@ -50,6 +50,18 @@ BOOL InitializeFlashSDK(HMODULE hModule)
     LOAD_PROC(FLH_MarkBad);
     LOAD_PROC(FLH_GetRealBlocksPerDie);
     LOAD_PROC(FLH_BlockIsGap);
+    
+    // VDR (Virtual Device Recognition) functions
+    g_VDR_LoadDriver = GetProcAddress(hModule, "VDR_LoadDriver");
+    g_VDR_FreeDriver = GetProcAddress(hModule, "VDR_FreeDriver");
+    g_VDR_ReadWriteLUNConfig = GetProcAddress(hModule, "VDR_ReadWriteLUNConfig");
+    g_VDR_GetSystemAddr = GetProcAddress(hModule, "VDR_GetSystemAddr");
+    g_VDR_GetDeviceInquiry = GetProcAddress(hModule, "VDR_GetDeviceInquiry");
+    g_VDR_CheckDeviceSupport = GetProcAddress(hModule, "VDR_CheckDeviceSupport");
+    g_VDR_GetLunIndex = GetProcAddress(hModule, "VDR_GetLunIndex");
+    g_VDR_GetDeviceID = GetProcAddress(hModule, "VDR_GetDeviceID");
+    g_VDR_ReadSysAddr = GetProcAddress(hModule, "VDR_ReadSysAddr");
+    
     LOAD_PROC(SEC_DoAuthentication);
     LOAD_PROC(SEC_LeaveAuthenticatedState);
     LOAD_PROC(SEC_GetPasswordHint);
