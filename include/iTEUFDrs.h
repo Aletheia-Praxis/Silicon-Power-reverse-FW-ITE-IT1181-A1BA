@@ -72,6 +72,7 @@ private:
     BOOL CheckDriveExistInternal(BYTE volumeIndex);
     BOOL OpenDriveHandleAgain(BYTE volumeIndex);
     BOOL ValidatePhysicalDevice(HANDLE hDevice, BYTE driveIndex);
+    BOOL ValidateControllerConfiguration(CONTROLLER_DATA* controller);
     BOOL SetDeviceID();
     void VolumePairController();
     

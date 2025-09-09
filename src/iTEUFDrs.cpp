@@ -1248,57 +1248,140 @@ BOOL iTEUFDrs::SetDeviceID()
 // Pair volumes with controllers (decompiled from FUN_00408430)
 void iTEUFDrs::VolumePairController()
 {
-    LogMessage("VolumePairController: pairing volumes to controllers");
+    // Enhanced implementation based on Ghidra analysis of VolumePairController (0x408430)
+    // This function groups volumes by their controller type and assigns them to logical controllers
+    LogMessage("VolumePairController: pairing volumes to controllers based on drive analysis");
     
+    // Clear controller markers array (equivalent to local_1c[24] in original)
     bool volumeUsed[MAX_VOLUMES] = { false };
     m_controllerCount = 0;
+    
+    // Initialize controller marker (equivalent to setting 0x8a2 offset)
+    m_deviceInfo.controllerIndex = 0;
 
-    for (BYTE i = 0; i < m_deviceInfo.volumeCount && m_controllerCount < MAX_CONTROLLERS; i++) {
-        if (volumeUsed[i]) {
+    // Main volume scanning loop (based on original algorithm)
+    for (BYTE volumeIndex = 0; volumeIndex < m_deviceInfo.volumeCount && m_controllerCount < MAX_CONTROLLERS; volumeIndex++) {
+        if (volumeUsed[volumeIndex]) {
             continue;
         }
 
-        DEVICE_VOLUME_INFO& baseVolume = m_deviceInfo.volumes[i];
+        DEVICE_VOLUME_INFO& baseVolume = m_deviceInfo.volumes[volumeIndex];
         if (!baseVolume.deviceFound) {
             continue;
         }
 
         // Start a new controller group
         CONTROLLER_DATA& controller = m_controllerData[m_controllerCount];
-        memset(&controller, 0, sizeof(CONTROLLER_DATA)); // Clear previous data
+        memset(&controller, 0, sizeof(CONTROLLER_DATA));
 
-        controller.volumeIndexes[0] = i;
+        // Add base volume to controller (equivalent to storing at 0x9a6 offset)
+        controller.volumeIndexes[0] = volumeIndex;
         controller.volumeCount = 1;
-        volumeUsed[i] = true;
+        volumeUsed[volumeIndex] = true;
+        
+        // Get base volume drive letter for pairing (from 0x62e0 offset pattern)
+        char baseDriveLetter = baseVolume.volumeLetter;
 
-        // Find other volumes belonging to the same physical device.
-        // The original code seems to group by a shared property, likely the controller type or a similar identifier.
-        // Here, we'll group by the `controllerType` we identified during `CheckDriveExist`.
-        for (BYTE j = i + 1; j < m_deviceInfo.volumeCount && controller.volumeCount < 4; j++) {
-            if (volumeUsed[j]) {
+        // Find other volumes with the same drive letter (controller pairing logic)
+        BYTE pairCount = 1;
+        for (BYTE otherIndex = 0; otherIndex < m_deviceInfo.volumeCount && pairCount < 4; otherIndex++) {
+            if (volumeUsed[otherIndex] || otherIndex == volumeIndex) {
                 continue;
             }
 
-            DEVICE_VOLUME_INFO& otherVolume = m_deviceInfo.volumes[j];
-            if (otherVolume.deviceFound && otherVolume.controllerType == baseVolume.controllerType) {
-                controller.volumeIndexes[controller.volumeCount] = j;
-                controller.volumeCount++;
-                volumeUsed[j] = true;
+            DEVICE_VOLUME_INFO& otherVolume = m_deviceInfo.volumes[otherIndex];
+            
+            // Enhanced pairing logic based on original algorithm
+            if (otherVolume.deviceFound && otherVolume.volumeLetter == baseDriveLetter) {
+                controller.volumeIndexes[pairCount] = otherIndex;
+                pairCount++;
+                volumeUsed[otherIndex] = true;
+                
+                LogMessage("VolumePairController: Paired volume %d with base volume %d (drive %c)", 
+                          otherIndex, volumeIndex, baseDriveLetter);
+                
+                // Break if we reach maximum volumes per controller (based on bVar4 == 4 check)
+                if (pairCount >= 4) {
+                    break;
+                }
             }
         }
 
-        // Finalize controller data
+        // Update controller volume count (equivalent to storing at 0x9aa offset)
+        controller.volumeCount = pairCount;
+        
+        // Set controller properties (equivalent to storing at 0x9ab offset)
         controller.isValid = TRUE;
         controller.controllerType = baseVolume.controllerType;
-        // The original code copies a product ID. Let's assume it's from the inquiry data.
-        // The exact field `productId` is not in DEVICE_VOLUME_INFO, so we'll use familyType as a placeholder.
-        controller.productId = baseVolume.familyType; 
+        controller.productId = baseVolume.inquiryData1; // Product ID from inquiry data
         
-        LogMessage("VolumePairController: Controller %d paired with %d volumes (Type: %d)", 
-                   m_controllerCount, controller.volumeCount, controller.controllerType);
+        // Enhanced security: Validate controller configuration
+        if (!ValidateControllerConfiguration(&controller)) {
+            LogWarning("VolumePairController: Controller %d configuration validation failed", m_controllerCount);
+            controller.isValid = FALSE;
+            continue;
+        }
+        
+        LogMessage("VolumePairController: Controller %d configured with %d volumes (Type: %d, Product: 0x%08X)", 
+                   m_controllerCount, controller.volumeCount, controller.controllerType, controller.productId);
         
         m_controllerCount++;
+        
+        // Break if we reach maximum controllers (equivalent to checking 0x8a2 == 3)
+        if (m_controllerCount >= 3) {
+            LogMessage("VolumePairController: Maximum controllers reached");
+            break;
+        }
     }
+
+    LogMessage("VolumePairController: Configured %d controllers from %d volumes", 
+               m_controllerCount, m_deviceInfo.volumeCount);
+}
+
+// Enhanced security validation for controller configurations
+BOOL iTEUFDrs::ValidateControllerConfiguration(CONTROLLER_DATA* controller)
+{
+    if (!controller) {
+        LogError("ValidateControllerConfiguration: NULL controller pointer");
+        return FALSE;
+    }
+    
+    // Validate volume count
+    if (controller->volumeCount == 0 || controller->volumeCount > 4) {
+        LogError("ValidateControllerConfiguration: Invalid volume count: %d", controller->volumeCount);
+        return FALSE;
+    }
+    
+    // Validate volume indexes
+    for (BYTE i = 0; i < controller->volumeCount; i++) {
+        BYTE volumeIndex = controller->volumeIndexes[i];
+        if (volumeIndex >= MAX_VOLUMES) {
+            LogError("ValidateControllerConfiguration: Invalid volume index: %d", volumeIndex);
+            return FALSE;
+        }
+        
+        // Ensure volume is actually found
+        if (!m_deviceInfo.volumes[volumeIndex].deviceFound) {
+            LogError("ValidateControllerConfiguration: Volume %d not found", volumeIndex);
+            return FALSE;
+        }
+    }
+    
+    // Validate controller type (basic range check)
+    if (controller->controllerType > 0x10) {
+        LogWarning("ValidateControllerConfiguration: Unusual controller type: 0x%02X", 
+                  controller->controllerType);
+    }
+    
+    // Validate product ID is not obviously invalid
+    if (controller->productId == 0) {
+        LogWarning("ValidateControllerConfiguration: Product ID is zero");
+    }
+    
+    LogMessage("ValidateControllerConfiguration: Controller validation passed - %d volumes, type 0x%02X", 
+               controller->volumeCount, controller->controllerType);
+    return TRUE;
+}
 }
 
 // Get volume index for controller
