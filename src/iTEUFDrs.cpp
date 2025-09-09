@@ -2413,6 +2413,360 @@ BOOL iTEUFDrs::IsCEChannelEnabled(BYTE volumeIndex, BYTE ce, BYTE ch)
     return TRUE;
 }
 
+// Enhanced OpenDriveHandleAgain based on comprehensive Ghidra decompilation (0040beb0)
+UINT iTEUFDrs::EnhancedOpenDriveHandleAgain()
+{
+    LogMessage("Enhanced OpenDriveHandleAgain: Starting comprehensive device detection");
+    
+    // Enhanced security: Input validation and initialization
+    if (!ValidateSystemState()) {
+        LogError("EnhancedOpenDriveHandleAgain: System state validation failed");
+        return 0;
+    }
+    
+    // Security-enhanced memory allocation
+    void* inquiryBuffer = nullptr;
+    void* extensionBuffer = nullptr;
+    
+    if (!SecureMemoryAllocation(&inquiryBuffer, 0xB0, "InquiryBuffer") ||
+        !SecureMemoryAllocation(&extensionBuffer, 0xE40, "ExtensionBuffer")) {
+        LogError("EnhancedOpenDriveHandleAgain: Secure memory allocation failed");
+        CleanupSecureBuffers(&inquiryBuffer, &extensionBuffer);
+        return 0;
+    }
+    
+    UINT foundDevices = 0;
+    
+    // Physical drive paths (from decompiled string array)
+    const char* physicalDrivePaths[] = {
+        "\\\\.\\PhysicalDrive1", "\\\\.\\PhysicalDrive2", "\\\\.\\PhysicalDrive3", "\\\\.\\PhysicalDrive4",
+        "\\\\.\\PhysicalDrive5", "\\\\.\\PhysicalDrive6", "\\\\.\\PhysicalDrive7", "\\\\.\\PhysicalDrive8"
+    };
+    
+    __try {
+        // Enhanced device scanning loop
+        for (DWORD driveIndex = 0; driveIndex < 8; driveIndex++) {
+            LogMessage("EnhancedOpenDriveHandleAgain: Scanning drive %d", driveIndex);
+            
+            // Calculate structure offset (0x57 bytes per device from decompilation)
+            DWORD structOffset = foundDevices * 0x57;
+            
+            // Initialize device state with security defaults
+            InitializeDeviceStructure(driveIndex, structOffset);
+            
+            // Enhanced physical drive opening with comprehensive error handling
+            if (!EnhancedOpenPhysicalDrive(driveIndex)) {
+                LogMessage("EnhancedOpenDriveHandleAgain: Failed to open drive %d", driveIndex);
+                continue;
+            }
+            
+            HANDLE driveHandle = GetDriveHandle(driveIndex);
+            if (!driveHandle || driveHandle == INVALID_HANDLE_VALUE) {
+                continue;
+            }
+            
+            // Secure inquiry buffer initialization
+            SecureZeroMemory(inquiryBuffer, 0xB0);
+            
+            // Enhanced device inquiry with validation
+            if (!PerformSecureDeviceInquiry(inquiryBuffer, driveHandle, driveIndex)) {
+                LogError("EnhancedOpenDriveHandleAgain: Device inquiry failed for drive %d", driveIndex);
+                CloseHandle(driveHandle);
+                continue;
+            }
+            
+            // Enhanced device analysis and validation
+            if (!AnalyzeAndValidateDevice(inquiryBuffer, extensionBuffer, driveHandle, 
+                                        driveIndex, structOffset)) {
+                LogMessage("EnhancedOpenDriveHandleAgain: Device validation failed for drive %d", driveIndex);
+                CloseHandle(driveHandle);
+                continue;
+            }
+            
+            // Successfully detected and validated device
+            foundDevices++;
+            LogMessage("EnhancedOpenDriveHandleAgain: Successfully detected device %d", foundDevices);
+            
+            // Close handle after processing (security best practice)
+            CloseHandle(driveHandle);
+        }
+        
+        LogMessage("EnhancedOpenDriveHandleAgain: Detection complete. Found %d devices", foundDevices);
+        
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        LogError("EnhancedOpenDriveHandleAgain: Exception during device scanning - 0x%08X", 
+                 GetExceptionCode());
+        foundDevices = 0;
+    }
+    
+    // Secure cleanup
+    CleanupSecureBuffers(&inquiryBuffer, &extensionBuffer);
+    
+    return foundDevices;
+}
+
+// Enhanced device inquiry with comprehensive security validation
+BOOL iTEUFDrs::PerformSecureDeviceInquiry(void* inquiryBuffer, HANDLE driveHandle, DWORD driveIndex)
+{
+    if (!inquiryBuffer || !driveHandle || driveHandle == INVALID_HANDLE_VALUE) {
+        LogError("PerformSecureDeviceInquiry: Invalid parameters");
+        return FALSE;
+    }
+    
+    // Call SDK inquiry function with enhanced error handling
+    if (!m_pVDR_GetDeviceInquiry) {
+        LogError("PerformSecureDeviceInquiry: SDK function not available");
+        return FALSE;
+    }
+    
+    BOOL result = m_pVDR_GetDeviceInquiry(inquiryBuffer, driveHandle);
+    if (!result) {
+        DWORD error = GetLastError();
+        LogError("PerformSecureDeviceInquiry: SDK inquiry failed for drive %d, error: %d", 
+                 driveIndex, error);
+        return FALSE;
+    }
+    
+    // Validate inquiry response integrity
+    if (!ValidateInquiryResponse(inquiryBuffer, 0xB0)) {
+        LogError("PerformSecureDeviceInquiry: Inquiry response validation failed");
+        return FALSE;
+    }
+    
+    return TRUE;
+}
+
+// Enhanced device analysis with comprehensive signature validation
+BOOL iTEUFDrs::AnalyzeAndValidateDevice(void* inquiryBuffer, void* extensionBuffer, 
+                                      HANDLE driveHandle, DWORD driveIndex, DWORD structOffset)
+{
+    if (!inquiryBuffer || !extensionBuffer || !driveHandle) {
+        return FALSE;
+    }
+    
+    // Enhanced inquiry string processing with bounds checking
+    char* inquiryStr = (char*)inquiryBuffer + 0x24; // Standard SCSI inquiry offset
+    char secureInquiryString[64] = {0};
+    
+    // Secure string copy with validation
+    if (!CopyInquiryString(secureInquiryString, sizeof(secureInquiryString), inquiryStr)) {
+        LogError("AnalyzeAndValidateDevice: Inquiry string processing failed");
+        return FALSE;
+    }
+    
+    LogMessage("AnalyzeAndValidateDevice: Drive %d Inquiry: %s", driveIndex, secureInquiryString);
+    
+    // Enhanced ITE device signature validation
+    if (!ValidateITEDeviceSignature(secureInquiryString)) {
+        LogMessage("AnalyzeAndValidateDevice: Not an ITE device (drive %d)", driveIndex);
+        return FALSE;
+    }
+    
+    // Enhanced controller type detection with security validation
+    DeviceInfo deviceInfo = {0};
+    if (!DetermineControllerType(secureInquiryString, &deviceInfo)) {
+        LogError("AnalyzeAndValidateDevice: Controller type determination failed");
+        return FALSE;
+    }
+    
+    // Validate controller type is supported
+    if (deviceInfo.firmwareType == 200) {
+        LogMessage("AnalyzeAndValidateDevice: Unsupported device type for drive %d", driveIndex);
+        return FALSE;
+    }
+    
+    // Enhanced device capability extraction
+    if (!ExtractEnhancedDeviceCapabilities(extensionBuffer, driveHandle, &deviceInfo, driveIndex)) {
+        LogMessage("AnalyzeAndValidateDevice: Device capability extraction failed");
+        return FALSE;
+    }
+    
+    // Store validated device information
+    if (!StoreDeviceInformation(&deviceInfo, structOffset, driveIndex)) {
+        LogError("AnalyzeAndValidateDevice: Failed to store device information");
+        return FALSE;
+    }
+    
+    LogMessage("AnalyzeAndValidateDevice: Device %d validated - Type: 0x%04X, FW: %d, Rev: %d",
+               driveIndex, deviceInfo.controllerType, deviceInfo.firmwareType, deviceInfo.revisionType);
+    
+    return TRUE;
+}
+
+// Enhanced controller type determination with security validation
+BOOL iTEUFDrs::DetermineControllerType(const char* inquiryString, DeviceInfo* deviceInfo)
+{
+    if (!inquiryString || !deviceInfo) {
+        return FALSE;
+    }
+    
+    // Initialize with secure defaults
+    deviceInfo->controllerType = 0;
+    deviceInfo->firmwareType = 200; // Default: unsupported
+    deviceInfo->revisionType = 0xFF;
+    
+    // Enhanced pattern matching with bounds checking
+    if (strstr(inquiryString, "1181")) {
+        deviceInfo->controllerType = 0x1181;
+        deviceInfo->firmwareType = 0;
+        deviceInfo->revisionType = 0xFF;
+        
+        // Enhanced revision detection
+        if (strstr(inquiryString, "A0AA")) {
+            deviceInfo->revisionType = 0;
+        } else if (strstr(inquiryString, "A1BA")) {
+            deviceInfo->firmwareType = 1;
+            deviceInfo->revisionType = 1;
+        }
+    } else if (strstr(inquiryString, "1176")) {
+        deviceInfo->controllerType = 0x1176;
+        deviceInfo->firmwareType = 2;
+        deviceInfo->revisionType = 0xFF;
+        
+        if (strstr(inquiryString, "A0AA")) {
+            deviceInfo->revisionType = 0;
+        }
+    }
+    
+    return (deviceInfo->firmwareType != 200);
+}
+
+// Enhanced device capability extraction with security validation
+BOOL iTEUFDrs::ExtractEnhancedDeviceCapabilities(void* extensionBuffer, HANDLE driveHandle, 
+                                                DeviceInfo* deviceInfo, DWORD driveIndex)
+{
+    if (!extensionBuffer || !driveHandle || !deviceInfo) {
+        return FALSE;
+    }
+    
+    BOOL result = TRUE;
+    
+    // Enhanced LUN index extraction
+    if (m_pVDR_GetLunIndex) {
+        UCHAR lunIndex = 0xFF;
+        if (m_pVDR_GetLunIndex(&lunIndex, extensionBuffer, driveHandle)) {
+            deviceInfo->lunIndex = lunIndex;
+            LogMessage("ExtractEnhancedDeviceCapabilities: LUN index: %d", lunIndex);
+        } else {
+            LogMessage("ExtractEnhancedDeviceCapabilities: LUN index extraction failed");
+            result = FALSE;
+        }
+    }
+    
+    // Enhanced Device ID extraction
+    if (m_pVDR_GetDeviceID) {
+        UCHAR deviceId = 0xFF;
+        if (m_pVDR_GetDeviceID(&deviceId, extensionBuffer, driveHandle)) {
+            deviceInfo->deviceId = deviceId;
+            if (deviceId != 0xFF && deviceId < MAX_DEVICES) {
+                LogMessage("ExtractEnhancedDeviceCapabilities: Device ID: %d", deviceId);
+            }
+        } else {
+            LogMessage("ExtractEnhancedDeviceCapabilities: Device ID extraction failed");
+            result = FALSE;
+        }
+    }
+    
+    // Enhanced drive type detection
+    char drivePathBuffer[16] = {0};
+    sprintf_s(drivePathBuffer, sizeof(drivePathBuffer), "\\\\.\\PhysicalDrive%d", driveIndex + 1);
+    deviceInfo->driveType = GetDriveTypeA(drivePathBuffer);
+    
+    return result;
+}
+
+// Security utility functions
+BOOL iTEUFDrs::ValidateSystemState()
+{
+    // Validate critical system components
+    if (!m_hSDK || !m_pVDR_GetDeviceInquiry) {
+        LogError("ValidateSystemState: SDK not properly initialized");
+        return FALSE;
+    }
+    
+    return TRUE;
+}
+
+BOOL iTEUFDrs::SecureMemoryAllocation(void** buffer, SIZE_T size, const char* purpose)
+{
+    if (!buffer || size == 0) {
+        return FALSE;
+    }
+    
+    *buffer = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size);
+    if (!*buffer) {
+        LogError("SecureMemoryAllocation: Failed to allocate %zu bytes for %s", 
+                 size, purpose ? purpose : "unknown");
+        return FALSE;
+    }
+    
+    return TRUE;
+}
+
+void iTEUFDrs::CleanupSecureBuffers(void** buffer1, void** buffer2)
+{
+    if (buffer1 && *buffer1) {
+        SecureZeroMemory(*buffer1, 0xB0);
+        HeapFree(GetProcessHeap(), 0, *buffer1);
+        *buffer1 = nullptr;
+    }
+    
+    if (buffer2 && *buffer2) {
+        SecureZeroMemory(*buffer2, 0xE40);
+        HeapFree(GetProcessHeap(), 0, *buffer2);
+        *buffer2 = nullptr;
+    }
+}
+
+BOOL iTEUFDrs::ValidateInquiryResponse(void* buffer, SIZE_T size)
+{
+    if (!buffer || size < 0x40) {
+        return FALSE;
+    }
+    
+    // Validate SCSI inquiry response format
+    UCHAR* data = (UCHAR*)buffer;
+    if (data[0] != 0x00) { // Must be direct-access device
+        return FALSE;
+    }
+    
+    // Additional validation can be added here
+    return TRUE;
+}
+
+BOOL iTEUFDrs::ValidateITEDeviceSignature(const char* inquiryString)
+{
+    if (!inquiryString) {
+        return FALSE;
+    }
+    
+    // Enhanced signature validation
+    size_t len = strnlen(inquiryString, 64);
+    if (len < 4) {
+        return FALSE;
+    }
+    
+    return (strstr(inquiryString, "ITEu") != nullptr);
+}
+
+BOOL iTEUFDrs::CopyInquiryString(char* dest, SIZE_T destSize, const char* src)
+{
+    if (!dest || !src || destSize == 0) {
+        return FALSE;
+    }
+    
+    // Secure string copy with validation
+    errno_t result = strncpy_s(dest, destSize, src, destSize - 1);
+    if (result != 0) {
+        return FALSE;
+    }
+    
+    // Ensure null termination
+    dest[destSize - 1] = '\0';
+    
+    return TRUE;
+}
+
 void iTEUFDrs::UpdateDeviceStatusFromScan(BYTE volumeIndex, BYTE ce, BYTE ch, BYTE* scanData)
 {
     if (volumeIndex >= m_deviceInfo.volumeCount || !scanData) return;
