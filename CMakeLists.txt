@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(URescue VERSION 81D.2.24.2)
+project(URescue VERSION 81.2.24.2)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -21,7 +21,7 @@ set(SOURCES
     src/SystemManager.cpp
     src/ITEController.cpp
     src/FirmwareManager.cpp
-    src/USBManager.cpp
+    src/USBDevice.cpp
     src/Utilities.cpp
     src/ErrorHandler.cpp
     src/iTEUFDrs.cpp
@@ -35,7 +35,7 @@ set(HEADERS
     include/SystemManager.h
     include/ITEController.h
     include/FirmwareManager.h
-    include/USBManager.h
+    include/USBDevice.h
     include/Utilities.h
     include/ErrorHandler.h
     include/iTEUFDrs.h
