@@ -51,6 +51,40 @@ public:
     const DEVICE_VOLUME_INFO* GetVolumeInfo(BYTE index) const;
     const CONTROLLER_DATA* GetControllerData(BYTE index) const;
 
+    // Enhanced device information structure based on Ghidra analysis
+struct DeviceInfo {
+    WORD controllerType;     // 0x1181, 0x1176, etc.
+    UCHAR firmwareType;      // Firmware type identifier
+    UCHAR revisionType;      // Revision identifier (A0AA=0, A1BA=1, etc.)
+    UCHAR lunIndex;          // LUN index
+    UCHAR deviceId;          // Device ID
+    UINT driveType;          // Drive type from GetDriveTypeA
+    char vendorId[16];       // Vendor identification
+    char productId[32];      // Product identification
+    DWORD capabilities;      // Device capabilities flags
+};
+
+// Constants for enhanced device management
+#define MAX_DEVICES 256
+#define DEVICE_STRUCT_SIZE 0x57  // Size per device structure (from Ghidra analysis)
+
+// Enhanced iTEFlashDevice structure based on Ghidra decompilation
+    UINT EnhancedOpenDriveHandleAgain();
+    BOOL PerformSecureDeviceInquiry(void* inquiryBuffer, HANDLE driveHandle, DWORD driveIndex);
+    BOOL AnalyzeAndValidateDevice(void* inquiryBuffer, void* extensionBuffer, 
+                                HANDLE driveHandle, DWORD driveIndex, DWORD structOffset);
+    BOOL DetermineControllerType(const char* inquiryString, DeviceInfo* deviceInfo);
+    BOOL ExtractEnhancedDeviceCapabilities(void* extensionBuffer, HANDLE driveHandle, 
+                                         DeviceInfo* deviceInfo, DWORD driveIndex);
+    
+    // Security utility functions
+    BOOL ValidateSystemState();
+    BOOL SecureMemoryAllocation(void** buffer, SIZE_T size, const char* purpose);
+    void CleanupSecureBuffers(void** buffer1, void** buffer2);
+    BOOL ValidateInquiryResponse(void* buffer, SIZE_T size);
+    BOOL ValidateITEDeviceSignature(const char* inquiryString);
+    BOOL CopyInquiryString(char* dest, SIZE_T destSize, const char* src);
+
 private:
     // Members based on decompiled structure
     void* m_vtable; // 0x00
