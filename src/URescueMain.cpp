@@ -4,6 +4,7 @@
 #include "URescueMain.h"
 #include "iTEUFDrs.h"
 #include "Utilities.h"
+#include "SDKLoader.h"
 
 // Global iTEUFDrs instance
 static iTEUFDrs* g_pURescueApp = nullptr;
@@ -19,6 +20,18 @@ int RunURescueApplication(void)
         LogError("Failed to get module directory");
         return -1;
     }
+
+    HMODULE hSdk = NULL;
+    if (!Load181FlashSDK(moduleDir, &hSdk)) {
+        LogError("Failed to load 181FlashSDK.dll");
+        return -1;
+    }
+
+    if (!InitializeFlashSDK(hSdk)) {
+        LogError("Failed to initialize Flash SDK functions");
+        Unload181FlashSDK(hSdk);
+        return -1;
+    }
     
     // Initialize main URescue object (equivalent to iTEUFDrs constructor call)
     g_pURescueApp = new iTEUFDrs(moduleDir);
@@ -27,6 +40,7 @@ int RunURescueApplication(void)
                  g_pURescueApp ? g_pURescueApp->GetLastError() : 0);
         delete g_pURescueApp;
         g_pURescueApp = nullptr;
+        Unload181FlashSDK(hSdk);
         return -1;
     }
     
@@ -39,6 +53,7 @@ int RunURescueApplication(void)
         LogError("Failed to create main frame window");
         delete g_pURescueApp;
         g_pURescueApp = nullptr;
+        Unload181FlashSDK(hSdk);
         return -1;
     }
     
@@ -55,6 +70,7 @@ int RunURescueApplication(void)
     delete g_pURescueApp;
     g_pURescueApp = nullptr;
     
+    Unload181FlashSDK(hSdk);
     LogMessage("URescue application exiting with code %d", result);
     return result;
 }
