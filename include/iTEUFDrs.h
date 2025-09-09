@@ -52,7 +52,6 @@ private:
     DWORD m_lastError; // 0x08 (param_1 + 1)
     CHAR m_basePath[MAX_PATH]; // 0x11b
     HMODULE m_hSDK; // 0x21f
-    SDK_APIS m_sdkApis; // Structure to hold all bound SDK function pointers
     
     // Device management data
     BYTE m_volumeCount;
@@ -63,6 +62,7 @@ private:
 
     // Internal initialization functions
     BOOL InitializeSDK();
+    BOOL VerifySDKIntegrity();
     void InitializeMembers();
     
     // Device information functions (decompiled from various FUN_* functions)
@@ -71,6 +71,7 @@ private:
     BYTE CheckDriveExist();
     BOOL CheckDriveExistInternal(BYTE volumeIndex);
     BOOL OpenDriveHandleAgain(BYTE volumeIndex);
+    BOOL ValidatePhysicalDevice(HANDLE hDevice, BYTE driveIndex);
     BOOL SetDeviceID();
     void VolumePairController();
     

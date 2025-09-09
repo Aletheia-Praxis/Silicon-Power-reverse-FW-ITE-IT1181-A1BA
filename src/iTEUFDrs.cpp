@@ -4,6 +4,9 @@
 #include "Utilities.h"
 #include <stdio.h>
 #include <string.h>
+#include <windows.h>
+#include <winioctl.h>
+#include <ntddstor.h>
 
 // Typedefs for SDK calls (best-effort based on decompilation patterns)
 typedef int (__stdcall *PFN_FLH_SCAN_MASS_BLOCKS_PER_CHIP)(DWORD ctx, BYTE ce, BYTE ch, int rtPtr, void* outBuf, BYTE mode, BYTE* outFlag, int* outRet);
@@ -47,6 +50,13 @@ iTEUFDrs::iTEUFDrs(LPCSTR basePath)
         return;
     }
 
+    // Enhanced security initialization based on analysis
+    if (!VerifySDKIntegrity()) {
+        LogError("iTEUFDrs: SDK integrity verification failed.");
+        m_lastError = ERROR_INVALID_DATA;
+        return;
+    }
+
     // Call GetDeviceInfo (equivalent to FUN_0040cf30)
     if (!GetDeviceInfo()) {
         LogError("iTEUFDrs: GetDeviceInfo failed.");
@@ -60,7 +70,6 @@ iTEUFDrs::iTEUFDrs(LPCSTR basePath)
 iTEUFDrs::~iTEUFDrs()
 {
     if (m_hSDK) {
-        ClearSDKAPIs(&m_sdkApis);
         Unload181FlashSDK(m_hSDK);
         m_hSDK = NULL;
     }
@@ -82,15 +91,82 @@ BOOL iTEUFDrs::InitializeSDK()
         return FALSE;
     }
 
-    LogMessage("iTEUFDrs: Loaded 181FlashSDK.dll. Binding APIs...");
-    if (!BindSDKAPIs(m_hSDK, &m_sdkApis)) {
-        LogError("iTEUFDrs: Failed to bind SDK APIs.");
+    LogMessage("iTEUFDrs: Loaded 181FlashSDK.dll. Initializing functions...");
+    if (!InitializeFlashSDK(m_hSDK)) {
+        LogError("iTEUFDrs: Failed to initialize SDK functions.");
         m_lastError = GetLastError();
         Unload181FlashSDK(m_hSDK);
         m_hSDK = NULL;
         return FALSE;
     }
-    LogMessage("iTEUFDrs: SDK APIs bound successfully.");
+    LogMessage("iTEUFDrs: SDK functions initialized successfully.");
+    return TRUE;
+}
+
+// Enhanced security function to verify SDK integrity
+BOOL iTEUFDrs::VerifySDKIntegrity()
+{
+    if (!m_hSDK) {
+        LogError("VerifySDKIntegrity: SDK not loaded.");
+        return FALSE;
+    }
+
+    // Verify critical SDK functions are loaded based on Ghidra analysis
+    // These are the essential security and core functions identified in FUN_00401000
+    
+    // Check critical security functions
+    if (!FLH_ReadISPData || !FLH_WriteISPData) {
+        LogError("VerifySDKIntegrity: Critical ISP functions not loaded.");
+        return FALSE;
+    }
+    
+    if (!SEC_DoAuthentication || !SEC_GetUserPassword || !SEC_ChangePassword) {
+        LogError("VerifySDKIntegrity: Critical security functions not loaded.");
+        return FALSE;
+    }
+    
+    // Check core flash operations
+    if (!FLH_PhyiscalRead || !FLH_PhyiscalWrite || !FLH_BlockErase) {
+        LogError("VerifySDKIntegrity: Critical flash operations not loaded.");
+        return FALSE;
+    }
+    
+    // Check device management functions
+    if (!VDR_ReadWriteLUNConfig || !VDR_GetSecurityStatus || !VDR_CheckSYSReady) {
+        LogError("VerifySDKIntegrity: Critical device management functions not loaded.");
+        return FALSE;
+    }
+    
+    // Verify the SDK module file integrity (basic check)
+    CHAR sdkPath[MAX_PATH];
+    if (!JoinPathA(sdkPath, sizeof(sdkPath), m_basePath, "181FlashSDK.dll")) {
+        LogError("VerifySDKIntegrity: Failed to build SDK path.");
+        return FALSE;
+    }
+    
+    HANDLE hFile = CreateFileA(sdkPath, GENERIC_READ, FILE_SHARE_READ, NULL, 
+                              OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        LogError("VerifySDKIntegrity: Cannot open SDK file for verification.");
+        return FALSE;
+    }
+    
+    LARGE_INTEGER fileSize;
+    if (!GetFileSizeEx(hFile, &fileSize)) {
+        LogError("VerifySDKIntegrity: Cannot get SDK file size.");
+        CloseHandle(hFile);
+        return FALSE;
+    }
+    
+    CloseHandle(hFile);
+    
+    // Basic sanity check - SDK should be reasonably sized
+    if (fileSize.QuadPart < 100000 || fileSize.QuadPart > 10000000) {
+        LogError("VerifySDKIntegrity: SDK file size suspicious: %lld bytes.", fileSize.QuadPart);
+        return FALSE;
+    }
+    
+    LogMessage("VerifySDKIntegrity: SDK integrity verification passed.");
     return TRUE;
 }
 
@@ -328,7 +404,7 @@ BOOL iTEUFDrs::CheckDriveExist()
         }
 
         // Use the bound SDK function for Inquiry
-        if (!m_sdkApis.STD_Inquiry || m_sdkApis.STD_Inquiry(inquiryBuffer, hDevice) == 0) {
+        if (!STD_Inquiry || STD_Inquiry(inquiryBuffer, hDevice) == 0) {
             LogWarning("CheckDriveExist: STD_Inquiry failed for %C:", letter);
             CloseHandle(hDevice);
             continue;
@@ -410,23 +486,147 @@ BOOL iTEUFDrs::OpenDriveHandleAgain()
 {
     LogMessage("OpenDriveHandleAgain: re-checking physical drives");
     
-    // This function appears to be a variant of CheckDriveExist, but it might be
-    // intended to scan physical drive paths directly, e.g., \\.\PhysicalDriveX
-    // The decompiled code shows it iterating through a list of "PhysicalDrive" paths.
-    // For now, we will re-use the logic from CheckDriveExist as it's safer and
-    // achieves a similar goal of re-validating device presence. A more precise
-    // implementation would require deeper analysis of the differences.
-
+    // Enhanced implementation based on Ghidra analysis of FUN_00408580
+    // This function opens physical drives \\.\PhysicalDrive1-8 with enhanced security
+    
     // Close any existing handles before re-opening
     for (BYTE i = 0; i < m_deviceInfo.volumeCount; ++i) {
         if (m_deviceInfo.volumes[i].hDevice != INVALID_HANDLE_VALUE) {
             CloseHandle(m_deviceInfo.volumes[i].hDevice);
             m_deviceInfo.volumes[i].hDevice = INVALID_HANDLE_VALUE;
+            LogMessage("OpenDriveHandleAgain: Closed existing handle for volume %d", i);
         }
     }
 
-    // Re-run the drive check logic
-    return CheckDriveExist();
+    // Physical drive paths based on FUN_00408580 analysis
+    const LPCSTR physicalDrivePaths[] = {
+        "\\\\.\\PhysicalDrive1",
+        "\\\\.\\PhysicalDrive2", 
+        "\\\\.\\PhysicalDrive3",
+        "\\\\.\\PhysicalDrive4",
+        "\\\\.\\PhysicalDrive5",
+        "\\\\.\\PhysicalDrive6",
+        "\\\\.\\PhysicalDrive7",
+        "\\\\.\\PhysicalDrive8"
+    };
+    
+    BOOL foundDevice = FALSE;
+    
+    // Scan through physical drives
+    for (BYTE driveIndex = 0; driveIndex < 8 && driveIndex < MAX_VOLUMES; driveIndex++) {
+        // Enhanced security: Use more restrictive access rights
+        // Original used 0xc0000000 (GENERIC_READ | GENERIC_WRITE)
+        // We use GENERIC_READ only initially for safety
+        HANDLE hDevice = CreateFileA(
+            physicalDrivePaths[driveIndex],
+            GENERIC_READ,  // More restrictive than original
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            NULL,
+            OPEN_EXISTING,
+            0,
+            NULL
+        );
+        
+        if (hDevice == INVALID_HANDLE_VALUE) {
+            DWORD error = GetLastError();
+            LogMessage("OpenDriveHandleAgain: Cannot access %s, error=%lu", 
+                      physicalDrivePaths[driveIndex], error);
+            continue;
+        }
+        
+        // Basic device validation
+        if (!ValidatePhysicalDevice(hDevice, driveIndex)) {
+            LogWarning("OpenDriveHandleAgain: Device validation failed for %s", 
+                      physicalDrivePaths[driveIndex]);
+            CloseHandle(hDevice);
+            continue;
+        }
+        
+        // Store device handle
+        if (driveIndex < m_deviceInfo.volumeCount) {
+            m_deviceInfo.volumes[driveIndex].hDevice = hDevice;
+            m_deviceInfo.volumes[driveIndex].deviceFound = TRUE;
+            m_deviceInfo.volumes[driveIndex].volumeIndex = driveIndex;
+            foundDevice = TRUE;
+            
+            LogMessage("OpenDriveHandleAgain: Successfully opened %s", 
+                      physicalDrivePaths[driveIndex]);
+        } else {
+            CloseHandle(hDevice);
+        }
+    }
+    
+    if (!foundDevice) {
+        LogError("OpenDriveHandleAgain: No accessible physical drives found");
+        return FALSE;
+    }
+    
+    LogMessage("OpenDriveHandleAgain: Physical drive scan completed");
+    return TRUE;
+}
+
+// Enhanced security validation for physical devices
+BOOL iTEUFDrs::ValidatePhysicalDevice(HANDLE hDevice, BYTE driveIndex)
+{
+    if (hDevice == INVALID_HANDLE_VALUE) {
+        return FALSE;
+    }
+    
+    // Basic device validation using DeviceIoControl
+    // This helps prevent attacks through malicious device responses
+    
+    STORAGE_DEVICE_NUMBER deviceNumber;
+    DWORD bytesReturned = 0;
+    
+    // Get device number to verify it's a legitimate storage device
+    if (!DeviceIoControl(hDevice, 
+                        IOCTL_STORAGE_GET_DEVICE_NUMBER,
+                        NULL, 0,
+                        &deviceNumber, sizeof(deviceNumber),
+                        &bytesReturned, NULL)) {
+        DWORD error = GetLastError();
+        LogWarning("ValidatePhysicalDevice: Cannot get device number for drive %d, error=%lu", 
+                  driveIndex, error);
+        // Don't fail immediately - some devices might not support this
+    } else {
+        LogMessage("ValidatePhysicalDevice: Drive %d - DeviceType=%lu, DeviceNumber=%lu, PartitionNumber=%lu",
+                  driveIndex, deviceNumber.DeviceType, deviceNumber.DeviceNumber, deviceNumber.PartitionNumber);
+        
+        // Verify it's a disk device
+        if (deviceNumber.DeviceType != FILE_DEVICE_DISK) {
+            LogError("ValidatePhysicalDevice: Drive %d is not a disk device (type=%lu)", 
+                    driveIndex, deviceNumber.DeviceType);
+            return FALSE;
+        }
+    }
+    
+    // Get drive geometry for additional validation
+    DISK_GEOMETRY geometry;
+    if (DeviceIoControl(hDevice,
+                       IOCTL_DISK_GET_DRIVE_GEOMETRY,
+                       NULL, 0,
+                       &geometry, sizeof(geometry),
+                       &bytesReturned, NULL)) {
+        LogMessage("ValidatePhysicalDevice: Drive %d geometry - Cylinders=%lld, TracksPerCylinder=%lu, SectorsPerTrack=%lu, BytesPerSector=%lu",
+                  driveIndex, geometry.Cylinders.QuadPart, geometry.TracksPerCylinder, 
+                  geometry.SectorsPerTrack, geometry.BytesPerSector);
+        
+        // Basic sanity checks
+        if (geometry.BytesPerSector == 0 || geometry.BytesPerSector > 8192) {
+            LogError("ValidatePhysicalDevice: Drive %d has invalid bytes per sector: %lu", 
+                    driveIndex, geometry.BytesPerSector);
+            return FALSE;
+        }
+        
+        if (geometry.SectorsPerTrack == 0 || geometry.SectorsPerTrack > 1024) {
+            LogError("ValidatePhysicalDevice: Drive %d has invalid sectors per track: %lu", 
+                    driveIndex, geometry.SectorsPerTrack);
+            return FALSE;
+        }
+    }
+    
+    LogMessage("ValidatePhysicalDevice: Drive %d validation passed", driveIndex);
+    return TRUE;
 }
 
 BOOL iTEUFDrs::SetDeviceID()
@@ -825,7 +1025,7 @@ BOOL iTEUFDrs::ProcessDeviceInquiry(HANDLE hDevice, BYTE volumeIndex)
     
     // Get inquiry data using SDK
     BOOL result = FALSE;
-    if (m_sdkApis.FLH_GetInfoFromDataBaseByID) {
+    if (FLH_GetInfoFromDataBaseByID) {
         // Call SDK function to get inquiry data
         result = TRUE;
         
@@ -1219,7 +1419,7 @@ BOOL iTEUFDrs::GetMPInfo(BYTE volumeIndex, DWORD deviceId)
     }
 
     // The decompiled code calls DAT_004ad59c, which is FLH_ReadISPData.
-    if (!m_sdkApis.FLH_ReadISPData) {
+    if (!FLH_ReadISPData) {
         LogError("GetMPInfo: FLH_ReadISPData SDK function not bound.");
         return FALSE;
     }
@@ -1233,10 +1433,10 @@ BOOL iTEUFDrs::GetMPInfo(BYTE volumeIndex, DWORD deviceId)
 
     BOOL success = FALSE;
     // The SDK function is called twice, first for LUN 0, then for LUN 1 if the first fails.
-    int readResult = m_sdkApis.FLH_ReadISPData(volume.hDevice, ispBuffer, 0x10000, 0, volume.bcmInfo, 1);
+    int readResult = FLH_ReadISPData(volume.hDevice, ispBuffer, 0x10000, 0, volume.bcmInfo, 1);
     if (readResult == 0) {
         LogWarning("GetMPInfo: Read 1st ISP data (LUN 0) failed. Trying LUN 1.");
-        readResult = m_sdkApis.FLH_ReadISPData(volume.hDevice, ispBuffer, 0x10000, 1, volume.bcmInfo, 1);
+        readResult = FLH_ReadISPData(volume.hDevice, ispBuffer, 0x10000, 1, volume.bcmInfo, 1);
     }
 
     if (readResult != 0) {
@@ -1983,7 +2183,7 @@ BOOL iTEUFDrs::NotifyFwSegmentInfo(BYTE volumeIndex, DWORD deviceId)
     // 1. DAT_004ad5f4 which is FLH_ArrangeSegmentPara
     // 2. DAT_004ad5ec which is FLH_InitCTRL
     
-    if (!m_sdkApis.FLH_ArrangeSegmentPara || !m_sdkApis.FLH_InitCTRL) {
+    if (!FLH_ArrangeSegmentPara || !FLH_InitCTRL) {
         LogError("NotifyFwSegmentInfo: Required SDK functions not bound.");
         return FALSE;
     }
@@ -2070,11 +2270,11 @@ BOOL iTEUFDrs::ScanMassBlocks(BYTE volumeIndex, DWORD deviceId, BYTE mode)
             }
             
             // Scan mass blocks per chip
-            if (m_sdkApis.FLH_ScanMassBlocksPerChip) {
+            if (g_FLH_HandleMassBlocksPerChip) {
                 BYTE outFlag = 0;
                 int outRet = 0;
                 
-                int scanResult = m_sdkApis.FLH_ScanMassBlocksPerChip(deviceId, ce, ch, 
+                int scanResult = ((int(__stdcall*)(DWORD, BYTE, BYTE, int, void*, BYTE, BYTE*, int*))g_FLH_HandleMassBlocksPerChip)(deviceId, ce, ch, 
                                                                     (int)&volume.banks[0], 
                                                                     scanBuffer, mode, &outFlag, &outRet);
                 
@@ -2143,10 +2343,10 @@ void iTEUFDrs::ProcessBadBlocks(BYTE volumeIndex, BYTE ce, BYTE ch, DWORD device
     DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
     
     // Process bad blocks using SDK
-    if (m_sdkApis.FLH_BlockErase) {
+    if (g_FLH_BlockErase) {
         for (DWORD block = 0; block < volume.blockCount; block++) {
             if (volume.blockMap[ce][ch][block] == 0xFF) { // Bad block marker
-                int eraseResult = m_sdkApis.FLH_BlockErase(deviceId, ch, ce, block, volume.hDevice);
+                int eraseResult = ((int(__stdcall*)(DWORD, DWORD, BYTE, BYTE, HANDLE))g_FLH_BlockErase)(deviceId, block, ce, ch, volume.hDevice);
                 if (eraseResult != 1) {
                     LogError("ProcessBadBlocks: Failed to erase bad block %d", block);
                 }
@@ -2260,8 +2460,8 @@ BOOL iTEUFDrs::GetDeviceInfoMain(BYTE volumeIndex, DWORD deviceId)
         }
         
         // Read BCM using SDK
-        if (m_sdkApis.FLH_ReadBCM) {
-            int result = m_sdkApis.FLH_ReadBCM(&bank.bcmInfo, volume.hDevice);
+        if (g_FLH_ReadBCM) {
+            int result = ((int(__stdcall*)(void*, HANDLE))g_FLH_ReadBCM)(&bank.bcmInfo, volume.hDevice);
             if (result != 1) {
                 switch (result) {
                     case 0:
@@ -2437,8 +2637,8 @@ BOOL iTEUFDrs::GetFlashMethod(BYTE volumeIndex, DWORD deviceId)
     }
     
     // Get flash data from database using SDK
-    if (m_sdkApis.FLH_GetFlashDataFromDataBase) {
-        BOOL result = m_sdkApis.FLH_GetFlashDataFromDataBase(deviceId, flashData, 
+    if (g_FLH_GetFlashDataFromDataBase) {
+        BOOL result = ((BOOL(__stdcall*)(DWORD, BYTE*, BYTE*, CHAR*))g_FLH_GetFlashDataFromDataBase)(deviceId, flashData, 
                                                            m_deviceInfo.deviceData, 
                                                            m_deviceInfo.devicePath);
         
@@ -2470,8 +2670,8 @@ BOOL iTEUFDrs::GetFlashMethod(BYTE volumeIndex, DWORD deviceId)
             LogMessage("Device is not ready....");
         } else {
             // Get flash data from memory
-            if (m_sdkApis.FLH_GetFlashDataFromMemory) {
-                BOOL memoryResult = m_sdkApis.FLH_GetFlashDataFromMemory(deviceId, flashData);
+            if (g_FLH_GetFlashDataFromMemory) {
+                BOOL memoryResult = ((BOOL(__stdcall*)(DWORD, BYTE*))g_FLH_GetFlashDataFromMemory)(deviceId, flashData);
                 bank.flashDataFromMemory = memoryResult;
                 
                 // Check root table validity
@@ -2576,8 +2776,8 @@ BOOL iTEUFDrs::CheckNeedLoadBank(BYTE volumeIndex, DWORD deviceId)
     memset(lunConfig, 0, sizeof(lunConfig));
     
     // Read LUN configuration using SDK
-    if (m_sdkApis.VDR_ReadWriteLUNConfig) {
-        int result = m_sdkApis.VDR_ReadWriteLUNConfig(0, lunConfig, &bank.bcmInfo[0xA26], deviceId);
+    if (g_VDR_ReadWriteLUNConfig) {
+        int result = ((int(__stdcall*)(DWORD, DWORD*, BYTE*, DWORD))g_VDR_ReadWriteLUNConfig)(0, lunConfig, &bank.bcmInfo[0xA26], deviceId);
         
         if (result == 0) {
             LogError(" (GetLunArrayData) Get Lun information fail");
@@ -2638,8 +2838,8 @@ BOOL iTEUFDrs::LoadBankData2(BYTE volumeIndex, DWORD deviceId)
     DWORD rootTableAddresses[3];
     
     // Find root table using SDK
-    if (m_sdkApis.FLH_FindRootTable) {
-        BYTE result = m_sdkApis.FLH_FindRootTable(deviceId, rootTableEntries, &bank.bcmInfo[0xA26], 0);
+    if (g_FLH_FindRootTable) {
+        BYTE result = ((BYTE(__stdcall*)(DWORD, DWORD*, BYTE*, DWORD))g_FLH_FindRootTable)(deviceId, rootTableEntries, &bank.bcmInfo[0xA26], 0);
         if (result != 0) {
             // Process root table entries
             for (DWORD i = 0; i < result; i++) {
@@ -2657,8 +2857,8 @@ BOOL iTEUFDrs::LoadBankData2(BYTE volumeIndex, DWORD deviceId)
             memset(rootTableBuffer, 0, sizeof(rootTableBuffer));
             
             // Read root table data using SDK
-            if (m_sdkApis.VDR_RootFunc) {
-                int readResult = m_sdkApis.VDR_RootFunc(rootTableAddresses[i], 1, 0x40, 1, 0x200, 
+            if (g_VDR_RootFunc) {
+                int readResult = ((int(__stdcall*)(DWORD, DWORD, DWORD, DWORD, DWORD, BYTE*, BYTE*, DWORD))g_VDR_RootFunc)(rootTableAddresses[i], 1, 0x40, 1, 0x200, 
                                                        rootTableBuffer, &bank.bcmInfo[0xA26], deviceId);
                 if (readResult == 1) {
                     // Process root table data
@@ -2717,8 +2917,8 @@ BOOL iTEUFDrs::LoadBankData3(BYTE volumeIndex, DWORD deviceId)
     WORD rootTableData[22];
     
     // Read system address data using SDK
-    if (m_sdkApis.VDR_ReadSysAddr) {
-        int readResult = m_sdkApis.VDR_ReadSysAddr(sysAddrData, &bank.bcmInfo[0xA26], deviceId);
+    if (g_VDR_ReadSysAddr) {
+        int readResult = ((int(__stdcall*)(DWORD*, BYTE*, DWORD))g_VDR_ReadSysAddr)(sysAddrData, &bank.bcmInfo[0xA26], deviceId);
         if (readResult != 0) {
             // Process system address data
             for (int i = 0; i < 2; i++) {
