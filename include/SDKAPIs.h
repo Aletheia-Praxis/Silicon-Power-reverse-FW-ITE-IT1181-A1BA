@@ -5,6 +5,17 @@
 // 181FlashSDK.dll API function pointers (decompiled from FUN_00401000)
 // These correspond to the global DAT_ variables in the decompiled code
 
+// Virtual Device Recognition (VDR) APIs
+extern FARPROC g_VDR_LoadDriver;
+extern FARPROC g_VDR_FreeDriver;
+extern FARPROC g_VDR_ReadWriteLUNConfig;
+extern FARPROC g_VDR_GetSystemAddr;
+extern FARPROC g_VDR_GetDeviceInquiry;
+extern FARPROC g_VDR_CheckDeviceSupport;
+extern FARPROC g_VDR_GetLunIndex;
+extern FARPROC g_VDR_GetDeviceID;
+extern FARPROC g_VDR_ReadSysAddr;
+
 // Flash Layer Helper (FLH) APIs
 extern FARPROC g_FLH_GetInfoFromDataBaseByID;
 extern FARPROC g_FLH_GetFlashDataFromDataBase;
