@@ -30,6 +30,10 @@ iTEUFDrs::iTEUFDrs(LPCSTR basePath)
     , m_isInitialized(FALSE)
     , m_lastError(0)
     , m_hSDK(NULL)
+    , m_pVDR_GetDeviceInquiry(nullptr)
+    , m_pVDR_CheckDeviceSupport(nullptr)
+    , m_pVDR_GetLunIndex(nullptr)
+    , m_pVDR_GetDeviceID(nullptr)
 {
     LogMessage("iTEUFDrs: constructor called with basePath: %s", basePath);
     
@@ -99,6 +103,13 @@ BOOL iTEUFDrs::InitializeSDK()
         m_hSDK = NULL;
         return FALSE;
     }
+    
+    // Initialize device management SDK function pointers
+    m_pVDR_GetDeviceInquiry = (PFN_VDR_GetDeviceInquiry)g_VDR_GetDeviceInquiry;
+    m_pVDR_CheckDeviceSupport = (PFN_VDR_CheckDeviceSupport)g_VDR_CheckDeviceSupport;
+    m_pVDR_GetLunIndex = (PFN_VDR_GetLunIndex)g_VDR_GetLunIndex;
+    m_pVDR_GetDeviceID = (PFN_VDR_GetDeviceID)g_VDR_GetDeviceID;
+    
     LogMessage("iTEUFDrs: SDK functions initialized successfully.");
     return TRUE;
 }
