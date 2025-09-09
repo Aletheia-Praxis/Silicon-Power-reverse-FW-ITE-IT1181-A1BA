@@ -335,3 +335,4 @@ $RECYCLE.BIN/
 /*.Rcheck/
 /*.tar.gz
 ghidra_mcp_bridge.log
+.github/*.md
