@@ -7,6 +7,12 @@
 #define MAX_VOLUMES 8
 #define MAX_CONTROLLERS 3
 
+// SDK function pointer types for device management
+typedef int (__stdcall *PFN_VDR_GetDeviceInquiry)(void* buffer, HANDLE handle);
+typedef int (__stdcall *PFN_VDR_CheckDeviceSupport)(void* buffer, HANDLE handle);
+typedef int (__stdcall *PFN_VDR_GetLunIndex)(BYTE* lunIndex, void* buffer, HANDLE handle);
+typedef int (__stdcall *PFN_VDR_GetDeviceID)(BYTE* deviceId, void* buffer, HANDLE handle);
+
 // Controller data structure
 typedef struct _CONTROLLER_DATA {
     BOOL isValid;
@@ -153,6 +159,12 @@ private:
     bool VerifySDKIntegrity();
     bool ValidatePhysicalDevice();
     bool ValidateControllerConfiguration();
+    
+    // SDK function pointers for device management
+    PFN_VDR_GetDeviceInquiry m_pVDR_GetDeviceInquiry;
+    PFN_VDR_CheckDeviceSupport m_pVDR_CheckDeviceSupport;
+    PFN_VDR_GetLunIndex m_pVDR_GetLunIndex;
+    PFN_VDR_GetDeviceID m_pVDR_GetDeviceID;
 };
 
 // Error codes for iTEUFDrs
