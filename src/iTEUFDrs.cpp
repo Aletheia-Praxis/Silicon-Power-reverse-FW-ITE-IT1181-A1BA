@@ -3032,3 +3032,231 @@ BOOL iTEUFDrs::LoadBankData3(BYTE volumeIndex, DWORD deviceId)
     
     return TRUE;
 }
+
+// Device management functions based on Ghidra analysis
+
+UINT iTEUFDrs::OpenDriveHandleAgain(int deviceIndex)
+{
+    void* manager = GetManager();
+    if (!manager) {
+        ErrorHandler::LogError("Failed to get manager instance", ERROR_INVALID_HANDLE);
+        return 0;
+    }
+    
+    // Physical drive paths for drives 1-8 (based on decompiled arrays)
+    const char* physicalDrivePaths[] = {
+        "\\\\.\\PhysicalDrive1", "\\\\.\\PhysicalDrive2", "\\\\.\\PhysicalDrive3", "\\\\.\\PhysicalDrive4",
+        "\\\\.\\PhysicalDrive5", "\\\\.\\PhysicalDrive6", "\\\\.\\PhysicalDrive7", "\\\\.\\PhysicalDrive8"
+    };
+    
+    UINT detectedDevices = 0;
+    void* inquiryBuffer = malloc(0xB0);  // Inquiry data buffer
+    void* dataBuffer = malloc(0xE40);    // Extended data buffer
+    
+    if (!inquiryBuffer || !dataBuffer) {
+        if (inquiryBuffer) free(inquiryBuffer);
+        if (dataBuffer) free(dataBuffer);
+        return 0;
+    }
+    
+    try {
+        for (int driveIndex = 0; driveIndex < 8; driveIndex++) {
+            // Calculate structure offset (0x57 bytes per volume)
+            int structOffset = detectedDevices * 0x57;
+            
+            // Initialize drive index in controller data
+            m_controllerData[detectedDevices].deviceId = driveIndex;
+            m_controllerData[detectedDevices].lunId = 0xFF;
+            m_controllerData[detectedDevices].targetId = 0xFF;
+            
+            // Try to open physical drive
+            if (!OpenPhysicalDrive(driveIndex)) {
+                continue;
+            }
+            
+            HANDLE driveHandle = (HANDLE)(uintptr_t)m_controllerData[detectedDevices].deviceId;
+            
+            // Clear inquiry buffer and get device inquiry data
+            memset(inquiryBuffer, 0, 0xB0);
+            
+            // Call SDK function for inquiry (using function pointer from DAT_004ad520)
+            if (!m_pVDR_GetDeviceInquiry || !m_pVDR_GetDeviceInquiry(inquiryBuffer, driveHandle)) {
+                ErrorHandler::LogError("Cannot get inquiry data for volume", driveIndex);
+                CloseHandle(driveHandle);
+                continue;
+            }
+            
+            // Format and process inquiry string
+            char inquiryString[256] = {0};
+            FormatInquiryString(inquiryString, "%s", (char*)inquiryBuffer + 0x24);
+            
+            ErrorHandler::LogError("Volume inquiry data", driveIndex, inquiryString);
+            
+            // Validate device type - must contain "ITEu"
+            if (!strstr(inquiryString, "ITEu")) {
+                ErrorHandler::LogError("Not an ITE device", driveIndex);
+                CloseHandle(driveHandle);
+                continue;
+            }
+            
+            // Determine controller type and revision
+            WORD productId = 0;
+            BYTE controllerType = 200; // Default unsupported
+            BYTE revision = 0xFF;
+            
+            if (strstr(inquiryString, "1181")) {
+                productId = 0x1181;
+                controllerType = 0;
+                revision = 0xFF;
+                
+                if (strstr(inquiryString, "A0AA")) {
+                    revision = 0;
+                } else if (strstr(inquiryString, "A1BA")) {
+                    controllerType = 1;
+                    revision = 1;
+                }
+            } else if (strstr(inquiryString, "1176")) {
+                productId = 0x1176;
+                controllerType = 2;
+                revision = 0xFF;
+                
+                if (strstr(inquiryString, "A0AA")) {
+                    revision = 0;
+                }
+            }
+            
+            // Skip unsupported devices
+            if (controllerType == 200) {
+                ErrorHandler::LogError("Device type not supported", driveIndex);
+                CloseHandle(driveHandle);
+                continue;
+            }
+            
+            // Store device information in controller data
+            m_controllerData[detectedDevices].productId = productId;
+            m_controllerData[detectedDevices].controllerType = controllerType;
+            m_controllerData[detectedDevices].busId = revision;
+            
+            // Copy inquiry data (vendor, product, revision)
+            memcpy(&m_controllerData[detectedDevices].inquiryData, 
+                   (char*)inquiryBuffer + 0x24, 16);
+            
+            // Get additional device configuration if supported
+            if (m_pVDR_CheckDeviceSupport && m_pVDR_CheckDeviceSupport(dataBuffer, driveHandle)) {
+                m_controllerData[detectedDevices].isReady = TRUE;
+                
+                // Get LUN index
+                BYTE lunIndex = 0xFF;
+                if (m_pVDR_GetLunIndex && m_pVDR_GetLunIndex(&lunIndex, dataBuffer, driveHandle)) {
+                    m_controllerData[detectedDevices].lunId = lunIndex;
+                }
+                
+                // Get device ID
+                BYTE deviceId = 0xFF;
+                if (m_pVDR_GetDeviceID && m_pVDR_GetDeviceID(&deviceId, dataBuffer, driveHandle)) {
+                    m_controllerData[detectedDevices].targetId = deviceId;
+                    if (deviceId != 0xFF) {
+                        // Mark device as available
+                        m_volumeInfo[deviceId].isValid = TRUE;
+                    }
+                }
+            }
+            
+            // Process vendor and product strings
+            for (int i = 0; i < 8; i++) {
+                char ch = *((char*)inquiryBuffer + 8 + i);
+                m_controllerData[detectedDevices].inquiryData[i] = (ch == 0) ? 0x20 : ch;
+            }
+            
+            for (int i = 0; i < 16; i++) {
+                char ch = *((char*)inquiryBuffer + 16 + i);
+                m_controllerData[detectedDevices].inquiryData[8 + i] = (ch == 0) ? 0x20 : ch;
+            }
+            
+            // Close and reopen handle with proper configuration
+            CloseDriveHandle(detectedDevices);
+            
+            // Get drive type
+            UINT driveType = GetDriveTypeA(physicalDrivePaths[driveIndex]);
+            m_volumeInfo[detectedDevices].driveType = driveType;
+            
+            detectedDevices++;
+        }
+    }
+    catch (...) {
+        ErrorHandler::LogError("Exception in OpenDriveHandleAgain", GetLastError());
+    }
+    
+    // Cleanup
+    free(dataBuffer);
+    free(inquiryBuffer);
+    
+    return detectedDevices & 0xFF;
+}
+
+void iTEUFDrs::CloseDriveHandle(int driveIndex)
+{
+    if (driveIndex < 0 || driveIndex >= MAX_VOLUMES) return;
+    
+    // Calculate offset in controller data (0x57 bytes per entry + 0x62a3 offset)
+    HANDLE* pHandle = (HANDLE*)&m_controllerData[driveIndex].deviceId;
+    
+    if (*pHandle && *pHandle != INVALID_HANDLE_VALUE) {
+        CloseHandle(*pHandle);
+        *pHandle = NULL;
+    }
+}
+
+BOOL iTEUFDrs::OpenPhysicalDrive(int driveIndex)
+{
+    if (driveIndex < 0 || driveIndex >= 8) return FALSE;
+    
+    // Physical drive paths array
+    const char* physicalDrivePaths[] = {
+        "\\\\.\\PhysicalDrive1", "\\\\.\\PhysicalDrive2", "\\\\.\\PhysicalDrive3", "\\\\.\\PhysicalDrive4",
+        "\\\\.\\PhysicalDrive5", "\\\\.\\PhysicalDrive6", "\\\\.\\PhysicalDrive7", "\\\\.\\PhysicalDrive8"
+    };
+    
+    // Try to open the physical drive with read/write access
+    HANDLE hDrive = CreateFileA(
+        physicalDrivePaths[driveIndex],
+        GENERIC_READ | GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        NULL,
+        OPEN_EXISTING,
+        0,
+        NULL
+    );
+    
+    if (hDrive == INVALID_HANDLE_VALUE) {
+        DWORD error = GetLastError();
+        ErrorHandler::LogError("Cannot get device handle", driveIndex, error);
+        return FALSE;
+    }
+    
+    // Store handle in controller data structure
+    m_controllerData[driveIndex].deviceId = (DWORD)(uintptr_t)hDrive;
+    
+    return TRUE;
+}
+
+void iTEUFDrs::FormatInquiryString(void* destination, const void* format, const void* source)
+{
+    // Simple string formatting function - wrapper around sprintf
+    if (destination && format && source) {
+        sprintf_s((char*)destination, 256, (const char*)format, (const char*)source);
+    }
+}
+
+void* iTEUFDrs::GetManager()
+{
+    // Returns pointer to global manager data structure (DAT_004ada7c equivalent)
+    static void* s_managerInstance = nullptr;
+    
+    if (!s_managerInstance) {
+        // Initialize manager instance if not already done
+        s_managerInstance = &m_controllerData; // Use our controller data as manager
+    }
+    
+    return s_managerInstance;
+}

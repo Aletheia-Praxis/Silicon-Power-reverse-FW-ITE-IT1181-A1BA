@@ -141,6 +141,18 @@ private:
     BOOL flhReadSpare(BYTE ch, BYTE ce, int rtPtr, void* spare, DWORD spareSize, DWORD ctx);
     BOOL flhBlockErase(DWORD ctx, DWORD handle, int rtPtr);
     void flhCPUReset(int rtPtr, DWORD handle, DWORD ctx);
+    
+    // Device management functions based on Ghidra analysis
+    UINT OpenDriveHandleAgain(int deviceIndex);
+    void CloseDriveHandle(int driveIndex);
+    BOOL OpenPhysicalDrive(int driveIndex);
+    void FormatInquiryString(void* destination, const void* format, const void* source);
+    void* GetManager();
+    
+    // Enhanced validation functions with security controls
+    bool VerifySDKIntegrity();
+    bool ValidatePhysicalDevice();
+    bool ValidateControllerConfiguration();
 };
 
 // Error codes for iTEUFDrs
