@@ -2,6 +2,7 @@
 #include <windows.h>
 #include "SDKAPIs.h"
 #include "DeviceStructures.h"
+#include "CryptoManager.h"
 
 // Maximum number of volumes and controllers
 #define MAX_VOLUMES 8
@@ -199,6 +200,9 @@ private:
     PFN_VDR_CheckDeviceSupport m_pVDR_CheckDeviceSupport;
     PFN_VDR_GetLunIndex m_pVDR_GetLunIndex;
     PFN_VDR_GetDeviceID m_pVDR_GetDeviceID;
+    
+    // Cryptographic manager for hash functions (from Ghidra analysis)
+    CryptoManager m_cryptoManager;
 };
 
 // Error codes for iTEUFDrs
