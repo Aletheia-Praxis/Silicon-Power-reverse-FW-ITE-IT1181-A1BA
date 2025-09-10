@@ -168,3 +168,36 @@ typedef struct _ITE_SDK_FUNCTIONS {
 #define VALIDATE_CONTROLLER_TYPE(type) IS_ITE_DEVICE(type)
 
 #pragma pack(pop)
+
+// Additional structures for enhanced device management workflow
+typedef struct _CONTROLLER_PAIR_INFO {
+    BOOL is_active;                      // Controller is active
+    BOOL is_processed;                   // Controller has been processed
+    BOOL system_ready;                   // System is ready
+    BOOL repair_mode;                    // Repair mode enabled
+    BOOL initialization_complete;        // Initialization completed
+    BOOL bank_c_loaded;                  // Bank C loaded
+    BOOL bcm_loaded;                     // BCM loaded
+
+    BYTE device_count;                   // Number of devices in the group
+    BYTE device_indices[4];              // Indices of devices (maximum 4)
+    CHAR controller_type;                // Controller type
+    HANDLE device_handle[4];             // Device handles
+    DWORD reserved_fields[8];            // Reserved fields
+} CONTROLLER_PAIR_INFO;
+
+// Device information structure for enhanced workflow
+typedef struct _ITE_DEVICE_INFO_ENHANCED {
+    BOOL device_found;                   // Device found
+    BOOL isp_loaded;                     // ISP loaded
+    HANDLE device_handle;                // Device handle
+    CHAR controller_type;                // Controller type
+    CHAR vendor_name[16];                // Vendor name
+    CHAR product_name[32];               // Product name
+    BYTE inquiry_data[0xB0];             // Inquiry data
+    DWORD capacity;                      // Capacity
+} ITE_DEVICE_INFO_ENHANCED;
+
+// Constants for enhanced device management
+#define MAX_DEVICE_COUNT_ENHANCED 24    // Maximum number of devices
+#define MAX_CONTROLLERS 3               // Maximum number of controllers
