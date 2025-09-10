@@ -1,9 +1,19 @@
 cmake_minimum_required(VERSION 3.16)
 project(URescue VERSION 81.2.24.2)
 
+# Set architecture to x86 for compatibility with original binary
+if(CMAKE_GENERATOR_PLATFORM)
+    # This is set automatically when using -A flag
+elseif(CMAKE_GENERATOR MATCHES "Visual Studio")
+    set(CMAKE_GENERATOR_PLATFORM Win32)
+endif()
+
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Enable MFC support
+set(CMAKE_MFC_FLAG 2)  # Use MFC in a Static Library
 
 # Set output directories
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -18,6 +28,7 @@ set(SOURCES
     src/main.cpp
     src/URescueMain.cpp
     src/URescueCore.cpp
+    src/URescueGUI.cpp
     src/SystemManager.cpp
     src/ITEController.cpp
     src/FirmwareManager.cpp
@@ -27,6 +38,13 @@ set(SOURCES
     src/iTEUFDrs.cpp
     src/SDKLoader.cpp
     src/SDKAPIs.cpp
+    src/FlashSDK.cpp
+    src/MemoryManager.cpp
+    src/ResourceManager.cpp
+    src/FileOperations.cpp
+    src/CryptoManager.cpp
+    src/Dialogs.cpp
+    src/Globals.cpp
 )
 
 # Header files
