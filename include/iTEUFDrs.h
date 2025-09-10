@@ -1,5 +1,5 @@
 #pragma once
-#include <windows.h>
+#include "WindowsHeaders.h"
 #include "SDKAPIs.h"
 #include "DeviceStructures.h"
 #include "CryptoManager.h"

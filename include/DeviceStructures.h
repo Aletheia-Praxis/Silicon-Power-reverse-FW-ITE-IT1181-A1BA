@@ -1,5 +1,11 @@
 #pragma once
-#include <windows.h>
+#include "WindowsHeaders.h"
+
+// Maximum device configuration
+#define MAX_BANKS 16
+#define MAX_SEGMENTS 8
+// Forward declarations
+typedef struct _DEVICE_BANK_INFO DEVICE_BANK_INFO, *PDEVICE_BANK_INFO;
 
 // Device volume information structure (based on decompiled code analysis)
 typedef struct _DEVICE_VOLUME_INFO {
