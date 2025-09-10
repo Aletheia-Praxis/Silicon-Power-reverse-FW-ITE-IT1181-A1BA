@@ -100,6 +100,12 @@ private:
     BOOL m_forcedMode;
     DEVICE_VOLUME_INFO m_deviceVolumeInfo[MAX_VOLUMES];
     CONTROLLER_DATA m_controllerData[MAX_CONTROLLERS];
+    
+    // Enhanced device management structures (based on Ghidra MCP analysis)
+    ITE_DEVICE_INFO_ENHANCED device_array[MAX_DEVICE_COUNT_ENHANCED];
+    CONTROLLER_PAIR_INFO controller_pairs[MAX_CONTROLLERS];
+    int device_count;                    // Number of detected devices
+    int controller_count;                // Number of created controllers
 
     // Internal initialization functions
     BOOL InitializeSDK();
@@ -200,6 +206,20 @@ private:
     int CallSDKGetLunIndex(unsigned char* lunIndex, void* buffer, HANDLE deviceHandle);
     int CallSDKGetDeviceID(unsigned char* deviceId, void* buffer, HANDLE deviceHandle);
     void CloseAndReopenDriveHandle(int deviceIndex);
+    
+    // Enhanced Ghidra MCP based functions
+    UINT InitializeParaValue();          // Based on 0x00408370 (180 bytes)
+    UINT VolumePairController();         // Based on 0x00408430 (335 bytes)  
+    UINT DeviceManagementWorkflow();     // Based on 0x0040d022 (1483 bytes)
+    
+    // Supporting workflow functions for new implementation
+    BOOL CheckSystemReadyIO(int device_idx);
+    BOOL InitializeController(int controller_idx);
+    BOOL LoadBankC(int controller_idx);
+    BOOL GetBCMInformation(int controller_idx);
+    BOOL CopyBankData(int controller_idx);
+    BOOL LoadBankData(int controller_idx);
+    BOOL FormatFinalDeviceString(int controller_idx);
     
     // Enhanced validation functions with security controls
     bool VerifySDKIntegrity();
