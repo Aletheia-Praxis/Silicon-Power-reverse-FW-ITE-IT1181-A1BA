@@ -2,6 +2,8 @@
 #include "SDKLoader.h"
 #include "SDKAPIs.h"
 #include "Utilities.h"
+#include "CryptoManager.h"
+#include "ObfuscatedStrings.h"
 #include <stdio.h>
 #include <string.h>
 #include <windows.h>
@@ -380,33 +382,18 @@ BOOL iTEUFDrs::InitializeParaValue()
 
 BOOL iTEUFDrs::CheckDriveExist()
 {
-    LogMessage("CheckDriveExist: checking for available drives");
+    LogMessage("CheckDriveExist: checking for physical drives");
     m_deviceInfo.volumeCount = 0;
-    const char driveLetters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
     // Allocate buffer for inquiry data
     BYTE inquiryBuffer[176]; // 0xB0 bytes
 
-    for (int i = 0; i < 26 && m_deviceInfo.volumeCount < MAX_VOLUMES; ++i) {
-        char letter = driveLetters[i];
-        
-        char drivePath[4];
-        drivePath[0] = letter;
-        drivePath[1] = ':';
-        drivePath[2] = '\\';
-        drivePath[3] = '\0';
+    // Scan PhysicalDrive1-8 (as per Ghidra analysis - original binary behavior)
+    for (int i = 1; i <= 8 && m_deviceInfo.volumeCount < MAX_VOLUMES; ++i) {
+        char physicalPath[32];
+        wsprintfA(physicalPath, "\\\\.\\PhysicalDrive%d", i);
 
-        UINT driveType = GetDriveTypeA(drivePath);
-        if (driveType != DRIVE_REMOVABLE && driveType != DRIVE_FIXED) {
-            continue;
-        }
-
-        char volumePath[8];
-        volumePath[0] = '\\'; volumePath[1] = '\\'; volumePath[2] = '.'; 
-        volumePath[3] = '\\'; volumePath[4] = letter; volumePath[5] = ':'; 
-        volumePath[6] = '\0';
-
-        HANDLE hDevice = CreateFileA(volumePath, GENERIC_READ | GENERIC_WRITE, 
+        HANDLE hDevice = CreateFileA(physicalPath, GENERIC_READ | GENERIC_WRITE, 
                                      FILE_SHARE_READ | FILE_SHARE_WRITE,
                                      NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
@@ -525,12 +512,12 @@ BOOL iTEUFDrs::OpenDriveHandleAgain()
     
     // Scan through physical drives
     for (BYTE driveIndex = 0; driveIndex < 8 && driveIndex < MAX_VOLUMES; driveIndex++) {
-        // Enhanced security: Use more restrictive access rights
-        // Original used 0xc0000000 (GENERIC_READ | GENERIC_WRITE)
-        // We use GENERIC_READ only initially for safety
+        // CRITICAL FIX: Use original access rights as per Ghidra MCP analysis (0x0040beb0)
+        // Original used 0xc0000000 (GENERIC_READ | GENERIC_WRITE) - REQUIRED for ITE devices
+        // ITE SDK functions need write access for device initialization
         HANDLE hDevice = CreateFileA(
             physicalDrivePaths[driveIndex],
-            GENERIC_READ,  // More restrictive than original
+            GENERIC_READ | GENERIC_WRITE,  // Original 0xc0000000 equivalent - FIXED
             FILE_SHARE_READ | FILE_SHARE_WRITE,
             NULL,
             OPEN_EXISTING,
@@ -884,18 +871,13 @@ BOOL iTEUFDrs::DetectPhysicalDrives()
 {
     LOG_INFO("DetectPhysicalDrives: start");
     m_deviceInfo.volumeCount = 0;
-    const char driveLetters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    for (int i = 0; i < 26 && m_deviceInfo.volumeCount < MAX_VOLUMES; ++i) {
-        char letter = driveLetters[i];
-        char path[8];
-        path[0] = '\\'; path[1] = '\\'; path[2] = '.'; path[3] = '\\'; path[4] = letter; path[5] = ':'; path[6] = '\0';
-        UINT dtype;
-        {
-            char typePath[4];
-            typePath[0] = letter; typePath[1] = ':'; typePath[2] = '\\'; typePath[3] = '\0';
-            dtype = GetDriveTypeA(typePath);
-        }
-        HANDLE h = CreateFileA(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+    
+    // Scan PhysicalDrive1-8 (as per Ghidra analysis - original binary behavior)
+    for (int i = 1; i <= 8 && m_deviceInfo.volumeCount < MAX_VOLUMES; ++i) {
+        char physicalPath[32];
+        wsprintfA(physicalPath, "\\\\.\\PhysicalDrive%d", i);
+        
+        HANDLE h = CreateFileA(physicalPath, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
                                NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         if (h == INVALID_HANDLE_VALUE) {
             continue;
@@ -903,9 +885,9 @@ BOOL iTEUFDrs::DetectPhysicalDrives()
         BYTE idx = m_deviceInfo.volumeCount;
         DEVICE_VOLUME_INFO& v = m_deviceInfo.volumes[idx];
         v.volumeIndex = idx;
-        v.volumeLetter = (BYTE)letter;
+        v.volumeLetter = (BYTE)('0' + i); // Store drive number instead of letter
         v.hDevice = h;
-        v.driveType = dtype;
+        v.driveType = DRIVE_FIXED; // Physical drives are fixed
         v.isInitialized = TRUE;
         v.deviceFound = TRUE;
         // Default family until deeper probe
