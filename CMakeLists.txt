@@ -45,6 +45,7 @@ set(SOURCES
     src/CryptoManager.cpp
     src/Dialogs.cpp
     src/Globals.cpp
+    src/CRTFunctions.cpp
 )
 
 # Header files
@@ -65,7 +66,7 @@ set(HEADERS
 # Create executable
 add_executable(URescue ${SOURCES} ${HEADERS})
 
-# Link libraries
+# Link libraries (with MFC support)
 target_link_libraries(URescue
     kernel32
     user32
@@ -79,10 +80,8 @@ target_link_libraries(URescue
     uuid
     odbc32
     odbccp32
-    mfc140u
-    mfcs140u
-    mfcs140ud
-    mfc140ud
+    setupapi
+    winmm
 )
 
 # Set properties
