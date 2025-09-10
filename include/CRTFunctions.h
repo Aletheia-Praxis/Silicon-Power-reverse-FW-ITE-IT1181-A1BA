@@ -3,41 +3,49 @@
 #include <windows.h>
 
 // CRT initialization functions (decompiled from URescue_v81D.2.24.2.exe)
+// Renamed to avoid conflicts with system CRT
 
 // Heap initialization
-int __heap_init(void);
+int URescue_heap_init(void);
 
-// Multithreading initialization  
-int __mtinit(void);
+// Multithreading initialization
+int URescue_mtinit(void);
 
 // Runtime checks initialization
-void __RTC_Initialize(void);
+void URescue_RTC_Initialize(void);
 
 // I/O initialization
-int __ioinit(void);
+int URescue_ioinit(void);
 
 // Argument setup
-int __setargv(void);
+int URescue_setargv(void);
 
 // Environment setup
-int __setenvp(void);
+int URescue_setenvp(void);
 
 // C runtime initialization
-int __cinit(int initterm_e);
+int URescue_cinit(int initterm_e);
 
 // Get command line for Windows
-LPTSTR __wincmdln(void);
+LPTSTR URescue_wincmdln(void);
 
 // Get environment strings
-LPSTR ___crtGetEnvironmentStringsA(void);
+LPSTR URescue_crtGetEnvironmentStringsA(void);
 
 // Exit functions
-void __cexit(void);
-void _exit(int exitcode);
+void URescue_cexit(void);
+void URescue_exit(int exitcode);
 
 // Error exit functions
-void fast_error_exit(int exitcode);
-void __amsg_exit(int rterrnum);
+void URescue_fast_error_exit(int exitcode);
+void URescue_amsg_exit(int rterrnum);
 
 // Security functions
-void ___security_init_cookie(void);
+void URescue_security_init_cookie(void);
+
+// Main CRT startup function (decompiled)
+int URescue_tmainCRTStartup(void);
+
+// Global variables (decompiled)
+extern LPSTR g_szCmdLine;
+extern LPSTR g_pEnvStrs;
