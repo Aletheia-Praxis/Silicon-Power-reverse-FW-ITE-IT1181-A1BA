@@ -190,6 +190,17 @@ private:
     void FormatInquiryString(void* destination, const void* format, const void* source);
     void* GetManager();
     
+    // Helper functions for OpenDriveHandleAgain (based on Ghidra MCP decompilation)
+    char OpenPhysicalDriveByIndex(int deviceIndex);
+    int GetControllerDataBase();
+    int CallSDKInquiry(void* buffer, HANDLE deviceHandle);
+    void FormatInquiryString(uchar** resultStr, int sourceOffset);
+    uchar* FindSubstring(uchar* haystack, const char* needle);
+    char CallSDKDeviceSupport(void* buffer, HANDLE deviceHandle);
+    int CallSDKGetLunIndex(unsigned char* lunIndex, void* buffer, HANDLE deviceHandle);
+    int CallSDKGetDeviceID(unsigned char* deviceId, void* buffer, HANDLE deviceHandle);
+    void CloseAndReopenDriveHandle(int deviceIndex);
+    
     // Enhanced validation functions with security controls
     bool VerifySDKIntegrity();
     bool ValidatePhysicalDevice();
