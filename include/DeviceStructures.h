@@ -4,62 +4,37 @@
 // Maximum device configuration
 #define MAX_BANKS    16
 #define MAX_SEGMENTS 8
+
 // Forward declarations
 typedef struct _DEVICE_BANK_INFO DEVICE_BANK_INFO, *PDEVICE_BANK_INFO;
+typedef struct _MP_INFO MP_INFO, *PMP_INFO;
+typedef struct _LUN_PARAMS LUN_PARAMS, *PLUN_PARAMS;
+typedef struct _LUN_INFO LUN_INFO, *PLUN_INFO;
 
-// Device volume information structure (based on decompiled code analysis)
-typedef struct _DEVICE_VOLUME_INFO {
-    BYTE volumeIndex;      // 0x00: Volume index (0-7)
-    BYTE volumeLetter;     // 0x01: Volume letter (A-Z)
-    BYTE driveType;        // 0x02: Drive type (GetDriveTypeA result)
-    BYTE reserved1;        // 0x03: Reserved
-    DWORD inquiryData1;    // 0x04-0x07: Inquiry data bytes 24-27
-    DWORD inquiryData2;    // 0x08-0x0B: Inquiry data bytes 28-31
-    DWORD inquiryData3;    // 0x0C-0x0F: Inquiry data bytes 32-35
-    DWORD inquiryData4;    // 0x10-0x13: Inquiry data bytes 36-39
-    BYTE lunIndex;         // 0x14: LUN index
-    BYTE deviceId;         // 0x15: Device ID
-    BYTE familyType;       // 0x16: Family type (0=1181, 1=A1BA, 2=1176)
-    BYTE deviceFound;      // 0x17: Device found flag
-    BYTE a1baFlag;         // 0x18: A1BA flag (0=A0AA, 1=A1BA)
-    BYTE reserved2[9];     // 0x19-0x21: Reserved
-    CHAR vendorName[8];    // 0x22-0x29: Vendor name (8 bytes)
-    CHAR productName[16];  // 0x2A-0x39: Product name (16 bytes)
-    BYTE reserved3[8];     // 0x3A-0x41: Reserved
+// MP Information structure
+typedef struct _MP_INFO {
+    BYTE majorVersion;
+    BYTE minorVersion;
+    BYTE vendorInfo[4];
+    BYTE productInfo[12];
+    BOOL isLoaded;
+} MP_INFO, *PMP_INFO;
 
-    // Device handles and state
-    HANDLE hDevice;      // Device handle
-    BOOL isInitialized;  // Initialization flag
-    BOOL deviceFound;    // Device found flag
+// LUN Parameters structure
+typedef struct _LUN_PARAMS {
+    BYTE lunType;
+    BYTE lunFlags;
+    WORD capacityArray[8];
+    DWORD totalCapacity;
+    BOOL isValid;
+} LUN_PARAMS, *PLUN_PARAMS;
 
-    // Bank information
-    DEVICE_BANK_INFO banks[MAX_BANKS];
-    BOOL bcmLoaded;       // BCM loaded flag
-    BYTE bcmInfo[0xE40];  // BCM information buffer
-
-    // Segment information
-    BYTE segmentInfo[128];   // Segment information
-    BOOL fwSegmentNotified;  // FW segment notified flag
-
-    // MP and LUN information
-    MP_INFO mpInfo;
-    LUN_INFO lunInfo[2];
-    LUN_PARAMS lunParams;
-    BYTE lunArray[0x10000];
-    BOOL lunArrayLoaded;
-    DWORD capacity;
-    DWORD realCapacity;
-    BYTE deviceParams[16];
-    BYTE lunConfig[16];
-
-    // Device flags and parameters
-    BYTE controllerType;           // Controller type
-    BYTE ceMask;                   // CE mask
-    BYTE chMask;                   // Channel mask
-    DWORD blockCount;              // Block count
-    BYTE blockMap[8][2][0x10000];  // Block map
-    DWORD deviceFlags;             // Device flags
-} DEVICE_VOLUME_INFO, *PDEVICE_VOLUME_INFO;
+// LUN Information structure
+typedef struct _LUN_INFO {
+    DWORD lunId;
+    BOOL isValid;
+    BOOL isLoaded;
+} LUN_INFO, *PLUN_INFO;
 
 // Version information structure
 typedef struct _VERSION_INFO {
@@ -100,6 +75,59 @@ typedef struct _DEVICE_BANK_INFO {
     BOOL sysAddrValid[20];     // System address validity flags
 } DEVICE_BANK_INFO, *PDEVICE_BANK_INFO;
 
+// Device volume information structure (based on decompiled code analysis)
+typedef struct _DEVICE_VOLUME_INFO {
+    BYTE volumeIndex;      // 0x00: Volume index (0-7)
+    BYTE volumeLetter;     // 0x01: Volume letter (A-Z)
+    BYTE driveType;        // 0x02: Drive type (GetDriveTypeA result)
+    BYTE reserved1;        // 0x03: Reserved
+    DWORD inquiryData1;    // 0x04-0x07: Inquiry data bytes 24-27
+    DWORD inquiryData2;    // 0x08-0x0B: Inquiry data bytes 28-31
+    DWORD inquiryData3;    // 0x0C-0x0F: Inquiry data bytes 32-35
+    DWORD inquiryData4;    // 0x10-0x13: Inquiry data bytes 36-39
+    BYTE lunIndex;         // 0x14: LUN index
+    BYTE deviceId;         // 0x15: Device ID
+    BYTE familyType;       // 0x16: Family type (0=1181, 1=A1BA, 2=1176)
+    BYTE deviceFound;      // 0x17: Device found flag
+    BYTE a1baFlag;         // 0x18: A1BA flag (0=A0AA, 1=A1BA)
+    BYTE reserved2[9];     // 0x19-0x21: Reserved
+    CHAR vendorName[8];    // 0x22-0x29: Vendor name (8 bytes)
+    CHAR productName[16];  // 0x2A-0x39: Product name (16 bytes)
+    BYTE reserved3[8];     // 0x3A-0x41: Reserved
+
+    // Device handles and state
+    HANDLE hDevice;      // Device handle
+    BOOL isInitialized;  // Initialization flag
+
+    // Bank information
+    DEVICE_BANK_INFO banks[MAX_BANKS];
+    BOOL bcmLoaded;       // BCM loaded flag
+    BYTE bcmInfo[0xE40];  // BCM information buffer
+
+    // Segment information
+    BYTE segmentInfo[128];   // Segment information
+    BOOL fwSegmentNotified;  // FW segment notified flag
+
+    // MP and LUN information
+    MP_INFO mpInfo;
+    LUN_INFO lunInfo[2];
+    LUN_PARAMS lunParams;
+    BYTE lunArray[0x10000];
+    BOOL lunArrayLoaded;
+    DWORD capacity;
+    DWORD realCapacity;
+    BYTE deviceParams[16];
+    BYTE lunConfig[16];
+
+    // Device flags and parameters
+    BYTE controllerType;           // Controller type
+    BYTE ceMask;                   // CE mask
+    BYTE chMask;                   // Channel mask
+    DWORD blockCount;              // Block count
+    BYTE blockMap[8][2][0x10000];  // Block map
+    DWORD deviceFlags;             // Device flags
+} DEVICE_VOLUME_INFO, *PDEVICE_VOLUME_INFO;
+
 // Device information structure (based on decompiled code analysis)
 typedef struct _DEVICE_INFO {
     // Device state flags
@@ -134,38 +162,11 @@ typedef struct _DEVICE_INFO {
     HANDLE hDevice;             // Device handle
     BYTE deviceParams[0xFF];    // Device parameters
     BOOL lunArrayLoaded;        // LUN array loaded flag
-    BOOL repairMode;            // Repair mode flag
 
 } DEVICE_INFO, *PDEVICE_INFO;
 
-// MP Information structure
-typedef struct _MP_INFO {
-    BYTE majorVersion;
-    BYTE minorVersion;
-    BYTE vendorInfo[4];
-    BYTE productInfo[12];
-    BOOL isLoaded;
-} MP_INFO, *PMP_INFO;
-
-// LUN Parameters structure
-typedef struct _LUN_PARAMS {
-    BYTE lunType;
-    BYTE lunFlags;
-    WORD capacityArray[8];
-    DWORD totalCapacity;
-    BOOL isValid;
-} LUN_PARAMS, *PLUN_PARAMS;
-
-// LUN Information structure
-typedef struct _LUN_INFO {
-    DWORD lunId;
-    BOOL isValid;
-    BOOL isLoaded;
-} LUN_INFO, *PLUN_INFO;
-
 // Device constants
 #define MAX_VOLUMES         8
-#define MAX_BANKS           24
 #define MAX_CONTROLLERS     3
 #define MAX_LUNS            2
 #define MAX_CAPACITY_ARRAYS 8
