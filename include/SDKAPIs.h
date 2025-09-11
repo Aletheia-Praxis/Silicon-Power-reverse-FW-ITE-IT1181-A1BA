@@ -1,6 +1,5 @@
 #pragma once
-
-#include <windows.h>
+#include "WindowsHeaders.h"
 
 // 181FlashSDK.dll API function pointers (decompiled from FUN_00401000)
 // These correspond to the global DAT_ variables in the decompiled code
