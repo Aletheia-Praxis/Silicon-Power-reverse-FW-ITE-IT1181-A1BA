@@ -22,6 +22,6 @@ LPCSTR GetErrorDescription(DWORD errorCode);
 
 // Error handling constants
 #define ERROR_CRITICAL 0xFFFFFFFF
-#define ERROR_IO 0x00000001
-#define ERROR_MEMORY 0x00000002
+#define ERROR_IO       0x00000001
+#define ERROR_MEMORY   0x00000002
 #define ERROR_FIRMWARE 0x00000003

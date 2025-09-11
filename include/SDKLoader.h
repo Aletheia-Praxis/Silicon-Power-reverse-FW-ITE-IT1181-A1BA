@@ -1,6 +1,7 @@
 #pragma once
 
 #include <windows.h>
+
 #include "FlashSDK.h"
 
 // Load 181FlashSDK.dll from the provided base directory (baseDir + "\\181FlashSDK.dll")

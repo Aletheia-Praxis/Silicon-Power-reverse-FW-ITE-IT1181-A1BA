@@ -25,14 +25,21 @@ LONG OpenRegistryKey(HKEY hKey, LPCSTR lpSubKey, PHKEY phkResult, REGSAM samDesi
 
 LONG CloseRegistryKey(HKEY hKey);
 
-LONG ReadRegistryValue(HKEY hKey, LPCSTR lpValueName, LPDWORD lpType, 
-                       LPBYTE lpData, LPDWORD lpcbData);
+LONG ReadRegistryValue(
+    HKEY hKey,
+    LPCSTR lpValueName,
+    LPDWORD lpType,
+    LPBYTE lpData,
+    LPDWORD lpcbData);
 
-LONG WriteRegistryValue(HKEY hKey, LPCSTR lpValueName, DWORD dwType, 
-                        CONST BYTE* lpData, DWORD cbData);
+LONG WriteRegistryValue(
+    HKEY hKey,
+    LPCSTR lpValueName,
+    DWORD dwType,
+    CONST BYTE* lpData,
+    DWORD cbData);
 
-LONG CreateRegistryKey(HKEY hKey, LPCSTR lpSubKey, PHKEY phkResult, 
-                       LPDWORD lpdwDisposition);
+LONG CreateRegistryKey(HKEY hKey, LPCSTR lpSubKey, PHKEY phkResult, LPDWORD lpdwDisposition);
 
 LONG DeleteRegistryKey(HKEY hKey, LPCSTR lpSubKey);
 
@@ -57,7 +64,7 @@ BOOL GetWindowsDirectoryPath(LPSTR lpBuffer, DWORD nSize);
 BOOL ReadDeviceSelectionFromIni(LPSTR lpOut, DWORD nSize);
 
 // Constants for system operations
-#define URESCUE_REGISTRY_KEY "Software\\URescue"
+#define URESCUE_REGISTRY_KEY    "Software\\URescue"
 #define SETTINGS_REGISTRY_VALUE "Settings"
-#define VERSION_REGISTRY_VALUE "Version"
-#define MAX_PATH_LENGTH 260
+#define VERSION_REGISTRY_VALUE  "Version"
+#define MAX_PATH_LENGTH         260

@@ -1,18 +1,19 @@
 #pragma once
 
 #include <windows.h>
+
 #include <cstdint>
 
 /**
  * @class CryptoManager
  * @brief Cryptographic functions extracted from URescue v81D.2.24.2.exe analysis
- * 
+ *
  * This class implements exact replicas of hash functions and cryptographic utilities
  * found through Ghidra MCP analysis at specific addresses in the original binary.
- * 
+ *
  * Function addresses from Ghidra decompilation:
  * - HashKey_char:    0x0041fe02
- * - HashKey_wchar:   0x0041fe37  
+ * - HashKey_wchar:   0x0041fe37
  * - HashKey_BSTR:    0x00420043
  * - HashKey_VARIANT: 0x0043a5aa
  */
@@ -27,7 +28,7 @@ public:
 
     /**
      * @brief Hash function for wchar_t* strings (from address 0x0041fe37)
-     * @param input Null-terminated wide char string  
+     * @param input Null-terminated wide char string
      * @return 32-bit hash value using multiplicative hash with constant 0x21 (33)
      */
     static uint32_t HashKey_wchar(const wchar_t* input);
@@ -87,7 +88,7 @@ private:
     /**
      * @brief Internal hash calculation for different data types
      * @param data Pointer to data
-     * @param size Size of data in bytes  
+     * @param size Size of data in bytes
      * @return 32-bit hash value
      */
     static uint32_t InternalHashCalculation(const void* data, SIZE_T size);
@@ -105,11 +106,9 @@ private:
 /**
  * @brief Utility macros for secure string hashing
  */
-#define SECURE_HASH_STRING(str) \
-    ((str) ? CryptoManager::HashKey_char(str) : 0)
+#define SECURE_HASH_STRING(str) ((str) ? CryptoManager::HashKey_char(str) : 0)
 
-#define SECURE_HASH_WSTRING(wstr) \
-    ((wstr) ? CryptoManager::HashKey_wchar(wstr) : 0)
+#define SECURE_HASH_WSTRING(wstr) ((wstr) ? CryptoManager::HashKey_wchar(wstr) : 0)
 
 /**
  * @brief Hash algorithm verification structure

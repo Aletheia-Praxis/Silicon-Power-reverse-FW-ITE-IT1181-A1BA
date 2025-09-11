@@ -1,7 +1,8 @@
 #pragma once
 
-#include <windows.h>
 #include <afxwin.h>
+#include <windows.h>
+
 #include <cstdint>
 
 // Logging functions
@@ -27,10 +28,10 @@ BOOL GetTempLongPathA(LPSTR buffer, DWORD size);
 BOOL JoinPathA(LPSTR outBuffer, DWORD size, LPCSTR a, LPCSTR b);
 
 // Logging macros
-#define LOG_INFO(format, ...) LogMessage("[INFO] " format, ##__VA_ARGS__)
+#define LOG_INFO(format, ...)    LogMessage("[INFO] " format, ##__VA_ARGS__)
 #define LOG_WARNING(format, ...) LogMessage("[WARNING] " format, ##__VA_ARGS__)
-#define LOG_ERROR(format, ...) LogMessage("[ERROR] " format, ##__VA_ARGS__)
-#define LOG_DEBUG(format, ...) LogMessage("[DEBUG] " format, ##__VA_ARGS__)
+#define LOG_ERROR(format, ...)   LogMessage("[ERROR] " format, ##__VA_ARGS__)
+#define LOG_DEBUG(format, ...)   LogMessage("[DEBUG] " format, ##__VA_ARGS__)
 
 // Helpers decompiled and re-implemented
 void SafeCloseHandle(HANDLE& handle);

@@ -3,15 +3,28 @@
 #include <windows.h>
 
 // File operations (decompiled from Ghidra)
-HANDLE CreateFileWrapper(LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, 
-                        LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, 
-                        DWORD dwFlagsAndAttributes, HANDLE hTemplateFile);
+HANDLE CreateFileWrapper(
+    LPCSTR lpFileName,
+    DWORD dwDesiredAccess,
+    DWORD dwShareMode,
+    LPSECURITY_ATTRIBUTES lpSecurityAttributes,
+    DWORD dwCreationDisposition,
+    DWORD dwFlagsAndAttributes,
+    HANDLE hTemplateFile);
 
-BOOL ReadFileWrapper(HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToRead, 
-                    LPDWORD lpNumberOfBytesRead, LPOVERLAPPED lpOverlapped);
+BOOL ReadFileWrapper(
+    HANDLE hFile,
+    LPVOID lpBuffer,
+    DWORD nNumberOfBytesToRead,
+    LPDWORD lpNumberOfBytesRead,
+    LPOVERLAPPED lpOverlapped);
 
-BOOL WriteFileWrapper(HANDLE hFile, LPCVOID lpBuffer, DWORD nNumberOfBytesToWrite, 
-                     LPDWORD lpNumberOfBytesWritten, LPOVERLAPPED lpOverlapped);
+BOOL WriteFileWrapper(
+    HANDLE hFile,
+    LPCVOID lpBuffer,
+    DWORD nNumberOfBytesToWrite,
+    LPDWORD lpNumberOfBytesWritten,
+    LPOVERLAPPED lpOverlapped);
 
 BOOL CloseFileWrapper(HANDLE hFile);
 
@@ -36,6 +49,6 @@ BOOL RestoreFromBackup(LPCSTR lpFileName, LPCSTR lpBackupSuffix);
 
 // Constants for file operations
 #define DEFAULT_BACKUP_SUFFIX ".bak"
-#define TEMP_FILE_SUFFIX ".tmp"
-#define MAX_FILE_PATH 260
-#define MAX_FILE_NAME 256
+#define TEMP_FILE_SUFFIX      ".tmp"
+#define MAX_FILE_PATH         260
+#define MAX_FILE_NAME         256

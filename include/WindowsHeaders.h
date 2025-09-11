@@ -2,172 +2,172 @@
 
 // Windows header configuration
 #ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
 #endif
 
 #ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0601  // Windows 7+
+    #define _WIN32_WINNT 0x0601  // Windows 7+
 #endif
 
 #ifndef WINVER
-#define WINVER 0x0601
+    #define WINVER 0x0601
 #endif
 
 // Exclude rarely-used stuff from Windows headers
 #ifndef NOGDICAPMASKS
-#define NOGDICAPMASKS
+    #define NOGDICAPMASKS
 #endif
 
 #ifndef NOVIRTUALKEYCODES
-#define NOVIRTUALKEYCODES
+    #define NOVIRTUALKEYCODES
 #endif
 
 #ifndef NOWINMESSAGES
-#define NOWINMESSAGES
+    #define NOWINMESSAGES
 #endif
 
 #ifndef NOWINSTYLES
-#define NOWINSTYLES
+    #define NOWINSTYLES
 #endif
 
 #ifndef NOSYSMETRICS
-#define NOSYSMETRICS
+    #define NOSYSMETRICS
 #endif
 
 #ifndef NOMENUS
-#define NOMENUS
+    #define NOMENUS
 #endif
 
 #ifndef NOICONS
-#define NOICONS
+    #define NOICONS
 #endif
 
 #ifndef NOKEYSTATES
-#define NOKEYSTATES
+    #define NOKEYSTATES
 #endif
 
 #ifndef NOSYSCOMMANDS
-#define NOSYSCOMMANDS
+    #define NOSYSCOMMANDS
 #endif
 
 #ifndef NORASTEROPS
-#define NORASTEROPS
+    #define NORASTEROPS
 #endif
 
 #ifndef NOSHOWWINDOW
-#define NOSHOWWINDOW
+    #define NOSHOWWINDOW
 #endif
 
 #ifndef OEMRESOURCE
-#define OEMRESOURCE
+    #define OEMRESOURCE
 #endif
 
 #ifndef NOATOM
-#define NOATOM
+    #define NOATOM
 #endif
 
 #ifndef NOCLIPBOARD
-#define NOCLIPBOARD
+    #define NOCLIPBOARD
 #endif
 
 #ifndef NOCOLOR
-#define NOCOLOR
+    #define NOCOLOR
 #endif
 
 #ifndef NOCTLMGR
-#define NOCTLMGR
+    #define NOCTLMGR
 #endif
 
 #ifndef NODRAWTEXT
-#define NODRAWTEXT
+    #define NODRAWTEXT
 #endif
 
 #ifndef NOGDI
-#define NOGDI
+    #define NOGDI
 #endif
 
 #ifndef NOKERNEL
-#define NOKERNEL
+    #define NOKERNEL
 #endif
 
 #ifndef NOUSER
-#define NOUSER
+    #define NOUSER
 #endif
 
 #ifndef NONLS
-#define NONLS
+    #define NONLS
 #endif
 
 #ifndef NOMB
-#define NOMB
+    #define NOMB
 #endif
 
 #ifndef NOMEMMGR
-#define NOMEMMGR
+    #define NOMEMMGR
 #endif
 
 #ifndef NOMETAFILE
-#define NOMETAFILE
+    #define NOMETAFILE
 #endif
 
 #ifndef NOMINMAX
-#define NOMINMAX
+    #define NOMINMAX
 #endif
 
 #ifndef NOMSG
-#define NOMSG
+    #define NOMSG
 #endif
 
 #ifndef NOOPENFILE
-#define NOOPENFILE
+    #define NOOPENFILE
 #endif
 
 #ifndef NOSCROLL
-#define NOSCROLL
+    #define NOSCROLL
 #endif
 
 #ifndef NOSERVICE
-#define NOSERVICE
+    #define NOSERVICE
 #endif
 
 #ifndef NOSOUND
-#define NOSOUND
+    #define NOSOUND
 #endif
 
 #ifndef NOTEXTMETRIC
-#define NOTEXTMETRIC
+    #define NOTEXTMETRIC
 #endif
 
 #ifndef NOWH
-#define NOWH
+    #define NOWH
 #endif
 
 #ifndef NOWINOFFSETS
-#define NOWINOFFSETS
+    #define NOWINOFFSETS
 #endif
 
 #ifndef NOCOMM
-#define NOCOMM
+    #define NOCOMM
 #endif
 
 #ifndef NOKANJI
-#define NOKANJI
+    #define NOKANJI
 #endif
 
 #ifndef NOHELP
-#define NOHELP
+    #define NOHELP
 #endif
 
 #ifndef NOPROFILER
-#define NOPROFILER
+    #define NOPROFILER
 #endif
 
 #ifndef NODEFERWINDOWPOS
-#define NODEFERWINDOWPOS
+    #define NODEFERWINDOWPOS
 #endif
 
 #ifndef NOMCX
-#define NOMCX
+    #define NOMCX
 #endif
 
 // Windows Socket включаем ПЕРВЫМ
@@ -182,33 +182,33 @@
 #include <oleauto.h>
 
 // Additional Windows APIs
-#include <setupapi.h>
 #include <cfgmgr32.h>
-#include <winioctl.h>
 #include <devguid.h>
+#include <setupapi.h>
+#include <winioctl.h>
 
 // Standard C++ includes
-#include <iostream>
-#include <string>
-#include <vector>
-#include <memory>
 #include <algorithm>
 #include <exception>
+#include <iostream>
+#include <memory>
+#include <string>
+#include <vector>
 
 // MFC включаем ПОСЛЕ всех windows headers
 #ifdef _AFXDLL
-#include <afxwin.h>
-#include <afxext.h>
-#include <afxdisp.h>
-#include <afxdtctl.h>
-#ifndef _AFX_NO_AFXCMN_SUPPORT
-#include <afxcmn.h>
-#endif
+    #include <afxdisp.h>
+    #include <afxdtctl.h>
+    #include <afxext.h>
+    #include <afxwin.h>
+    #ifndef _AFX_NO_AFXCMN_SUPPORT
+        #include <afxcmn.h>
+    #endif
 #endif
 
 // USB definitions
-#include <usbioctl.h>
 #include <usb.h>
+#include <usbioctl.h>
 
 // Ensure basic types are defined
 #ifndef BYTE
@@ -228,11 +228,11 @@ typedef int BOOL;
 #endif
 
 #ifndef TRUE
-#define TRUE 1
+    #define TRUE 1
 #endif
 
 #ifndef FALSE
-#define FALSE 0
+    #define FALSE 0
 #endif
 
 #ifndef UINT
@@ -252,10 +252,10 @@ typedef void* HANDLE;
 #endif
 
 #ifndef INVALID_HANDLE_VALUE
-#define INVALID_HANDLE_VALUE ((HANDLE)(LONG_PTR)-1)
+    #define INVALID_HANDLE_VALUE ((HANDLE) (LONG_PTR) - 1)
 #endif
 
 // Array size macro
 #ifndef ARRAYSIZE
-#define ARRAYSIZE(a) (sizeof(a)/sizeof(a[0]))
+    #define ARRAYSIZE(a) (sizeof(a) / sizeof(a[0]))
 #endif

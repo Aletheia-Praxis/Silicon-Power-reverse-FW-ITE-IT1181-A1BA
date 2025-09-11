@@ -30,5 +30,5 @@ BOOL LoadResourceFromFile(LPCSTR fileName, LPVOID* ppBuffer, DWORD* pSize);
 // Constants for resource management
 #define FIRMWARE_RESOURCE_TYPE RT_RCDATA
 #define BOOTCODE_RESOURCE_NAME "BootCode"
-#define SDK_RESOURCE_NAME "FlashSDK"
-#define MAX_RESOURCE_NAME 256
+#define SDK_RESOURCE_NAME      "FlashSDK"
+#define MAX_RESOURCE_NAME      256

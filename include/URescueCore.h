@@ -1,10 +1,11 @@
 #pragma once
 
 #include <windows.h>
-#include "SystemManager.h"
+
+#include "DeviceStructures.h"
 #include "ITEController.h"
 #include "SDKLoader.h"
-#include "DeviceStructures.h"
+#include "SystemManager.h"
 
 // Application states
 typedef enum _URESCUE_STATE {
@@ -36,18 +37,18 @@ typedef struct _URESCUE_CONTEXT {
     BOOL isAdministrator;
     DEVICE_INFO deviceInfo;
     URESCUE_SETTINGS settings;
-    
+
     // Device
     HANDLE hDevice;
-    
+
     // Firmware
     LPVOID pFirmware;
     DWORD firmwareSize;
-    
+
     // BootCode
     LPVOID pBootCode;
     DWORD bootCodeSize;
-    
+
     // SDK
     LPVOID pSDK;
     DWORD sdkSize;
@@ -89,13 +90,13 @@ DWORD GetURescueError();
 BOOL UpdateSettings(PURESCUE_SETTINGS pSettings);
 
 // Application constants
-#define URESCUE_VERSION "81D.2.24.2"
-#define URESCUE_NAME "URescue"
+#define URESCUE_VERSION     "81D.2.24.2"
+#define URESCUE_NAME        "URescue"
 #define URESCUE_DESCRIPTION "ITE IT1181 Firmware Recovery Tool"
-#define URESCUE_AUTHOR "Silicon Power"
-#define URESCUE_COPYRIGHT "Copyright (c) 2024 Silicon Power"
+#define URESCUE_AUTHOR      "Silicon Power"
+#define URESCUE_COPYRIGHT   "Copyright (c) 2024 Silicon Power"
 
 // Default settings constants
-#define DEFAULT_TIMEOUT 5000
+#define DEFAULT_TIMEOUT     5000
 #define DEFAULT_RETRY_COUNT 3
-#define DEFAULT_LOG_FILE "URescue.log"
+#define DEFAULT_LOG_FILE    "URescue.log"

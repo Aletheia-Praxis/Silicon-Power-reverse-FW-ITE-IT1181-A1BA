@@ -9,12 +9,11 @@ int FUN_004845e0(void);
 int AfxWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow);
 
 // Main window of the program
-class CMainFrame : public CFrameWnd
-{
+class CMainFrame : public CFrameWnd {
 public:
     CMainFrame();
     virtual ~CMainFrame();
-    
+
 protected:
     DECLARE_MESSAGE_MAP()
 };

@@ -37,6 +37,6 @@ void ClearFirmwareMemory(LPVOID pFirmware, DWORD firmwareSize);
 
 // Memory constants
 #define FIRMWARE_MEMORY_ALIGNMENT 4096
-#define DEFAULT_MEMORY_ALIGNMENT 16
-#define MAX_MEMORY_SIZE 0x7FFFFFFF
-#define MIN_MEMORY_SIZE 1
+#define DEFAULT_MEMORY_ALIGNMENT  16
+#define MAX_MEMORY_SIZE           0x7FFFFFFF
+#define MIN_MEMORY_SIZE           1
