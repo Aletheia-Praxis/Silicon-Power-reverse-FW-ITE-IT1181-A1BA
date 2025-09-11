@@ -2,6 +2,7 @@
 
 #include <afxcmn.h>
 #include <afxdlgs.h>
+#include <afxext.h>
 #include <afxinet.h>
 #include <afxwin.h>
 
@@ -62,8 +63,8 @@ public:
     CString GetSelectedDevice() const { return m_selectedDevice; }
 
 protected:
-    virtual void DoDataExchange(CDataExchange* pDX);
-    virtual BOOL OnInitDialog();
+    virtual void DoDataExchange(CDataExchange* pDX) override;
+    virtual BOOL OnInitDialog() override;
 
     afx_msg void OnDeviceListSelChange();
     afx_msg void OnRefresh();
@@ -80,8 +81,8 @@ public:
     CAboutDialog(CWnd* pParent = NULL);
 
 protected:
-    virtual void DoDataExchange(CDataExchange* pDX);
-    virtual BOOL OnInitDialog();
+    virtual void DoDataExchange(CDataExchange* pDX) override;
+    virtual BOOL OnInitDialog() override;
 
     DECLARE_MESSAGE_MAP()
 };
