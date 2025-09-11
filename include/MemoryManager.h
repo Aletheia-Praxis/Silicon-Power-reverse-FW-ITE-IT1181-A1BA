@@ -14,15 +14,15 @@ LPVOID AllocateAlignedMemory(DWORD size, DWORD alignment);
 void FreeAlignedMemory(LPVOID pMemory);
 
 // Memory copy and manipulation functions
-LPVOID CopyMemory(LPVOID pDestination, LPCVOID pSource, DWORD size);
+LPVOID SafeCopyMemory(LPVOID pDestination, LPCVOID pSource, DWORD size);
 
-LPVOID MoveMemory(LPVOID pDestination, LPCVOID pSource, DWORD size);
+LPVOID SafeMoveMemory(LPVOID pDestination, LPCVOID pSource, DWORD size);
 
-LPVOID FillMemory(LPVOID pDestination, DWORD size, BYTE value);
+LPVOID SafeFillMemory(LPVOID pDestination, DWORD size, BYTE value);
 
-int CompareMemory(LPCVOID pBuffer1, LPCVOID pBuffer2, DWORD size);
+int SafeCompareMemory(LPCVOID pBuffer1, LPCVOID pBuffer2, DWORD size);
 
-LPVOID FindByteInMemory(LPCVOID pBuffer, DWORD size, BYTE value);
+LPVOID SafeFindByteInMemory(LPCVOID pBuffer, DWORD size, BYTE value);
 
 // Specialized functions for firmware management
 LPVOID AllocateFirmwareMemory(DWORD firmwareSize);
