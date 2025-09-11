@@ -1,75 +1,77 @@
-#include <afxwin.h>
-#include <afxcmn.h>
-#include <afxinet.h>
+#include "WindowsHeaders.h"
 #include "URescueMain.h"
-#include "iTEUFDrs.h"
-#include "Utilities.h"
 #include "SDKLoader.h"
+#include "Utilities.h"
+#include "iTEUFDrs.h"
 
 // Global iTEUFDrs instance
-static iTEUFDrs* g_pURescueApp = nullptr;
+static iTEUFDrs *g_pURescueApp = nullptr;
 
 // Main function of the URescue program
 int RunURescueApplication(void)
 {
     LogMessage("URescue application starting...");
-    
+
     // Get module directory for SDK loading
     CHAR moduleDir[MAX_PATH];
-    if (!GetModuleDirectoryA(moduleDir, sizeof(moduleDir))) {
+    if (!GetModuleDirectoryA(moduleDir, sizeof(moduleDir)))
+    {
         LogError("Failed to get module directory");
         return -1;
     }
 
     HMODULE hSdk = NULL;
-    if (!Load181FlashSDK(moduleDir, &hSdk)) {
+    if (!Load181FlashSDK(moduleDir, &hSdk))
+    {
         LogError("Failed to load 181FlashSDK.dll");
         return -1;
     }
 
-    if (!InitializeFlashSDK(hSdk)) {
+    if (!InitializeFlashSDK(hSdk))
+    {
         LogError("Failed to initialize Flash SDK functions");
         Unload181FlashSDK(hSdk);
         return -1;
     }
-    
+
     // Initialize main URescue object (equivalent to iTEUFDrs constructor call)
     g_pURescueApp = new iTEUFDrs(moduleDir);
-    if (!g_pURescueApp || !g_pURescueApp->IsInitialized()) {
-        LogError("Failed to initialize iTEUFDrs: Error code %d", 
-                 g_pURescueApp ? g_pURescueApp->GetLastError() : 0);
+    if (!g_pURescueApp || !g_pURescueApp->IsInitialized())
+    {
+        LogError("Failed to initialize iTEUFDrs: Error code %d", g_pURescueApp ? g_pURescueApp->GetLastError() : 0);
         delete g_pURescueApp;
         g_pURescueApp = nullptr;
         Unload181FlashSDK(hSdk);
         return -1;
     }
-    
+
     // Initialize MFC application
     CWinApp app;
-    
+
     // Create the main window
-    CMainFrame* pMainFrame = new CMainFrame();
-    if (!pMainFrame) {
+    CMainFrame *pMainFrame = new CMainFrame();
+    if (!pMainFrame)
+    {
         LogError("Failed to create main frame window");
         delete g_pURescueApp;
         g_pURescueApp = nullptr;
         Unload181FlashSDK(hSdk);
         return -1;
     }
-    
+
     // Show the main window
     pMainFrame->ShowWindow(SW_SHOW);
     pMainFrame->UpdateWindow();
-    
+
     LogMessage("URescue application initialized successfully");
-    
+
     // Run the message loop
     int result = app.Run();
-    
+
     // Cleanup
     delete g_pURescueApp;
     g_pURescueApp = nullptr;
-    
+
     Unload181FlashSDK(hSdk);
     LogMessage("URescue application exiting with code %d", result);
     return result;
@@ -79,10 +81,11 @@ int RunURescueApplication(void)
 int AfxWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow)
 {
     // Initialize MFC
-    if (!AfxWinInit(hInstance, hPrevInstance, lpCmdLine, nCmdShow)) {
+    if (!AfxWinInit(hInstance, hPrevInstance, lpCmdLine, nCmdShow))
+    {
         return 0;
     }
-    
+
     // Run the main function
     return RunURescueApplication();
 }
