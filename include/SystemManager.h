@@ -2,17 +2,6 @@
 
 #include <windows.h>
 
-// Device information structure
-typedef struct _DEVICE_INFO {
-    WORD processorArchitecture;
-    DWORD numberOfProcessors;
-    DWORD pageSize;
-    DWORD majorVersion;
-    DWORD minorVersion;
-    DWORD buildNumber;
-    CHAR platformId[256];
-} DEVICE_INFO, *PDEVICE_INFO;
-
 // System functions (decompiled from Ghidra)
 BOOL GetSystemVersion(OSVERSIONINFOA* pVersionInfo);
 
