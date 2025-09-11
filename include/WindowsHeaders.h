@@ -1,10 +1,6 @@
 #pragma once
 
-// Windows header configuration
-#ifndef WIN32_LEAN_AND_MEAN
-    #define WIN32_LEAN_AND_MEAN
-#endif
-
+// Define _WIN32_WINNT before any includes
 #ifndef _WIN32_WINNT
     #define _WIN32_WINNT 0x0601  // Windows 7+
 #endif
@@ -13,179 +9,36 @@
     #define WINVER 0x0601
 #endif
 
-// Exclude rarely-used stuff from Windows headers
-#ifndef NOGDICAPMASKS
-    #define NOGDICAPMASKS
-#endif
-
-#ifndef NOVIRTUALKEYCODES
-    #define NOVIRTUALKEYCODES
-#endif
-
-#ifndef NOWINMESSAGES
-    #define NOWINMESSAGES
-#endif
-
-#ifndef NOWINSTYLES
-    #define NOWINSTYLES
-#endif
-
-#ifndef NOSYSMETRICS
-    #define NOSYSMETRICS
-#endif
-
-#ifndef NOMENUS
-    #define NOMENUS
-#endif
-
-#ifndef NOICONS
-    #define NOICONS
-#endif
-
-#ifndef NOKEYSTATES
-    #define NOKEYSTATES
-#endif
-
-#ifndef NOSYSCOMMANDS
-    #define NOSYSCOMMANDS
-#endif
-
-#ifndef NORASTEROPS
-    #define NORASTEROPS
-#endif
-
-#ifndef NOSHOWWINDOW
-    #define NOSHOWWINDOW
-#endif
-
-#ifndef OEMRESOURCE
-    #define OEMRESOURCE
-#endif
-
-#ifndef NOATOM
-    #define NOATOM
-#endif
-
-#ifndef NOCLIPBOARD
-    #define NOCLIPBOARD
-#endif
-
-#ifndef NOCOLOR
-    #define NOCOLOR
-#endif
-
-#ifndef NOCTLMGR
-    #define NOCTLMGR
-#endif
-
-#ifndef NODRAWTEXT
-    #define NODRAWTEXT
-#endif
-
-#ifndef NOGDI
-    #define NOGDI
-#endif
-
-#ifndef NOKERNEL
-    #define NOKERNEL
-#endif
-
-#ifndef NOUSER
-    #define NOUSER
-#endif
-
-#ifndef NONLS
-    #define NONLS
-#endif
-
-#ifndef NOMB
-    #define NOMB
-#endif
-
-#ifndef NOMEMMGR
-    #define NOMEMMGR
-#endif
-
-#ifndef NOMETAFILE
-    #define NOMETAFILE
+// Lean and mean to reduce conflicts
+#ifndef WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
 #endif
 
 #ifndef NOMINMAX
     #define NOMINMAX
 #endif
 
-#ifndef NOMSG
-    #define NOMSG
-#endif
-
-#ifndef NOOPENFILE
-    #define NOOPENFILE
-#endif
-
-#ifndef NOSCROLL
-    #define NOSCROLL
-#endif
-
-#ifndef NOSERVICE
-    #define NOSERVICE
-#endif
-
-#ifndef NOSOUND
-    #define NOSOUND
-#endif
-
-#ifndef NOTEXTMETRIC
-    #define NOTEXTMETRIC
-#endif
-
-#ifndef NOWH
-    #define NOWH
-#endif
-
-#ifndef NOWINOFFSETS
-    #define NOWINOFFSETS
-#endif
-
-#ifndef NOCOMM
-    #define NOCOMM
-#endif
-
-#ifndef NOKANJI
-    #define NOKANJI
-#endif
-
-#ifndef NOHELP
-    #define NOHELP
-#endif
-
-#ifndef NOPROFILER
-    #define NOPROFILER
-#endif
-
-#ifndef NODEFERWINDOWPOS
-    #define NODEFERWINDOWPOS
-#endif
-
-#ifndef NOMCX
-    #define NOMCX
-#endif
-
-// Windows Socket включаем ПЕРВЫМ
+// Include winsock2 first to prevent redefinition errors
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
-// Затем windows.h
-#include <windows.h>
-
-// COM interfaces
-#include <objbase.h>
-#include <oleauto.h>
+// Now include MFC headers
+#include <afxdisp.h>
+#include <afxext.h>
+#include <afxwin.h>
 
 // Additional Windows APIs
 #include <cfgmgr32.h>
 #include <devguid.h>
 #include <setupapi.h>
 #include <winioctl.h>
+
+// COM interfaces
+#include <objbase.h>
+#include <oleauto.h>
+
+// USB and device I/O
+#include <usbioctl.h>
 
 // Standard C++ includes
 #include <algorithm>
@@ -194,21 +47,6 @@
 #include <memory>
 #include <string>
 #include <vector>
-
-// MFC включаем ПОСЛЕ всех windows headers
-#ifdef _AFXDLL
-    #include <afxdisp.h>
-    #include <afxdtctl.h>
-    #include <afxext.h>
-    #include <afxwin.h>
-    #ifndef _AFX_NO_AFXCMN_SUPPORT
-        #include <afxcmn.h>
-    #endif
-#endif
-
-// USB definitions
-#include <usb.h>
-#include <usbioctl.h>
 
 // Ensure basic types are defined
 #ifndef BYTE
