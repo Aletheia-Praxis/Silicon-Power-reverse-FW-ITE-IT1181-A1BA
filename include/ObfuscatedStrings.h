@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstring>
+
 /**
  * @file ObfuscatedStrings.h
  * @brief String constants extracted from URescue v81D.2.24.2.exe binary analysis
