@@ -1,6 +1,16 @@
 #pragma once
 
+// Prevent conflicts and ensure minimal includes
+#ifndef WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+    #define NOMINMAX
+#endif
+
 #include <windows.h>
+
+#include "DeviceStructures.h"
 
 // System functions (decompiled from Ghidra)
 BOOL GetSystemVersion(OSVERSIONINFOA* pVersionInfo);
