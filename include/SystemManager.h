@@ -16,7 +16,7 @@ typedef struct _DEVICE_INFO {
 // System functions (decompiled from Ghidra)
 BOOL GetSystemVersion(OSVERSIONINFOA* pVersionInfo);
 
-BOOL GetSystemInfo(SYSTEM_INFO* pSystemInfo);
+BOOL GetSystemInfoWrapper(SYSTEM_INFO* pSystemInfo);
 
 int GetSystemMetricsWrapper(int nIndex);
 
