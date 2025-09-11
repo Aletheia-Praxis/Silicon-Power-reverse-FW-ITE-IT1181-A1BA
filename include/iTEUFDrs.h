@@ -5,8 +5,9 @@
 #include "WindowsHeaders.h"
 
 // Maximum number of volumes and controllers
-#define MAX_VOLUMES     8
-#define MAX_CONTROLLERS 3
+#define MAX_VOLUMES               8
+#define MAX_CONTROLLERS           3
+#define MAX_DEVICE_COUNT_ENHANCED 256
 
 // SDK function pointer types for device management
 typedef int(__stdcall* PFN_VDR_GetDeviceInquiry)(void* buffer, HANDLE handle);
@@ -35,6 +36,17 @@ typedef struct _CONTROLLER_DATA {
     BOOL bcmAvailable;
     BOOL bankDataLoaded;
 } CONTROLLER_DATA, *PCONTROLLER_DATA;
+
+// Enhanced device info from Ghidra
+typedef struct _ITE_DEVICE_INFO_ENHANCED {
+    // Placeholder for the enhanced device info structure
+    BYTE data[0x100];  // Example size
+} ITE_DEVICE_INFO_ENHANCED;
+
+typedef struct _CONTROLLER_PAIR_INFO {
+    // Placeholder for controller pair info
+    BYTE data[0x100];  // Example size
+} CONTROLLER_PAIR_INFO;
 
 // iTEUFDrs class (represents the main application logic)
 class iTEUFDrs {
@@ -130,7 +142,6 @@ private:
     void VolumePairController();
 
     // Controller processing functions
-    BYTE GetControllerCount() const { return m_controllerCount; }
     BYTE GetVolumeIndexForController(BYTE controllerIndex) const;
     DWORD GetDeviceIdForController(BYTE controllerIndex) const;
 
@@ -186,10 +197,6 @@ private:
     BOOL CheckNeedLoadBank(BYTE volumeIndex, DWORD deviceId);
     void UpdateDeviceParameters(DWORD deviceId);
     void UpdateDeviceStatus(DWORD deviceId, BYTE volumeLetter);
-    BOOL LoadBankData(BYTE volumeIndex, DWORD deviceId);
-    BOOL LoadBankData2(BYTE volumeIndex, DWORD deviceId);
-    BOOL LoadBankData3(BYTE volumeIndex, DWORD deviceId);
-    BOOL GetBinFileVersion(BYTE volumeIndex, DWORD deviceId);
 
     // Helpers mirrored from FUN_00408710 and FUN_004087b0
     void UpdateFlagsAfterFlashParse(BYTE volumeIndex);
@@ -221,29 +228,23 @@ private:
     char OpenPhysicalDriveByIndex(int deviceIndex);
     int GetControllerDataBase();
     int CallSDKInquiry(void* buffer, HANDLE deviceHandle);
-    void FormatInquiryString(uchar** resultStr, int sourceOffset);
-    uchar* FindSubstring(uchar* haystack, const char* needle);
+    void FormatInquiryString(unsigned char** resultStr, int sourceOffset);
+    unsigned char* FindSubstring(unsigned char* haystack, const char* needle);
     char CallSDKDeviceSupport(void* buffer, HANDLE deviceHandle);
     int CallSDKGetLunIndex(unsigned char* lunIndex, void* buffer, HANDLE deviceHandle);
     int CallSDKGetDeviceID(unsigned char* deviceId, void* buffer, HANDLE deviceHandle);
     void CloseAndReopenDriveHandle(int deviceIndex);
 
     // Enhanced Ghidra MCP based functions
-    UINT InitializeParaValue();       // Based on 0x00408370 (180 bytes)
-    UINT VolumePairController();      // Based on 0x00408430 (335 bytes)
     UINT DeviceManagementWorkflow();  // Based on 0x0040d022 (1483 bytes)
 
     // Supporting workflow functions for new implementation
     BOOL CheckSystemReadyIO(int device_idx);
     BOOL InitializeController(int controller_idx);
-    BOOL LoadBankC(int controller_idx);
-    BOOL GetBCMInformation(int controller_idx);
     BOOL CopyBankData(int controller_idx);
-    BOOL LoadBankData(int controller_idx);
     BOOL FormatFinalDeviceString(int controller_idx);
 
     // Enhanced validation functions with security controls
-    bool VerifySDKIntegrity();
     bool ValidatePhysicalDevice();
     bool ValidateControllerConfiguration();
 
