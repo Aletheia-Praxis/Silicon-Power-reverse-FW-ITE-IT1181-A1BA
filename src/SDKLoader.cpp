@@ -1,16 +1,19 @@
-#include <windows.h>
-#include <stdio.h>
 #include "SDKLoader.h"
-#include "Utilities.h"
-#include "FlashSDK.h"
 
-BOOL Load181FlashSDK(LPCSTR baseDir, HMODULE* outModule)
-{
-    if (!baseDir || !outModule) return FALSE;
-    CHAR path[MAX_PATH] = {0};
-    if (!JoinPathA(path, sizeof(path), baseDir, "181FlashSDK.dll")) return FALSE;
+#include <stdio.h>
+#include <windows.h>
+
+#include "FlashSDK.h"
+#include "Utilities.h"
+
+BOOL Load181FlashSDK(LPCSTR baseDir, HMODULE* outModule) {
+    if(! baseDir || ! outModule)
+        return FALSE;
+    CHAR path[MAX_PATH] = { 0 };
+    if(! JoinPathA(path, sizeof(path), baseDir, "181FlashSDK.dll"))
+        return FALSE;
     HMODULE h = LoadLibraryA(path);
-    if (!h) {
+    if(! h) {
         LogMessage("Failed to load 181FlashSDK.dll from: %s", path);
         return FALSE;
     }
@@ -19,16 +22,16 @@ BOOL Load181FlashSDK(LPCSTR baseDir, HMODULE* outModule)
     return TRUE;
 }
 
-BOOL InitializeFlashSDK(HMODULE hModule)
-{
-    if (!hModule) return FALSE;
+BOOL InitializeFlashSDK(HMODULE hModule) {
+    if(! hModule)
+        return FALSE;
 
-    #define LOAD_PROC(name) \
-        name = (name##_t)GetProcAddress(hModule, #name); \
-        if (!name) { \
-            LogMessage("Failed to load function: %s", #name); \
-            return FALSE; \
-        }
+#define LOAD_PROC(name)                                   \
+    name = (name##_t) GetProcAddress(hModule, #name);     \
+    if(! name) {                                          \
+        LogMessage("Failed to load function: %s", #name); \
+        return FALSE;                                     \
+    }
 
     LOAD_PROC(FLH_GetInfoFromDataBaseByID);
     LOAD_PROC(FLH_GetFlashDataFromDataBase);
@@ -50,7 +53,7 @@ BOOL InitializeFlashSDK(HMODULE hModule)
     LOAD_PROC(FLH_MarkBad);
     LOAD_PROC(FLH_GetRealBlocksPerDie);
     LOAD_PROC(FLH_BlockIsGap);
-    
+
     // VDR (Virtual Device Recognition) functions
     g_VDR_LoadDriver = GetProcAddress(hModule, "VDR_LoadDriver");
     g_VDR_FreeDriver = GetProcAddress(hModule, "VDR_FreeDriver");
@@ -61,7 +64,7 @@ BOOL InitializeFlashSDK(HMODULE hModule)
     g_VDR_GetLunIndex = GetProcAddress(hModule, "VDR_GetLunIndex");
     g_VDR_GetDeviceID = GetProcAddress(hModule, "VDR_GetDeviceID");
     g_VDR_ReadSysAddr = GetProcAddress(hModule, "VDR_ReadSysAddr");
-    
+
     LOAD_PROC(SEC_DoAuthentication);
     LOAD_PROC(SEC_LeaveAuthenticatedState);
     LOAD_PROC(SEC_GetPasswordHint);
@@ -155,15 +158,14 @@ BOOL InitializeFlashSDK(HMODULE hModule)
     LOAD_PROC(ADDR_ReadCISData);
     LOAD_PROC(FLH_InitCodeForReady);
 
-    #undef LOAD_PROC
+#undef LOAD_PROC
 
     LogMessage("All Flash SDK functions initialized successfully.");
     return TRUE;
 }
 
-void Unload181FlashSDK(HMODULE hModule)
-{
-    if (hModule) {
+void Unload181FlashSDK(HMODULE hModule) {
+    if(hModule) {
         FreeLibrary(hModule);
         LogMessage("Unloaded 181FlashSDK.dll");
     }

@@ -1,10 +1,16 @@
-#include <windows.h>
 #include <setupapi.h>
+#include <windows.h>
 #include <winusb.h>
 
 // Global GUIDs for USB devices
-const GUID GUID_DEVCLASS_USB = { 0x36fc9e60, 0xc465, 0x11cf, { 0x80, 0x56, 0x44, 0x45, 0x53, 0x54, 0x00, 0x00 } };
-const GUID GUID_DEVINTERFACE_USB_DEVICE = { 0xa5dcbfa1, 0x6530, 0x11d2, { 0x90, 0x1f, 0x00, 0xc0, 0x4f, 0xb9, 0x51, 0xed } };
+const GUID GUID_DEVCLASS_USB = { 0x36fc9e60,
+                                 0xc465,
+                                 0x11cf,
+                                 { 0x80, 0x56, 0x44, 0x45, 0x53, 0x54, 0x00, 0x00 } };
+const GUID GUID_DEVINTERFACE_USB_DEVICE = { 0xa5dcbfa1,
+                                            0x6530,
+                                            0x11d2,
+                                            { 0x90, 0x1f, 0x00, 0xc0, 0x4f, 0xb9, 0x51, 0xed } };
 
 // Constants for ITE controller
 const BYTE ITE_COMMAND_PREFIX[] = { 0x55, 0xAA };
@@ -28,14 +34,14 @@ const BYTE ITE_STATE_BUSY = 0x01;
 const BYTE ITE_STATE_ERROR = 0xFF;
 
 // Operation timeouts
-const DWORD ITE_TIMEOUT_INIT = 100;      // ms
-const DWORD ITE_TIMEOUT_COMMAND = 100;   // ms
-const DWORD ITE_TIMEOUT_RESET = 1000;    // ms
-const DWORD ITE_TIMEOUT_FLASH = 5000;    // ms
+const DWORD ITE_TIMEOUT_INIT = 100;     // ms
+const DWORD ITE_TIMEOUT_COMMAND = 100;  // ms
+const DWORD ITE_TIMEOUT_RESET = 1000;   // ms
+const DWORD ITE_TIMEOUT_FLASH = 5000;   // ms
 
 // Buffer sizes
 const DWORD ITE_BUFFER_SIZE = 4096;
-const DWORD ITE_MAX_FIRMWARE_SIZE = 16 * 1024 * 1024; // 16 MB
+const DWORD ITE_MAX_FIRMWARE_SIZE = 16 * 1024 * 1024;  // 16 MB
 const DWORD ITE_HEADER_SIZE = 512;
 
 // Signatures and identifiers

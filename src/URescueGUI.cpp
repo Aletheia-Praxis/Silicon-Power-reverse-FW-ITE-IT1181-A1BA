@@ -1,11 +1,11 @@
-#include "WindowsHeaders.h"
 #include "URescueGUI.h"
+
 #include "FirmwareManager.h"
 #include "ITEController.h"
+#include "WindowsHeaders.h"
 
 // Main window constructor
-CMainFrame::CMainFrame()
-{
+CMainFrame::CMainFrame() {
     // Creating main window
     Create(NULL, _T("URescue v81D.2.24.2 - ITE IT1181 Firmware Recovery Tool"));
 
@@ -17,14 +17,12 @@ CMainFrame::CMainFrame()
 }
 
 // Main window destructor
-CMainFrame::~CMainFrame()
-{
+CMainFrame::~CMainFrame() {
     // Resource cleanup
 }
 
 // Creating interface elements
-void CMainFrame::CreateControls()
-{
+void CMainFrame::CreateControls() {
     // Creating toolbar
     m_toolBar.Create(this);
     m_toolBar.LoadToolBar(IDR_MAINFRAME);
@@ -51,9 +49,8 @@ ON_COMMAND(ID_HELP_ABOUT, OnHelpAbout)
 END_MESSAGE_MAP()
 
 // Window creation handler
-int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
-{
-    if (CFrameWnd::OnCreate(lpCreateStruct) == -1)
+int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct) {
+    if(CFrameWnd::OnCreate(lpCreateStruct) == -1)
         return -1;
 
     // Interface initialization
@@ -61,61 +58,49 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 }
 
 // Window resize handler
-void CMainFrame::OnSize(UINT nType, int cx, int cy)
-{
+void CMainFrame::OnSize(UINT nType, int cx, int cy) {
     CFrameWnd::OnSize(nType, cx, cy);
 
     // Redrawing the interface
-    if (m_mainDialog.GetSafeHwnd())
-    {
+    if(m_mainDialog.GetSafeHwnd()) {
         m_mainDialog.MoveWindow(0, 0, cx, cy);
     }
 }
 
 // Device connection handler
-void CMainFrame::OnDeviceConnect()
-{
+void CMainFrame::OnDeviceConnect() {
     // Displaying device selection dialog
     CDeviceSelectDialog dlg;
-    if (dlg.DoModal() == IDOK)
-    {
+    if(dlg.DoModal() == IDOK) {
         // Connecting to selected device
         HANDLE hDevice = InitializeUSBDevice(dlg.GetSelectedDevice());
-        if (hDevice)
-        {
+        if(hDevice) {
             // Controller initialization
-            if (InitializeITEController(hDevice))
-            {
+            if(InitializeITEController(hDevice)) {
                 m_hDevice = hDevice;
                 m_statusBar.SetPaneText(0, _T("Device Connected"));
 
                 // Getting controller information
                 ITE_CONTROLLER_INFO info;
-                if (GetControllerInfo(hDevice, &info))
-                {
+                if(GetControllerInfo(hDevice, &info)) {
                     CString strInfo;
                     strInfo.Format(_T("Controller: %s, Version: %s"), info.model, info.version);
                     m_statusBar.SetPaneText(1, strInfo);
                 }
-            }
-            else
-            {
+            } else {
                 CloseUSBDevice(hDevice);
-                MessageBox(_T("Failed to initialize controller"), _T("Error"), MB_OK | MB_ICONERROR);
+                MessageBox(
+                    _T("Failed to initialize controller"), _T("Error"), MB_OK | MB_ICONERROR);
             }
-        }
-        else
-        {
+        } else {
             MessageBox(_T("Failed to connect to device"), _T("Error"), MB_OK | MB_ICONERROR);
         }
     }
 }
 
 // Device disconnection handler
-void CMainFrame::OnDeviceDisconnect()
-{
-    if (m_hDevice && m_hDevice != INVALID_HANDLE_VALUE)
-    {
+void CMainFrame::OnDeviceDisconnect() {
+    if(m_hDevice && m_hDevice != INVALID_HANDLE_VALUE) {
         CloseUSBDevice(m_hDevice);
         m_hDevice = INVALID_HANDLE_VALUE;
         m_statusBar.SetPaneText(0, _T("Device Disconnected"));
@@ -124,65 +109,57 @@ void CMainFrame::OnDeviceDisconnect()
 }
 
 // Firmware loading handler
-void CMainFrame::OnFirmwareLoad()
-{
+void CMainFrame::OnFirmwareLoad() {
     // Displaying firmware file selection dialog
-    CFileDialog dlg(TRUE, _T("bin"), _T("*.bin"), OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT,
-                    _T("Firmware Files (*.bin)|*.bin||"));
+    CFileDialog dlg(
+        TRUE,
+        _T("bin"),
+        _T("*.bin"),
+        OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT,
+        _T("Firmware Files (*.bin)|*.bin||"));
 
-    if (dlg.DoModal() == IDOK)
-    {
+    if(dlg.DoModal() == IDOK) {
         CString firmwarePath = dlg.GetPathName();
 
         // Loading firmware
         LPVOID pFirmware;
         DWORD firmwareSize;
 
-        if (LoadFirmware(firmwarePath, &pFirmware, &firmwareSize))
-        {
+        if(LoadFirmware(firmwarePath, &pFirmware, &firmwareSize)) {
             m_pFirmware = pFirmware;
             m_firmwareSize = firmwareSize;
 
             CString strInfo;
             strInfo.Format(_T("Firmware loaded: %d bytes"), firmwareSize);
             m_statusBar.SetPaneText(2, strInfo);
-        }
-        else
-        {
+        } else {
             MessageBox(_T("Failed to load firmware"), _T("Error"), MB_OK | MB_ICONERROR);
         }
     }
 }
 
 // Firmware writing handler
-void CMainFrame::OnFirmwareWrite()
-{
-    if (!m_hDevice || m_hDevice == INVALID_HANDLE_VALUE)
-    {
+void CMainFrame::OnFirmwareWrite() {
+    if(! m_hDevice || m_hDevice == INVALID_HANDLE_VALUE) {
         MessageBox(_T("No device connected"), _T("Error"), MB_OK | MB_ICONERROR);
         return;
     }
 
-    if (!m_pFirmware || m_firmwareSize == 0)
-    {
+    if(! m_pFirmware || m_firmwareSize == 0) {
         MessageBox(_T("No firmware loaded"), _T("Error"), MB_OK | MB_ICONERROR);
         return;
     }
 
     // Setting write mode
-    if (!SetControllerMode(m_hDevice, ITE_MODE_FLASH))
-    {
+    if(! SetControllerMode(m_hDevice, ITE_MODE_FLASH)) {
         MessageBox(_T("Failed to set flash mode"), _T("Error"), MB_OK | MB_ICONERROR);
         return;
     }
 
     // Writing firmware
-    if (WriteFirmware(m_hDevice, m_pFirmware, m_firmwareSize))
-    {
+    if(WriteFirmware(m_hDevice, m_pFirmware, m_firmwareSize)) {
         m_statusBar.SetPaneText(2, _T("Firmware written successfully"));
-    }
-    else
-    {
+    } else {
         MessageBox(_T("Failed to write firmware"), _T("Error"), MB_OK | MB_ICONERROR);
     }
 
@@ -191,34 +168,27 @@ void CMainFrame::OnFirmwareWrite()
 }
 
 // Firmware verification handler
-void CMainFrame::OnFirmwareVerify()
-{
-    if (!m_hDevice || m_hDevice == INVALID_HANDLE_VALUE)
-    {
+void CMainFrame::OnFirmwareVerify() {
+    if(! m_hDevice || m_hDevice == INVALID_HANDLE_VALUE) {
         MessageBox(_T("No device connected"), _T("Error"), MB_OK | MB_ICONERROR);
         return;
     }
 
-    if (!m_pFirmware || m_firmwareSize == 0)
-    {
+    if(! m_pFirmware || m_firmwareSize == 0) {
         MessageBox(_T("No firmware loaded"), _T("Error"), MB_OK | MB_ICONERROR);
         return;
     }
 
     // Verifying firmware
-    if (VerifyFirmware(m_hDevice, m_pFirmware, m_firmwareSize))
-    {
+    if(VerifyFirmware(m_hDevice, m_pFirmware, m_firmwareSize)) {
         m_statusBar.SetPaneText(2, _T("Firmware verification successful"));
-    }
-    else
-    {
+    } else {
         m_statusBar.SetPaneText(2, _T("Firmware verification failed"));
     }
 }
 
 // Help handler
-void CMainFrame::OnHelpAbout()
-{
+void CMainFrame::OnHelpAbout() {
     CAboutDialog dlg;
     dlg.DoModal();
 }

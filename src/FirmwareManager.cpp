@@ -1,160 +1,176 @@
-#include <windows.h>
+#include "FirmwareManager.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "FirmwareManager.h"
+#include <windows.h>
+
 #include "USBDevice.h"
 #include "Utilities.h"
 
 // Firmware loading function
-BOOL LoadFirmware(LPCSTR firmwarePath, LPVOID* ppBuffer, DWORD* pSize)
-{
+BOOL LoadFirmware(LPCSTR firmwarePath, LPVOID* ppBuffer, DWORD* pSize) {
     // Opening the firmware file
-    HANDLE hFile = CreateFileA(firmwarePath,
-                              GENERIC_READ,
-                              FILE_SHARE_READ,
-                              NULL,
-                              OPEN_EXISTING,
-                              FILE_ATTRIBUTE_NORMAL,
-                              NULL);
-    
-    if (hFile == INVALID_HANDLE_VALUE) {
+    HANDLE hFile = CreateFileA(
+        firmwarePath,
+        GENERIC_READ,
+        FILE_SHARE_READ,
+        NULL,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL);
+
+    if(hFile == INVALID_HANDLE_VALUE) {
         return FALSE;
     }
-    
+
     // Getting the file size
     DWORD fileSize = GetFileSize(hFile, NULL);
-    if (fileSize == INVALID_FILE_SIZE) {
+    if(fileSize == INVALID_FILE_SIZE) {
         CloseHandle(hFile);
         return FALSE;
     }
-    
+
     // Allocating memory for the firmware
     LPVOID pBuffer = malloc(fileSize);
-    if (!pBuffer) {
+    if(! pBuffer) {
         CloseHandle(hFile);
         return FALSE;
     }
-    
+
     // Reading the firmware file
     DWORD bytesRead;
     BOOL result = ReadFile(hFile, pBuffer, fileSize, &bytesRead, NULL);
-    
+
     CloseHandle(hFile);
-    
-    if (!result || bytesRead != fileSize) {
+
+    if(! result || bytesRead != fileSize) {
         free(pBuffer);
         return FALSE;
     }
-    
+
     *ppBuffer = pBuffer;
     *pSize = fileSize;
     return TRUE;
 }
 
 // Build SetDBPath / GetBinFilePath equivalents
-BOOL BuildDatabasePathsA(LPCSTR baseDir, LPSTR outFlashFdb, DWORD outFlashFdbSize,
-                         LPSTR outCtrlCdb, DWORD outCtrlCdbSize)
-{
-    if (!baseDir || !outFlashFdb || !outCtrlCdb) return FALSE;
-    if (!JoinPathA(outFlashFdb, outFlashFdbSize, baseDir, "Bin\\FlashSSD_D.fdb")) return FALSE;
-    if (!JoinPathA(outCtrlCdb, outCtrlCdbSize, baseDir, "Bin\\CtrlSSD.cdb")) return FALSE;
+BOOL BuildDatabasePathsA(
+    LPCSTR baseDir,
+    LPSTR outFlashFdb,
+    DWORD outFlashFdbSize,
+    LPSTR outCtrlCdb,
+    DWORD outCtrlCdbSize) {
+    if(! baseDir || ! outFlashFdb || ! outCtrlCdb)
+        return FALSE;
+    if(! JoinPathA(outFlashFdb, outFlashFdbSize, baseDir, "Bin\\FlashSSD_D.fdb"))
+        return FALSE;
+    if(! JoinPathA(outCtrlCdb, outCtrlCdbSize, baseDir, "Bin\\CtrlSSD.cdb"))
+        return FALSE;
     return TRUE;
 }
 
-BOOL BuildBinPathA(LPCSTR baseDir, BYTE familyHint, BYTE binIndex,
-                   BOOL isA1BA, LPSTR outBin, DWORD outBinSize)
-{
-    if (!baseDir || !outBin) return FALSE;
-    CHAR subdir[64] = {0};
+BOOL BuildBinPathA(
+    LPCSTR baseDir,
+    BYTE familyHint,
+    BYTE binIndex,
+    BOOL isA1BA,
+    LPSTR outBin,
+    DWORD outBinSize) {
+    if(! baseDir || ! outBin)
+        return FALSE;
+    CHAR subdir[64] = { 0 };
     // familyHint: 0x76 -> 1176, else 1181; variant: A0AA or A1BA
-    if (isA1BA) {
+    if(isA1BA) {
         strcpy_s(subdir, sizeof(subdir), "1181\\DownGrade\\A1BA");
     } else {
-        if (familyHint == 0x76) strcpy_s(subdir, sizeof(subdir), "1176\\DownGrade\\A0AA");
-        else strcpy_s(subdir, sizeof(subdir), "1181\\DownGrade\\A0AA");
+        if(familyHint == 0x76)
+            strcpy_s(subdir, sizeof(subdir), "1176\\DownGrade\\A0AA");
+        else
+            strcpy_s(subdir, sizeof(subdir), "1181\\DownGrade\\A0AA");
     }
-    CHAR binName[64] = {0};
-    if (binIndex == 0xFF) strcpy_s(binName, sizeof(binName), "u181s00.bin");
-    else sprintf_s(binName, sizeof(binName), "u181s%02x.bin", (unsigned)binIndex);
-    CHAR dir[MAX_PATH] = {0};
-    if (!JoinPathA(dir, sizeof(dir), baseDir, "Bin")) return FALSE;
-    if (!JoinPathA(dir, sizeof(dir), dir, subdir)) return FALSE;
+    CHAR binName[64] = { 0 };
+    if(binIndex == 0xFF)
+        strcpy_s(binName, sizeof(binName), "u181s00.bin");
+    else
+        sprintf_s(binName, sizeof(binName), "u181s%02x.bin", (unsigned) binIndex);
+    CHAR dir[MAX_PATH] = { 0 };
+    if(! JoinPathA(dir, sizeof(dir), baseDir, "Bin"))
+        return FALSE;
+    if(! JoinPathA(dir, sizeof(dir), dir, subdir))
+        return FALSE;
     return JoinPathA(outBin, outBinSize, dir, binName);
 }
 
 // Firmware writing function to the device
-BOOL WriteFirmware(HANDLE hDevice, LPCVOID pFirmware, DWORD firmwareSize)
-{
+BOOL WriteFirmware(HANDLE hDevice, LPCVOID pFirmware, DWORD firmwareSize) {
     // Parameter check
-    if (!hDevice || !pFirmware || firmwareSize == 0) {
+    if(! hDevice || ! pFirmware || firmwareSize == 0) {
         return FALSE;
     }
-    
+
     // Preparing the buffer for writing
     DWORD bytesWritten = 0;
     DWORD totalWritten = 0;
-    const BYTE* pData = (const BYTE*)pFirmware;
-    
+    const BYTE* pData = (const BYTE*) pFirmware;
+
     // Writing firmware in blocks
-    while (totalWritten < firmwareSize) {
+    while(totalWritten < firmwareSize) {
         DWORD blockSize = min(USB_BUFFER_SIZE, firmwareSize - totalWritten);
-        
+
         BOOL result = Write(hDevice, pData + totalWritten, blockSize, &bytesWritten, NULL);
-        if (!result) {
+        if(! result) {
             return FALSE;
         }
-        
+
         totalWritten += bytesWritten;
-        
+
         // Delay between blocks
         Sleep(10);
     }
-    
+
     return TRUE;
 }
 
 // Firmware verification function
-BOOL VerifyFirmware(HANDLE hDevice, LPCVOID pFirmware, DWORD firmwareSize)
-{
+BOOL VerifyFirmware(HANDLE hDevice, LPCVOID pFirmware, DWORD firmwareSize) {
     // Parameter check
-    if (!hDevice || !pFirmware || firmwareSize == 0) {
+    if(! hDevice || ! pFirmware || firmwareSize == 0) {
         return FALSE;
     }
-    
+
     // Allocating a buffer for reading
-    BYTE* pReadBuffer = (BYTE*)malloc(firmwareSize);
-    if (!pReadBuffer) {
+    BYTE* pReadBuffer = (BYTE*) malloc(firmwareSize);
+    if(! pReadBuffer) {
         return FALSE;
     }
-    
+
     // Reading firmware from the device
     DWORD bytesRead = 0;
     DWORD totalRead = 0;
-    
-    while (totalRead < firmwareSize) {
+
+    while(totalRead < firmwareSize) {
         DWORD blockSize = min(USB_BUFFER_SIZE, firmwareSize - totalRead);
-        
+
         BOOL result = Read(hDevice, pReadBuffer + totalRead, blockSize, &bytesRead, NULL);
-        if (!result) {
+        if(! result) {
             free(pReadBuffer);
             return FALSE;
         }
-        
+
         totalRead += bytesRead;
     }
-    
+
     // Comparing firmwares
     BOOL isMatch = (memcmp(pFirmware, pReadBuffer, firmwareSize) == 0);
-    
+
     free(pReadBuffer);
     return isMatch;
 }
 
 // Firmware cleanup function
-void CleanupFirmware(LPVOID pBuffer)
-{
-    if (pBuffer) {
+void CleanupFirmware(LPVOID pBuffer) {
+    if(pBuffer) {
         free(pBuffer);
     }
 }
