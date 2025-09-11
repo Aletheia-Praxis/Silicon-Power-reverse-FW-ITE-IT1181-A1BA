@@ -1,8 +1,7 @@
 #pragma once
-
-#include <windows.h>
-
 #include <cstdint>
+
+#include "WindowsHeaders.h"
 
 /**
  * @class CryptoManager
