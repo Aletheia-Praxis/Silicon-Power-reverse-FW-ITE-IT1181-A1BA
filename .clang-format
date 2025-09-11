@@ -1,0 +1,111 @@
+# Basic settings
+BasedOnStyle: Chromium
+Language: Cpp
+Standard: Cpp11
+
+# Main formatting parameters
+ColumnLimit: '100'
+IndentWidth: '4'
+UseTab: Never
+MaxEmptyLinesToKeep: '1'
+
+# Braces and indentation style
+BreakBeforeBraces: Attach
+BraceWrapping:
+    AfterCaseLabel: false
+    AfterClass: false
+    AfterControlStatement: false
+    AfterEnum: false
+    AfterFunction: false
+    AfterObjCDeclaration: false
+    AfterStruct: false
+    AfterUnion: false
+    AfterExternBlock: false
+    AfterNamespace: false
+    BeforeCatch: false
+    BeforeElse: true
+    IndentBraces: true
+    SplitEmptyFunction: false
+    SplitEmptyRecord: false
+    SplitEmptyNamespace: false
+
+# Indentation and alignment
+AccessModifierOffset: '-4'
+ConstructorInitializerIndentWidth: '4'
+ContinuationIndentWidth: '4'
+IndentCaseLabels: 'false'
+IndentPPDirectives: BeforeHash
+IndentWrappedFunctionNames: 'false'
+NamespaceIndentation: None
+
+# Alignment and formatting
+AlignAfterOpenBracket: AlwaysBreak
+AlignConsecutiveMacros: 'true'
+AlignConsecutiveAssignments: 'false'
+AlignConsecutiveDeclarations: 'false'
+AlignEscapedNewlines: Left
+AlignOperands: 'true'
+AlignTrailingComments: 'true'
+
+# Line breaks
+AlwaysBreakAfterReturnType: None
+AlwaysBreakBeforeMultilineStrings: 'false'
+AlwaysBreakTemplateDeclarations: Yes
+BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeTernaryOperators: 'true'
+BreakConstructorInitializers: BeforeColon
+BreakInheritanceList: BeforeColon
+
+# Parameters for short constructs
+AllowShortBlocksOnASingleLine: true
+AllowShortCaseLabelsOnASingleLine: 'true'
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: Inline
+AllowShortLoopsOnASingleLine: 'false'
+
+# Parameters for arguments and parameters
+AllowAllArgumentsOnNextLine: 'true'
+AllowAllConstructorInitializersOnNextLine: 'false'
+AllowAllParametersOfDeclarationOnNextLine: 'false'
+BinPackArguments: 'false'
+BinPackParameters: 'false'
+
+# Spaces
+SpaceAfterCStyleCast: 'true'
+SpaceAfterLogicalNot: 'true'
+SpaceAfterTemplateKeyword: 'false'
+SpaceBeforeAssignmentOperators: 'true'
+SpaceBeforeCpp11BracedList: 'true'
+SpaceBeforeCtorInitializerColon: 'true'
+SpaceBeforeInheritanceColon: 'true'
+SpaceBeforeParens: Never
+SpaceBeforeRangeBasedForLoopColon: 'true'
+SpaceInEmptyParentheses: 'false'
+SpacesBeforeTrailingComments: '2'
+SpacesInAngles: 'false'
+SpacesInCStyleCastParentheses: 'false'
+SpacesInContainerLiterals: 'false'
+SpacesInParentheses: 'false'
+SpacesInSquareBrackets: 'false'
+
+# Additional settings
+Cpp11BracedListStyle: 'false'
+ConstructorInitializerAllOnOneLineOrOnePerLine: 'false'
+DerivePointerAlignment: 'true'
+FixNamespaceComments: 'true'
+KeepEmptyLinesAtTheStartOfBlocks: 'false'
+PointerAlignment: Left
+ReflowComments: 'true'
+
+# Include and comment settings
+IncludeBlocks: Regroup
+SortIncludes: 'true'
+CompactNamespaces: 'false'
+CommentPragmas: >-
+    ^[ \t]*(@brief|@param|@return|@note|NOLINT|TODO|FIXME|WARNING|HACK|XXX):|^
+    PROJECT_NOTE:
+
+# Specific settings
+BreakAfterJavaFieldAnnotations: 'true'
+ObjCBinPackProtocolList: Never
