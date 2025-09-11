@@ -12,8 +12,12 @@ endif()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Enable MFC support
-set(CMAKE_MFC_FLAG 2)  # Use MFC in a Static Library
+# Enable MFC support with shared DLL
+set(CMAKE_MFC_FLAG 2)  # Use MFC in a Shared DLL
+
+# Set runtime library to MD for MFC
+set(CMAKE_CXX_FLAGS_DEBUG "/MDd /Zi /Ob0 /Od /RTC1")
+set(CMAKE_CXX_FLAGS_RELEASE "/MD /O2 /Ob2 /DNDEBUG")
 
 # Set output directories
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
