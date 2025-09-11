@@ -22,7 +22,7 @@ if(WIN32)
         _UNICODE
         UNICODE
     )
-    
+
     # Visual Studio settings
     if(MSVC)
         set_target_properties(URescueTests PROPERTIES
