@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Winsock2.h>
 #include <afxwin.h>
 #include <windows.h>
 

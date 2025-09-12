@@ -1,11 +1,11 @@
-#include "ErrorHandler.h"
+// clang-format off
+#include "../include/Utilities.h"
+#include "../include/ErrorHandler.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <windows.h>
-
-#include "Utilities.h"
+// clang-format on
 
 // Function to get the last error (decompiled from FUN_0046bc3d)
 DWORD GetLastErrorWrapper() {
