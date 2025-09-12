@@ -11,10 +11,6 @@
 #define IDD_DEVICE_SELECT 140
 #define IDD_ABOUT         141
 
-// Global identifiers for USB
-extern const GUID GUID_DEVCLASS_USB;
-extern const GUID GUID_DEVINTERFACE_USB_DEVICE;
-
 // Device Selection Dialog
 class CDeviceSelectDialog : public CDialog {
 public:
@@ -23,12 +19,12 @@ public:
     CString GetSelectedDevice() const { return m_selectedDevice; }
 
 protected:
-    virtual void DoDataExchange(CDataExchange* pDX);
-    virtual BOOL OnInitDialog();
+    void DoDataExchange(CDataExchange* pDX) override;
+    BOOL OnInitDialog() override;
 
     afx_msg void OnDeviceListSelChange();
     afx_msg void OnRefresh();
-    virtual void OnOK();
+    void OnOK() override;
 
     CListBox m_deviceList;
     CString m_selectedDevice;
@@ -49,8 +45,8 @@ public:
     CAboutDialog(CWnd* pParent = NULL);
 
 protected:
-    virtual void DoDataExchange(CDataExchange* pDX);
-    virtual BOOL OnInitDialog();
+    void DoDataExchange(CDataExchange* pDX) override;
+    BOOL OnInitDialog() override;
 
     DECLARE_MESSAGE_MAP()
 };

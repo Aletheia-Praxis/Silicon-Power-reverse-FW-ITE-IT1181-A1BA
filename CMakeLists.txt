@@ -25,7 +25,10 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 # Include directories
-include_directories(include)
+include_directories(
+    include
+    resources
+)
 
 # Source files
 set(SOURCES

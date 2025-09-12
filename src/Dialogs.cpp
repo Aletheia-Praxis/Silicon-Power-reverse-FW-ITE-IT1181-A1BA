@@ -1,7 +1,7 @@
-#include "Dialogs.h"
+#include "../include/Dialogs.h"
 
-#include "WindowsHeaders.h"
-#include "resource.h"
+#include "../include/WindowsHeaders.h"
+#include "../resources/resource.h"
 
 // Device selection dialog constructor
 CDeviceSelectDialog::CDeviceSelectDialog(CWnd *pParent) : CDialog(IDD_DEVICE_SELECT, pParent) {
@@ -132,8 +132,8 @@ void CDeviceSelectDialog::OnOK() {
 
 // Message handler
 BEGIN_MESSAGE_MAP(CDeviceSelectDialog, CDialog)
-ON_LBN_SELCHANGE(IDC_DEVICE_LIST, OnDeviceListSelChange)
-ON_BN_CLICKED(IDC_REFRESH_BUTTON, OnRefresh)
+ON_LBN_SELCHANGE(IDC_DEVICE_LIST, &CDeviceSelectDialog::OnDeviceListSelChange)
+ON_BN_CLICKED(IDC_REFRESH_BUTTON, &CDeviceSelectDialog::OnRefresh)
 END_MESSAGE_MAP()
 
 // About dialog constructor
