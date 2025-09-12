@@ -1,11 +1,13 @@
-#include "MemoryManager.h"
-
+// clang-format off
+#include <winsock2.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <windows.h>
 
-#include "Utilities.h"
+#include "../include/MemoryManager.h"
+#include "../include/Utilities.h"
+// clang-format on
 
 // Memory allocation function (decompiled from FUN_004625cc)
 LPVOID AllocateMemory(DWORD size) {
@@ -102,7 +104,7 @@ void FreeAlignedMemory(LPVOID pMemory) {
 }
 
 // Memory copy function (decompiled from FUN_0046bc3d)
-LPVOID CopyMemory(LPVOID pDestination, LPCVOID pSource, DWORD size) {
+LPVOID CustomCopyMemory(LPVOID pDestination, LPCVOID pSource, DWORD size) {
     if(! pDestination || ! pSource || size == 0) {
         LogError("Invalid parameters for memory copy");
         return NULL;
@@ -117,7 +119,7 @@ LPVOID CopyMemory(LPVOID pDestination, LPCVOID pSource, DWORD size) {
 }
 
 // Memory move function (decompiled from FUN_0046ba6c)
-LPVOID MoveMemory(LPVOID pDestination, LPCVOID pSource, DWORD size) {
+LPVOID CustomMoveMemory(LPVOID pDestination, LPCVOID pSource, DWORD size) {
     if(! pDestination || ! pSource || size == 0) {
         LogError("Invalid parameters for memory move");
         return NULL;
@@ -132,7 +134,7 @@ LPVOID MoveMemory(LPVOID pDestination, LPCVOID pSource, DWORD size) {
 }
 
 // Memory fill function (decompiled from FUN_0045719c)
-LPVOID FillMemory(LPVOID pDestination, DWORD size, BYTE value) {
+LPVOID CustomFillMemory(LPVOID pDestination, DWORD size, BYTE value) {
     if(! pDestination || size == 0) {
         LogError("Invalid parameters for memory fill");
         return NULL;
@@ -177,10 +179,10 @@ LPVOID FindByteInMemory(LPCVOID pBuffer, DWORD size, BYTE value) {
 
     LogMessage("Searching for byte 0x%02X in memory: %lu bytes at %p", value, size, pBuffer);
 
-    LPVOID result = memchr(pBuffer, value, size);
+    LPVOID result = (LPVOID) memchr(pBuffer, value, size);
 
     if(result) {
-        LogMessage("Byte found at offset: %lu", (BYTE*) result - (BYTE*) pBuffer);
+        LogMessage("Byte found at offset: %lu", (ULONG_PTR) result - (ULONG_PTR) pBuffer);
     } else {
         LogMessage("Byte not found in memory");
     }
@@ -225,7 +227,7 @@ BOOL CopyFirmware(LPVOID pDestination, LPCVOID pSource, DWORD firmwareSize) {
 
     LogMessage("Copying firmware: %lu bytes", firmwareSize);
 
-    LPVOID result = CopyMemory(pDestination, pSource, firmwareSize);
+    LPVOID result = CustomCopyMemory(pDestination, pSource, firmwareSize);
 
     if(! result) {
         LogError("Firmware copy failed");
@@ -265,7 +267,7 @@ void ClearFirmwareMemory(LPVOID pFirmware, DWORD firmwareSize) {
 
     LogMessage("Clearing firmware memory: %lu bytes at %p", firmwareSize, pFirmware);
 
-    FillMemory(pFirmware, firmwareSize, 0xFF);  // Filling with 0xFF
+    CustomFillMemory(pFirmware, firmwareSize, 0xFF);  // Filling with 0xFF
 
     LogMessage("Firmware memory cleared successfully");
 }

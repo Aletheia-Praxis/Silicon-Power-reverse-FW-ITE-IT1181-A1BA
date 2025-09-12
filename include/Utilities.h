@@ -1,10 +1,12 @@
 #pragma once
 
-#include <Winsock2.h>
+// clang-format off
+#include <winsock2.h>
 #include <afxwin.h>
 #include <windows.h>
 
 #include <cstdint>
+// clang-format on
 
 // Logging functions
 void LogMessage(LPCSTR format, ...);
