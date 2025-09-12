@@ -76,6 +76,23 @@ public:
         DWORD capabilities;   // Device capabilities flags
     };
 
+    // Internal device info structure that holds all runtime data
+    struct DEVICE_INFO_INTERNAL {
+        BOOL isInitialized;
+        BOOL deviceFound;
+        BOOL driveOpened;
+        BOOL ispLoaded;
+        BOOL systemReady;
+        BOOL repairMode;
+        BYTE volumeCount;
+        BYTE selectedVolume;
+        BYTE controllerIndex;
+        CHAR deviceString[256];
+        BYTE deviceData[8];
+        DEVICE_VOLUME_INFO volumes[MAX_VOLUMES];
+        DEVICE_BANK_INFO banks[MAX_BANKS];
+    };
+
 // Constants for enhanced device management
 #define MAX_DEVICES        256
 #define DEVICE_STRUCT_SIZE 0x57  // Size per device structure (from Ghidra analysis)
@@ -112,6 +129,9 @@ private:
     CHAR m_basePath[MAX_PATH];  // 0x11b
     HMODULE m_hSDK;             // 0x21f
 
+    // Main device information struct
+    DEVICE_INFO_INTERNAL m_deviceInfo;
+
     // Device management data
     BYTE m_volumeCount;
     BYTE m_controllerCount;
@@ -129,6 +149,7 @@ private:
     BOOL InitializeSDK();
     BOOL VerifySDKIntegrity();
     void InitializeMembers();
+    BOOL InitializeDeviceStructures();
 
     // Device information functions (decompiled from various FUN_* functions)
     BOOL GetDeviceInfoInternal();
@@ -181,6 +202,7 @@ private:
     BOOL GetBinFilePath(BYTE volumeIndex, LPCSTR fileName, LPSTR filePath, DWORD pathSize);
 
     BOOL FormatDeviceString(LPSTR buffer, DWORD size, LPCSTR format, ...);
+    BOOL FormatDeviceIdentification();
 
     void updateCISBuffer();
 
@@ -241,7 +263,7 @@ private:
     // Supporting workflow functions for new implementation
     BOOL CheckSystemReadyIO(int device_idx);
     BOOL InitializeController(int controller_idx);
-    BOOL CopyBankData(int controller_idx);
+    BOOL CopyBankData(BYTE volumeIndex);
     BOOL FormatFinalDeviceString(int controller_idx);
 
     // Enhanced validation functions with security controls
