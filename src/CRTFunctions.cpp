@@ -1,6 +1,6 @@
 #define WIN32_LEAN_AND_MEAN
 #define _WIN32_WINNT 0x0601  // Windows 7
-#include "CRTFunctions.h"
+#include "../include/CRTFunctions.h"
 
 #include <afxwin.h>
 #include <windows.h>
