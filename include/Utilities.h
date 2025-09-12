@@ -7,6 +7,8 @@
 
 // Logging functions
 void LogMessage(LPCSTR format, ...);
+void LogError(const char* format, ...);
+void LogWarning(const char* format, ...);
 
 // Formatting functions
 CString FormatBytes(DWORD bytes);

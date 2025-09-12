@@ -1,10 +1,15 @@
-#include "Utilities.h"
+#include "../include/Utilities.h"
 
+#include <afxwin.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <windows.h>
+
+#include <cstdint>
+
+#include "../include/FirmwareManager.h"
 
 // Logging function
 void LogMessage(LPCSTR format, ...) {
@@ -33,6 +38,24 @@ void LogMessage(LPCSTR format, ...) {
         fprintf(logFile, "[%s] %s\n", timestamp, buffer);
         fclose(logFile);
     }
+}
+
+void LogError(const char* format, ...) {
+    char buffer[1024];
+    va_list args;
+    va_start(args, format);
+    vsprintf_s(buffer, sizeof(buffer), format, args);
+    va_end(args);
+    LogMessage("[ERROR] %s", buffer);
+}
+
+void LogWarning(const char* format, ...) {
+    char buffer[1024];
+    va_list args;
+    va_start(args, format);
+    vsprintf_s(buffer, sizeof(buffer), format, args);
+    va_end(args);
+    LogMessage("[WARNING] %s", buffer);
 }
 
 // Function to convert bytes to a readable format

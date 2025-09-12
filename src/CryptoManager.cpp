@@ -1,9 +1,9 @@
-#include "CryptoManager.h"
+#include "../include/CryptoManager.h"
 
 #include <comutil.h>
 #include <oleauto.h>
 
-#include "Utilities.h"
+#include "../include/Utilities.h"
 
 // Hash test vectors for validation (based on Ghidra analysis)
 const HashTestVector g_hashTestVectors[] = {
@@ -210,11 +210,11 @@ void CryptoManager::SecureFree(void* ptr, SIZE_T size) {
     // Verify guard bytes
     BOOL guardOk = TRUE;
     for(SIZE_T i = 0; i < GUARD_SIZE; i++) {
-        if(((char*) actualPtr)[i] != GUARD_BYTE) {
+        if(((unsigned char*) actualPtr)[i] != GUARD_BYTE) {
             guardOk = FALSE;
             break;
         }
-        if(((char*) ptr + size)[i] != GUARD_BYTE) {
+        if(((unsigned char*) ptr + size)[i] != GUARD_BYTE) {
             guardOk = FALSE;
             break;
         }
