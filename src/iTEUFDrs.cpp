@@ -803,7 +803,7 @@ BOOL iTEUFDrs::LoadBankC(BYTE volumeIndex, DWORD deviceId) {
     if(sprintf_s(
            versionString,
            sizeof(versionString),
-           " %s%s",
+           " %lu.%lu",
            bank.versionInfo.major,
            bank.versionInfo.minor)
        <= 0) {
