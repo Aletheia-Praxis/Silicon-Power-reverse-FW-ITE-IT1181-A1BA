@@ -1,5 +1,8 @@
-#include "CRTFunctions.h"
-#include "WindowsHeaders.h"
+#define WIN32_LEAN_AND_MEAN
+#include <afxwin.h>
+
+#include "../include/CRTFunctions.h"
+#include "../include/WindowsHeaders.h"
 
 // Main application wrapper (this is what the real AfxWinMain calls)
 int RunURescueApplication(
@@ -73,9 +76,9 @@ int URescue_tmainCRTStartup(void) {
         startupInfo.wShowWindow = SW_SHOWDEFAULT;
     }
 
-    // Call the actual main application function (wrapper for AfxWinMain)
-    result =
-        AfxWinMain((HINSTANCE) GetModuleHandle(NULL), NULL, winCmdLine, startupInfo.wShowWindow);
+    // Call the actual main application function
+    result = RunURescueApplication(
+        (HINSTANCE) GetModuleHandle(NULL), NULL, winCmdLine, startupInfo.wShowWindow);
 
     if(isGuiApp) {
         URescue_cexit();
