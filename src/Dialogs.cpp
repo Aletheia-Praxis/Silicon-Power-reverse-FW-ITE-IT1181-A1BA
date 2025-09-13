@@ -1,7 +1,8 @@
-#include "../include/Dialogs.h"
-
+// clang-format off
 #include "../include/WindowsHeaders.h"
 #include "../resources/resource.h"
+#include "../include/Dialogs.h"
+// clang-format on
 
 // Device selection dialog constructor
 CDeviceSelectDialog::CDeviceSelectDialog(CWnd *pParent) : CDialog(IDD_DEVICE_SELECT, pParent) {
