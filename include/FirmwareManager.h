@@ -4,8 +4,11 @@
 
 // Firmware management functions
 BOOL LoadFirmware(LPCSTR firmwarePath, LPVOID* ppBuffer, DWORD* pSize);
+BOOL LoadFirmwareFromFile(LPCSTR firmwarePath, LPVOID* ppBuffer, DWORD* pSize);
 BOOL WriteFirmware(HANDLE hDevice, LPCVOID pFirmware, DWORD firmwareSize);
+BOOL WriteFirmwareToDevice(HANDLE hDevice, LPCVOID pFirmware, DWORD firmwareSize);
 BOOL VerifyFirmware(HANDLE hDevice, LPCVOID pFirmware, DWORD firmwareSize);
+BOOL VerifyFirmwareOnDevice(HANDLE hDevice, LPCVOID pFirmware, DWORD firmwareSize);
 void CleanupFirmware(LPVOID pBuffer);
 
 // Constants for firmware management

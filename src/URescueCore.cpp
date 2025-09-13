@@ -1,20 +1,20 @@
-#include "URescueCore.h"
+#include "../include/URescueCore.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <windows.h>
 
-#include "ErrorHandler.h"
-#include "FileOperations.h"
-#include "FirmwareManager.h"
-#include "MemoryManager.h"
-#include "ResourceManager.h"
-#include "SystemManager.h"
-#include "Utilities.h"
+#include "../include/ErrorHandler.h"
+#include "../include/FirmwareManager.h"
+#include "../include/MemoryManager.h"
+#include "../include/ResourceManager.h"
+#include "../include/SystemManager.h"
+#include "../include/USBDevice.h"
+#include "../include/Utilities.h"
 
 // Global program variables
-static URESCUE_CONTEXT g_urescueContext = { 0 };
+static URESCUE_CONTEXT g_urescueContext;
 static BOOL g_bInitialized = FALSE;
 static HMODULE g_hSdk = NULL;
 
@@ -29,6 +29,7 @@ BOOL InitializeURescue() {
 
     // Clearing the context
     memset(&g_urescueContext, 0, sizeof(URESCUE_CONTEXT));
+    g_urescueContext.applicationState = URESCUE_STATE_UNINITIALIZED;
 
     // Resolve module and temp directories
     GetModuleDirectoryA(g_urescueContext.moduleDir, sizeof(g_urescueContext.moduleDir));
@@ -75,8 +76,8 @@ BOOL InitializeURescue() {
     g_urescueContext.lastError = ERROR_SUCCESS;
 
     // Loading settings from the registry
-    LoadSettingsFromRegistry(
-        SETTINGS_REGISTRY_VALUE, &g_urescueContext.settings, sizeof(URESCUE_SETTINGS));
+    DWORD settingsSize = sizeof(URESCUE_SETTINGS);
+    LoadSettingsFromRegistry(SETTINGS_REGISTRY_VALUE, &g_urescueContext.settings, &settingsSize);
 
     g_bInitialized = TRUE;
     LogMessage("URescue initialized successfully");

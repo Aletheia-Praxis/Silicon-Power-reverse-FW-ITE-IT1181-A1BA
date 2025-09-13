@@ -32,6 +32,19 @@ BOOL CreateBackup(LPCSTR sourcePath, LPCSTR backupPath);
 BOOL GetModuleDirectoryA(LPSTR buffer, DWORD size);
 BOOL GetTempLongPathA(LPSTR buffer, DWORD size);
 BOOL JoinPathA(LPSTR outBuffer, DWORD size, LPCSTR a, LPCSTR b);
+void BuildDatabasePathsA(
+    const char* moduleDir,
+    char* flashDbPath,
+    size_t flashDbPathSize,
+    char* ctrlDbPath,
+    size_t ctrlDbPathSize);
+void BuildBinPathA(
+    const char* moduleDir,
+    uint8_t familyHint,
+    uint8_t binIndex,
+    bool isA1BA,
+    char* outBinPath,
+    size_t outBinPathSize);
 
 // Logging macros
 #define LOG_INFO(format, ...)    LogMessage("[INFO] " format, ##__VA_ARGS__)
