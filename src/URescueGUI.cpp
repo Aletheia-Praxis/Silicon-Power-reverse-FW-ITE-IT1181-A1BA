@@ -1,11 +1,12 @@
-#include "URescueGUI.h"
+#include "../include/URescueGUI.h"
 
-#include "FirmwareManager.h"
-#include "ITEController.h"
-#include "WindowsHeaders.h"
+#include "../include/FirmwareManager.h"
+#include "../include/ITEController.h"
+#include "../include/USBDevice.h"
+#include "../include/WindowsHeaders.h"
 
 // Main window constructor
-CMainFrame::CMainFrame() {
+CMainFrame::CMainFrame() : m_hDevice(INVALID_HANDLE_VALUE), m_pFirmware(NULL), m_firmwareSize(0) {
     // Creating main window
     Create(NULL, _T("URescue v81D.2.24.2 - ITE IT1181 Firmware Recovery Tool"));
 
@@ -36,16 +37,16 @@ void CMainFrame::CreateControls() {
     m_mainDialog.ShowWindow(SW_SHOW);
 }
 
-// Message handler
+// Message handlers for CMainFrame
 BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
 ON_WM_CREATE()
 ON_WM_SIZE()
-ON_COMMAND(ID_DEVICE_CONNECT, OnDeviceConnect)
-ON_COMMAND(ID_DEVICE_DISCONNECT, OnDeviceDisconnect)
-ON_COMMAND(ID_FIRMWARE_LOAD, OnFirmwareLoad)
-ON_COMMAND(ID_FIRMWARE_WRITE, OnFirmwareWrite)
-ON_COMMAND(ID_FIRMWARE_VERIFY, OnFirmwareVerify)
-ON_COMMAND(ID_HELP_ABOUT, OnHelpAbout)
+ON_COMMAND(ID_DEVICE_CONNECT, &CMainFrame::OnDeviceConnect)
+ON_COMMAND(ID_DEVICE_DISCONNECT, &CMainFrame::OnDeviceDisconnect)
+ON_COMMAND(ID_FIRMWARE_LOAD, &CMainFrame::OnFirmwareLoad)
+ON_COMMAND(ID_FIRMWARE_WRITE, &CMainFrame::OnFirmwareWrite)
+ON_COMMAND(ID_FIRMWARE_VERIFY, &CMainFrame::OnFirmwareVerify)
+ON_COMMAND(ID_HELP_ABOUT, &CMainFrame::OnHelpAbout)
 END_MESSAGE_MAP()
 
 // Window creation handler
@@ -73,7 +74,8 @@ void CMainFrame::OnDeviceConnect() {
     CDeviceSelectDialog dlg;
     if(dlg.DoModal() == IDOK) {
         // Connecting to selected device
-        HANDLE hDevice = InitializeUSBDevice(dlg.GetSelectedDevice());
+        CString devicePath = dlg.GetSelectedDevice();
+        HANDLE hDevice = InitializeUSBDevice(devicePath.GetString());
         if(hDevice) {
             // Controller initialization
             if(InitializeITEController(hDevice)) {
@@ -125,7 +127,7 @@ void CMainFrame::OnFirmwareLoad() {
         LPVOID pFirmware;
         DWORD firmwareSize;
 
-        if(LoadFirmware(firmwarePath, &pFirmware, &firmwareSize)) {
+        if(LoadFirmware(firmwarePath.GetString(), &pFirmware, &firmwareSize)) {
             m_pFirmware = pFirmware;
             m_firmwareSize = firmwareSize;
 
@@ -191,4 +193,84 @@ void CMainFrame::OnFirmwareVerify() {
 void CMainFrame::OnHelpAbout() {
     CAboutDialog dlg;
     dlg.DoModal();
+}
+
+//=============================================================================
+// Device Selection Dialog Implementation
+//=============================================================================
+
+// Device selection dialog constructor
+CDeviceSelectDialog::CDeviceSelectDialog(CWnd* pParent) : CDialog(IDD_DEVICE_SELECT, pParent) {
+    m_selectedDevice = _T("");
+}
+
+// Data exchange
+void CDeviceSelectDialog::DoDataExchange(CDataExchange* pDX) {
+    CDialog::DoDataExchange(pDX);
+    DDX_Control(pDX, IDC_DEVICE_LIST, m_deviceList);
+    DDX_Text(pDX, IDC_SELECTED_DEVICE, m_selectedDevice);
+}
+
+// Message map for device dialog
+BEGIN_MESSAGE_MAP(CDeviceSelectDialog, CDialog)
+ON_LBN_SELCHANGE(IDC_DEVICE_LIST, &CDeviceSelectDialog::OnDeviceListSelChange)
+ON_BN_CLICKED(IDC_REFRESH, &CDeviceSelectDialog::OnRefresh)
+END_MESSAGE_MAP()
+
+// Dialog initialization
+BOOL CDeviceSelectDialog::OnInitDialog() {
+    CDialog::OnInitDialog();
+
+    // Initialize device list
+    OnRefresh();
+
+    return TRUE;
+}
+
+// Device list selection change
+void CDeviceSelectDialog::OnDeviceListSelChange() {
+    int nSel = m_deviceList.GetCurSel();
+    if(nSel != LB_ERR) {
+        m_deviceList.GetText(nSel, m_selectedDevice);
+        UpdateData(FALSE);
+    }
+}
+
+// Refresh device list
+void CDeviceSelectDialog::OnRefresh() {
+    m_deviceList.ResetContent();
+
+    // Add sample devices (in real implementation, scan for USB devices)
+    m_deviceList.AddString(_T("Silicon Power IT1181 Device 1"));
+    m_deviceList.AddString(_T("Silicon Power IT1181 Device 2"));
+
+    if(m_deviceList.GetCount() > 0) {
+        m_deviceList.SetCurSel(0);
+        OnDeviceListSelChange();
+    }
+}
+
+//=============================================================================
+// About Dialog Implementation
+//=============================================================================
+
+// About dialog constructor
+CAboutDialog::CAboutDialog(CWnd* pParent) : CDialog(IDD_ABOUT, pParent) {}
+
+// Data exchange
+void CAboutDialog::DoDataExchange(CDataExchange* pDX) {
+    CDialog::DoDataExchange(pDX);
+}
+
+// Message map for about dialog
+BEGIN_MESSAGE_MAP(CAboutDialog, CDialog)
+END_MESSAGE_MAP()
+
+// Dialog initialization
+BOOL CAboutDialog::OnInitDialog() {
+    CDialog::OnInitDialog();
+
+    SetWindowText(_T("About URescue"));
+
+    return TRUE;
 }

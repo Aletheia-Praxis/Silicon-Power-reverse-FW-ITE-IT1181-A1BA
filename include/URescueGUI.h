@@ -12,12 +12,17 @@
 // Resource identifiers
 #define IDR_MAINFRAME        128
 #define IDD_MAIN             129
-#define ID_DEVICE_CONNECT    130
-#define ID_DEVICE_DISCONNECT 131
-#define ID_FIRMWARE_LOAD     132
-#define ID_FIRMWARE_WRITE    133
-#define ID_FIRMWARE_VERIFY   134
-#define ID_HELP_ABOUT        135
+#define IDD_DEVICE_SELECT    130
+#define IDD_ABOUT            131
+#define ID_DEVICE_CONNECT    132
+#define ID_DEVICE_DISCONNECT 133
+#define ID_FIRMWARE_LOAD     134
+#define ID_FIRMWARE_WRITE    135
+#define ID_FIRMWARE_VERIFY   136
+#define ID_HELP_ABOUT        137
+#define IDC_DEVICE_LIST      1001
+#define IDC_SELECTED_DEVICE  1002
+#define IDC_REFRESH          1003
 
 // Status bar indicators
 static UINT indicators[] = { ID_SEPARATOR, ID_SEPARATOR, ID_SEPARATOR };
