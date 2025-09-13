@@ -1,10 +1,10 @@
-#include "ITEController.h"
+#include "../include/ITEController.h"
 
 #include <stdio.h>
 #include <string.h>
 #include <windows.h>
 
-#include "USBDevice.h"
+#include "../include/USBDevice.h"
 
 // Function to initialize the ITE controller
 BOOL InitializeITEController(HANDLE hDevice) {

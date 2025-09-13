@@ -1,6 +1,8 @@
-#include <setupapi.h>
+// clang-format off
 #include <windows.h>
+#include <setupapi.h>
 #include <winusb.h>
+// clang-format on
 
 // Global GUIDs for USB devices
 const GUID GUID_DEVCLASS_USB = { 0x36fc9e60,

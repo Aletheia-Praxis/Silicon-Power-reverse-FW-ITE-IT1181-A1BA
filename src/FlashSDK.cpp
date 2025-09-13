@@ -1,4 +1,4 @@
-#include "FlashSDK.h"
+#include "../include/FlashSDK.h"
 
 // Initialize all function pointers to NULL
 FLH_GetInfoFromDataBaseByID_t FLH_GetInfoFromDataBaseByID = NULL;
