@@ -1,4 +1,4 @@
-#include "USBDevice.h"
+#include "../include/USBDevice.h"
 
 #include <setupapi.h>
 #include <windows.h>

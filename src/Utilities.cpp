@@ -9,7 +9,9 @@
 
 #include <cstdint>
 
-#include "../include/FirmwareManager.h"
+// Firmware validation constants
+#define ITE_HEADER_SIZE       512                 // Standard ITE firmware header size
+#define ITE_MAX_FIRMWARE_SIZE (16 * 1024 * 1024)  // Maximum 16MB firmware size
 
 // Logging function
 void LogMessage(LPCSTR format, ...) {
