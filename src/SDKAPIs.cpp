@@ -1,6 +1,6 @@
-#include "SDKAPIs.h"
+#include "../include/SDKAPIs.h"
 
-#include "Utilities.h"
+#include "../include/Utilities.h"
 
 // Global API function pointers (corresponding to DAT_ variables in decompiled code)
 

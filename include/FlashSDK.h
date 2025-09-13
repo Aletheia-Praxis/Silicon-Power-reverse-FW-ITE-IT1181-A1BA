@@ -28,6 +28,16 @@ typedef FARPROC FLH_IsTableBlock_t;
 typedef FARPROC FLH_MarkBad_t;
 typedef FARPROC FLH_GetRealBlocksPerDie_t;
 typedef FARPROC FLH_BlockIsGap_t;
+
+// VDR function pointer types
+typedef FARPROC VDR_LoadDriver_t;
+typedef FARPROC VDR_FreeDriver_t;
+typedef FARPROC VDR_GetSystemAddr_t;
+typedef FARPROC VDR_GetDeviceInquiry_t;
+typedef FARPROC VDR_CheckDeviceSupport_t;
+typedef FARPROC VDR_GetLunIndex_t;
+typedef FARPROC VDR_GetDeviceID_t;
+
 typedef FARPROC SEC_DoAuthentication_t;
 typedef FARPROC SEC_LeaveAuthenticatedState_t;
 typedef FARPROC SEC_GetPasswordHint_t;
@@ -142,6 +152,16 @@ extern FLH_IsTableBlock_t FLH_IsTableBlock;
 extern FLH_MarkBad_t FLH_MarkBad;
 extern FLH_GetRealBlocksPerDie_t FLH_GetRealBlocksPerDie;
 extern FLH_BlockIsGap_t FLH_BlockIsGap;
+
+// VDR functions
+extern VDR_LoadDriver_t VDR_LoadDriver;
+extern VDR_FreeDriver_t VDR_FreeDriver;
+extern VDR_GetSystemAddr_t VDR_GetSystemAddr;
+extern VDR_GetDeviceInquiry_t VDR_GetDeviceInquiry;
+extern VDR_CheckDeviceSupport_t VDR_CheckDeviceSupport;
+extern VDR_GetLunIndex_t VDR_GetLunIndex;
+extern VDR_GetDeviceID_t VDR_GetDeviceID;
+
 extern SEC_DoAuthentication_t SEC_DoAuthentication;
 extern SEC_LeaveAuthenticatedState_t SEC_LeaveAuthenticatedState;
 extern SEC_GetPasswordHint_t SEC_GetPasswordHint;

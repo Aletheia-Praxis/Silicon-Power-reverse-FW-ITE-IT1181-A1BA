@@ -1,10 +1,11 @@
-#include "SDKLoader.h"
-
-#include <stdio.h>
+// clang-format off
+#include <winsock2.h>
 #include <windows.h>
 
-#include "FlashSDK.h"
-#include "Utilities.h"
+#include "../include/SDKLoader.h"
+#include "../include/FlashSDK.h"
+#include "../include/Utilities.h"
+// clang-format on
 
 BOOL Load181FlashSDK(LPCSTR baseDir, HMODULE* outModule) {
     if(! baseDir || ! outModule)
@@ -55,15 +56,15 @@ BOOL InitializeFlashSDK(HMODULE hModule) {
     LOAD_PROC(FLH_BlockIsGap);
 
     // VDR (Virtual Device Recognition) functions
-    g_VDR_LoadDriver = GetProcAddress(hModule, "VDR_LoadDriver");
-    g_VDR_FreeDriver = GetProcAddress(hModule, "VDR_FreeDriver");
-    g_VDR_ReadWriteLUNConfig = GetProcAddress(hModule, "VDR_ReadWriteLUNConfig");
-    g_VDR_GetSystemAddr = GetProcAddress(hModule, "VDR_GetSystemAddr");
-    g_VDR_GetDeviceInquiry = GetProcAddress(hModule, "VDR_GetDeviceInquiry");
-    g_VDR_CheckDeviceSupport = GetProcAddress(hModule, "VDR_CheckDeviceSupport");
-    g_VDR_GetLunIndex = GetProcAddress(hModule, "VDR_GetLunIndex");
-    g_VDR_GetDeviceID = GetProcAddress(hModule, "VDR_GetDeviceID");
-    g_VDR_ReadSysAddr = GetProcAddress(hModule, "VDR_ReadSysAddr");
+    LOAD_PROC(VDR_LoadDriver);
+    LOAD_PROC(VDR_FreeDriver);
+    LOAD_PROC(VDR_ReadWriteLUNConfig);
+    LOAD_PROC(VDR_GetSystemAddr);
+    LOAD_PROC(VDR_GetDeviceInquiry);
+    LOAD_PROC(VDR_CheckDeviceSupport);
+    LOAD_PROC(VDR_GetLunIndex);
+    LOAD_PROC(VDR_GetDeviceID);
+    LOAD_PROC(VDR_ReadSysAddr);
 
     LOAD_PROC(SEC_DoAuthentication);
     LOAD_PROC(SEC_LeaveAuthenticatedState);
@@ -97,7 +98,6 @@ BOOL InitializeFlashSDK(HMODULE hModule) {
     LOAD_PROC(VDR_WriteXData);
     LOAD_PROC(VDR_ReadIData);
     LOAD_PROC(VDR_WriteIData);
-    LOAD_PROC(VDR_ReadSysAddr);
     LOAD_PROC(VDR_WriteSysAddr);
     LOAD_PROC(VDR_CheckSYSReady);
     LOAD_PROC(VDR_SetSYSReady);
