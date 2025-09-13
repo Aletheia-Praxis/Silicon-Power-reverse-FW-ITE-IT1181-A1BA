@@ -1,9 +1,8 @@
-#include "URescueMain.h"
+#include "..//include/URescueMain.h"
 
-#include "SDKLoader.h"
-#include "Utilities.h"
-#include "WindowsHeaders.h"
-#include "iTEUFDrs.h"
+#include "..//include/SDKLoader.h"
+#include "..//include/Utilities.h"
+#include "..//include/iTEUFDrs.h"
 
 // Global iTEUFDrs instance
 static iTEUFDrs *g_pURescueApp = nullptr;
