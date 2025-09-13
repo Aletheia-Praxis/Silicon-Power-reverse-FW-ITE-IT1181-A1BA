@@ -1,11 +1,15 @@
-#include "ResourceManager.h"
+// clang-format off
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
+#include "../include/ResourceManager.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <windows.h>
 
-#include "Utilities.h"
+#include "../include/Utilities.h"
+// clang-format on
 
 // Resource finding function (decompiled from FUN_0046bc3d)
 HRSRC FindResourceWrapper(HMODULE hModule, LPCSTR lpName, LPCSTR lpType) {
