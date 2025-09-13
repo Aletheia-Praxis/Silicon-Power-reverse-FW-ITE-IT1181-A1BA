@@ -1,12 +1,14 @@
-#include "FirmwareManager.h"
+#define WIN32_LEAN_AND_MEAN
+
+#include "../include/FirmwareManager.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <windows.h>
 
-#include "USBDevice.h"
-#include "Utilities.h"
+#include "../include/USBDevice.h"
+#include "../include/Utilities.h"
 
 // Firmware loading function
 BOOL LoadFirmware(LPCSTR firmwarePath, LPVOID* ppBuffer, DWORD* pSize) {
