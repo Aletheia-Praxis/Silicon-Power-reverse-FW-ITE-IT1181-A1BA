@@ -1,4 +1,4 @@
-#include "SystemManager.h"
+#include "../include/SystemManager.h"
 
 #include <shlwapi.h>
 #include <stdio.h>
@@ -8,7 +8,7 @@
 #include <windows.h>
 #include <winreg.h>
 
-#include "Utilities.h"
+#include "../include/Utilities.h"
 
 // Function to get the system version (decompiled from FUN_0046bc3d)
 BOOL GetSystemVersion(OSVERSIONINFOA* pVersionInfo) {
@@ -39,9 +39,9 @@ BOOL GetSystemVersion(OSVERSIONINFOA* pVersionInfo) {
 }
 
 // Function to get system information (decompiled from FUN_0046ba6c)
-BOOL GetSystemInfo(SYSTEM_INFO* pSystemInfo) {
+BOOL GetSystemInfoWrapper(SYSTEM_INFO* pSystemInfo) {
     if(! pSystemInfo) {
-        LogError("Invalid parameter for GetSystemInfo");
+        LogError("Invalid parameter for GetSystemInfoWrapper");
         return FALSE;
     }
 
@@ -207,23 +207,27 @@ BOOL GetDeviceInfo(DEVICE_INFO* pDeviceInfo) {
 
     // Getting system information
     SYSTEM_INFO sysInfo;
-    GetSystemInfo(&sysInfo);
+    GetSystemInfoWrapper(&sysInfo);
 
     // Getting system version
     OSVERSIONINFOA osInfo;
     GetSystemVersion(&osInfo);
 
     // Filling the device information structure
-    pDeviceInfo->processorArchitecture = sysInfo.wProcessorArchitecture;
-    pDeviceInfo->numberOfProcessors = sysInfo.dwNumberOfProcessors;
-    pDeviceInfo->pageSize = sysInfo.dwPageSize;
-    pDeviceInfo->majorVersion = osInfo.dwMajorVersion;
-    pDeviceInfo->minorVersion = osInfo.dwMinorVersion;
-    pDeviceInfo->buildNumber = osInfo.dwBuildNumber;
+    pDeviceInfo->wProcessorArchitecture = sysInfo.wProcessorArchitecture;
+    pDeviceInfo->dwNumberOfProcessors = sysInfo.dwNumberOfProcessors;
+    pDeviceInfo->dwPageSize = sysInfo.dwPageSize;
+    pDeviceInfo->dwMajorVersion = osInfo.dwMajorVersion;
+    pDeviceInfo->dwMinorVersion = osInfo.dwMinorVersion;
+    pDeviceInfo->dwBuildNumber = osInfo.dwBuildNumber;
 
     // Copying the platform name
-    strncpy(pDeviceInfo->platformId, osInfo.szPlatformId, sizeof(pDeviceInfo->platformId) - 1);
-    pDeviceInfo->platformId[sizeof(pDeviceInfo->platformId) - 1] = '\0';
+    strncpy_s(
+        pDeviceInfo->szPlatformId,
+        sizeof(pDeviceInfo->szPlatformId),
+        osInfo.szCSDVersion,
+        _TRUNCATE);
+    pDeviceInfo->szPlatformId[sizeof(pDeviceInfo->szPlatformId) - 1] = '\0';
 
     LogMessage("Device information retrieved successfully");
     return TRUE;

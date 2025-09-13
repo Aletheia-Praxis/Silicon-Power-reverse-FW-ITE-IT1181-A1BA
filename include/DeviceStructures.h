@@ -130,6 +130,15 @@ typedef struct _DEVICE_VOLUME_INFO {
 
 // Device information structure (based on decompiled code analysis)
 typedef struct _DEVICE_INFO {
+    // System Information
+    WORD wProcessorArchitecture;
+    DWORD dwNumberOfProcessors;
+    DWORD dwPageSize;
+    DWORD dwMajorVersion;
+    DWORD dwMinorVersion;
+    DWORD dwBuildNumber;
+    CHAR szPlatformId[128];
+
     // Device state flags
     BOOL isInitialized;  // 0x00: Initialization flag
     BOOL deviceFound;    // 0x04: Device found flag
