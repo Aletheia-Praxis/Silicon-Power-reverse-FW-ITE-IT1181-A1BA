@@ -1,7 +1,5 @@
 # Test project for URescue Reverse Engineering
-
-# Including directories
-include_directories(${CMAKE_SOURCE_DIR}/include)
+project(URescueTests)
 
 # Adding test files
 set(TEST_SOURCES
@@ -11,13 +9,17 @@ set(TEST_SOURCES
 # Creating the test executable
 add_executable(URescueTests ${TEST_SOURCES})
 
+# Include directories
+target_include_directories(URescueTests PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+)
+
 # Linking libraries
-target_link_libraries(URescueTests kernel32 user32)
+target_link_libraries(URescueTests PRIVATE URescueLib)
 
 # Windows compilation settings
 if(WIN32)
     target_compile_definitions(URescueTests PRIVATE
-        WIN32
         _CONSOLE
         _UNICODE
         UNICODE
@@ -31,8 +33,3 @@ if(WIN32)
         )
     endif()
 endif()
-
-# Setting output path
-set_target_properties(URescueTests PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-)

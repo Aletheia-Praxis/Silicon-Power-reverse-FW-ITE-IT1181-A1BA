@@ -19,23 +19,14 @@ set(CMAKE_MFC_FLAG 2)  # Use MFC in a Shared DLL
 set(CMAKE_CXX_FLAGS_DEBUG "/MDd /Zi /Ob0 /Od /RTC1")
 set(CMAKE_CXX_FLAGS_RELEASE "/MD /O2 /Ob2 /DNDEBUG")
 
-# Set output directories
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+# Set output directories for all targets
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/$<CONFIG>)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/$<CONFIG>)
 
-# Include directories
-include_directories(
-    include
-    resources
-)
-
-# Source files
-set(SOURCES
-    src/main.cpp
-    src/URescueMain.cpp
+# Source files for the library
+set(LIB_SOURCES
     src/URescueCore.cpp
-    src/URescueGUI.cpp
     src/SystemManager.cpp
     src/ITEController.cpp
     src/FirmwareManager.cpp
@@ -50,31 +41,40 @@ set(SOURCES
     src/ResourceManager.cpp
     src/FileOperations.cpp
     src/CryptoManager.cpp
-    # src/Dialogs.cpp  # Excluded due to duplicate implementations in URescueGUI.cpp
     src/Globals.cpp
     src/CRTFunctions.cpp
 )
 
-# Header files
-set(HEADERS
-    include/URescueCore.h
-    include/SystemManager.h
-    include/ITEController.h
-    include/FirmwareManager.h
-    include/USBDevice.h
-    include/Utilities.h
-    include/ErrorHandler.h
-    include/iTEUFDrs.h
-    include/SDKLoader.h
-    include/SDKAPIs.h
-    include/DeviceStructures.h
+# Create static library
+add_library(URescueLib STATIC ${LIB_SOURCES})
+
+# Include directories for the library
+target_include_directories(URescueLib PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources
+)
+
+# Source files for the executable
+set(APP_SOURCES
+    src/main.cpp
+    src/URescueMain.cpp
+    src/URescueGUI.cpp
 )
 
 # Create executable
-add_executable(URescue ${SOURCES} ${HEADERS})
+add_executable(URescue ${APP_SOURCES})
+
+# Link library to executable
+target_link_libraries(URescue PRIVATE URescueLib)
+
+# Include directories for the executable
+target_include_directories(URescue PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources
+)
 
 # Link libraries (with MFC support)
-target_link_libraries(URescue
+target_link_libraries(URescue PRIVATE
     kernel32
     user32
     gdi32
@@ -96,6 +96,9 @@ set_target_properties(URescue PROPERTIES
     WIN32_EXECUTABLE TRUE
     OUTPUT_NAME "URescue_v81D.2.24.2"
 )
+
+# Add tests subdirectory
+add_subdirectory(tests)
 
 # Copy resources
 file(COPY resources DESTINATION ${CMAKE_BINARY_DIR}/bin)
