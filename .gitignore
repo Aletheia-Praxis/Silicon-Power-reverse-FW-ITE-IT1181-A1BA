@@ -336,3 +336,4 @@ $RECYCLE.BIN/
 /*.tar.gz
 ghidra_mcp_bridge.log
 .github/*.md
+.github/instructions/*.md
