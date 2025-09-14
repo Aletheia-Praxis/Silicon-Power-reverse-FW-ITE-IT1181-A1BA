@@ -50,7 +50,7 @@ set(SOURCES
     src/ResourceManager.cpp
     src/FileOperations.cpp
     src/CryptoManager.cpp
-    src/Dialogs.cpp
+    # src/Dialogs.cpp  # Excluded due to duplicate implementations in URescueGUI.cpp
     src/Globals.cpp
     src/CRTFunctions.cpp
 )

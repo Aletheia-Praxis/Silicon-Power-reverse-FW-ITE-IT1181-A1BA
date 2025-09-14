@@ -5,6 +5,9 @@
 // Main function of the URescue program
 int FUN_004845e0(void);
 
+// Main application wrapper function
+int RunURescueApplication(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow);
+
 // MFC WinMain function
 int AfxWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow);
 

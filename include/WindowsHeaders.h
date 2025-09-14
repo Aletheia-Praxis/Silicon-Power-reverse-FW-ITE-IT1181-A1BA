@@ -18,6 +18,19 @@
     #define NOMINMAX
 #endif
 
+// Fix USB spec struct conflicts by defining ULONG before including USB headers
+#ifndef ULONG
+typedef unsigned long ULONG;
+#endif
+
+#ifndef USHORT
+typedef unsigned short USHORT;
+#endif
+
+#ifndef UCHAR
+typedef unsigned char UCHAR;
+#endif
+
 // Include winsock2 first to prevent redefinition errors
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -37,8 +50,8 @@
 #include <objbase.h>
 #include <oleauto.h>
 
-// USB and device I/O
-#include <usbioctl.h>
+// USB and device I/O - exclude problematic usbioctl.h for now
+// #include <usbioctl.h>
 
 // Standard C++ includes
 #include <algorithm>
@@ -78,15 +91,15 @@ typedef unsigned int UINT;
 #endif
 
 #ifndef LPVOID
-typedef void* LPVOID;
+typedef void *LPVOID;
 #endif
 
 #ifndef LPCVOID
-typedef const void* LPCVOID;
+typedef const void *LPCVOID;
 #endif
 
 #ifndef HANDLE
-typedef void* HANDLE;
+typedef void *HANDLE;
 #endif
 
 #ifndef INVALID_HANDLE_VALUE
@@ -97,3 +110,7 @@ typedef void* HANDLE;
 #ifndef ARRAYSIZE
     #define ARRAYSIZE(a) (sizeof(a) / sizeof(a[0]))
 #endif
+
+// Forward declarations for global GUIDs defined in Globals.cpp
+extern const GUID GUID_DEVCLASS_USB;
+extern const GUID GUID_DEVINTERFACE_USB_DEVICE;

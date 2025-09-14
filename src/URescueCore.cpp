@@ -1,3 +1,7 @@
+#ifndef _WIN32_WINNT
+    #define _WIN32_WINNT 0x0601  // Windows 7+
+#endif
+
 #include "../include/URescueCore.h"
 
 #include <stdio.h>
@@ -361,4 +365,86 @@ BOOL UpdateSettings(PURESCUE_SETTINGS pSettings) {
 
     LogMessage("Settings updated successfully");
     return TRUE;
+}
+
+// Missing function implementations
+
+int LoadFirmwareFromFile(const char* filename, void** buffer, unsigned long* size) {
+    LogMessage("LoadFirmwareFromFile: %s", filename);
+
+    if(! filename || ! buffer || ! size) {
+        LogError("Invalid parameters");
+        return 0;
+    }
+
+    // Stub implementation - return success for now
+    *buffer = nullptr;
+    *size = 0;
+    return 1;
+}
+
+int WriteFirmwareToDevice(void* device, const void* firmware, unsigned long size) {
+    LogMessage("WriteFirmwareToDevice: size=%lu", size);
+
+    if(! device || ! firmware) {
+        LogError("Invalid parameters");
+        return 0;
+    }
+
+    // Stub implementation
+    return 1;
+}
+
+int VerifyFirmwareOnDevice(void* device, const void* firmware, unsigned long size) {
+    LogMessage("VerifyFirmwareOnDevice: size=%lu", size);
+
+    if(! device || ! firmware) {
+        LogError("Invalid parameters");
+        return 0;
+    }
+
+    // Stub implementation
+    return 1;
+}
+
+void BuildDatabasePathsA(
+    const char* basePath,
+    char* dbPath,
+    unsigned int dbPathSize,
+    char* backupPath,
+    unsigned int backupPathSize) {
+    LogMessage("BuildDatabasePathsA: %s", basePath);
+
+    if(basePath && dbPath && dbPathSize > 0) {
+        strncpy(dbPath, basePath, dbPathSize - 1);
+        dbPath[dbPathSize - 1] = '\0';
+        strcat(dbPath, "\\database");
+    }
+
+    if(basePath && backupPath && backupPathSize > 0) {
+        strncpy(backupPath, basePath, backupPathSize - 1);
+        backupPath[backupPathSize - 1] = '\0';
+        strcat(backupPath, "\\backup");
+    }
+}
+
+void BuildBinPathA(
+    const char* basePath,
+    unsigned char controller,
+    unsigned char variant,
+    bool isDebug,
+    char* binPath,
+    unsigned int binPathSize) {
+    LogMessage("BuildBinPathA: %s, controller=%d, variant=%d", basePath, controller, variant);
+
+    if(basePath && binPath && binPathSize > 0) {
+        snprintf(
+            binPath,
+            binPathSize,
+            "%s\\bin\\ITE_%d_%d%s.bin",
+            basePath,
+            controller,
+            variant,
+            isDebug ? "_debug" : "");
+    }
 }

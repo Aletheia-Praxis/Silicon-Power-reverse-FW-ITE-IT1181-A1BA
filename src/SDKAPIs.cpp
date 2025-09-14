@@ -84,6 +84,13 @@ FARPROC g_ED3Address2CCBAddress = nullptr;  // _DAT_004ad4fc
 FARPROC g_BlkAddr2RawAddr = nullptr;        // DAT_004ad504
 
 // Vendor Data Record (VDR) APIs
+FARPROC g_VDR_LoadDriver = nullptr;
+FARPROC g_VDR_FreeDriver = nullptr;
+FARPROC g_VDR_GetSystemAddr = nullptr;
+FARPROC g_VDR_GetDeviceInquiry = nullptr;
+FARPROC g_VDR_CheckDeviceSupport = nullptr;
+FARPROC g_VDR_GetLunIndex = nullptr;
+FARPROC g_VDR_GetDeviceID = nullptr;
 FARPROC g_VDR_ReadWriteLUNConfig = nullptr;   // DAT_004ad64c
 FARPROC g_VDR_ReadLUNData = nullptr;          // _DAT_004ad648
 FARPROC g_VDR_WriteLUNData = nullptr;         // _DAT_004ad644
@@ -158,6 +165,15 @@ BOOL BindSDKAPIs(HMODULE hSDK) {
     LogMessage("Binding 181FlashSDK APIs...");
 
     // Bind all APIs in the exact order as in the decompiled function
+    // VDR APIs first (these are the core functions needed)
+    BIND_API(g_VDR_LoadDriver, "VDR_LoadDriver");
+    BIND_API(g_VDR_FreeDriver, "VDR_FreeDriver");
+    BIND_API(g_VDR_GetSystemAddr, "VDR_GetSystemAddr");
+    BIND_API(g_VDR_GetDeviceInquiry, "VDR_GetDeviceInquiry");
+    BIND_API(g_VDR_CheckDeviceSupport, "VDR_CheckDeviceSupport");
+    BIND_API(g_VDR_GetLunIndex, "VDR_GetLunIndex");
+    BIND_API(g_VDR_GetDeviceID, "VDR_GetDeviceID");
+
     // Flash Layer Helper (FLH) APIs
     BIND_API(g_FLH_GetInfoFromDataBaseByID, "FLH_GetInfoFromDataBaseByID");
     BIND_API(g_FLH_GetFlashDataFromDataBase, "FLH_GetFlashDataFromDataBase");
@@ -300,6 +316,15 @@ BOOL BindSDKAPIs(HMODULE hSDK) {
 
 // Function to clear all API pointers
 void ClearSDKAPIs() {
+    // VDR APIs
+    g_VDR_LoadDriver = nullptr;
+    g_VDR_FreeDriver = nullptr;
+    g_VDR_GetSystemAddr = nullptr;
+    g_VDR_GetDeviceInquiry = nullptr;
+    g_VDR_CheckDeviceSupport = nullptr;
+    g_VDR_GetLunIndex = nullptr;
+    g_VDR_GetDeviceID = nullptr;
+
     // Flash Layer Helper (FLH) APIs
     g_FLH_GetInfoFromDataBaseByID = nullptr;
     g_FLH_GetFlashDataFromDataBase = nullptr;
@@ -351,4 +376,43 @@ void ClearSDKAPIs() {
 
     // Continue clearing all other API pointers...
     // (Abbreviated for brevity - in real implementation, clear all pointers)
+}
+
+// VDR API function implementations (stub implementations for linking)
+extern "C" {
+
+int VDR_LoadDriver() {
+    LogMessage("VDR_LoadDriver called");
+    return 1;  // Success
+}
+
+int VDR_FreeDriver() {
+    LogMessage("VDR_FreeDriver called");
+    return 1;  // Success
+}
+
+int VDR_GetSystemAddr() {
+    LogMessage("VDR_GetSystemAddr called");
+    return 0;  // Return some address or 0 for stub
+}
+
+int VDR_GetDeviceInquiry() {
+    LogMessage("VDR_GetDeviceInquiry called");
+    return 1;  // Success
+}
+
+int VDR_CheckDeviceSupport() {
+    LogMessage("VDR_CheckDeviceSupport called");
+    return 1;  // Supported
+}
+
+int VDR_GetLunIndex() {
+    LogMessage("VDR_GetLunIndex called");
+    return 0;  // Return LUN index
+}
+
+int VDR_GetDeviceID() {
+    LogMessage("VDR_GetDeviceID called");
+    return 0x1181;  // ITE IT1181
+}
 }

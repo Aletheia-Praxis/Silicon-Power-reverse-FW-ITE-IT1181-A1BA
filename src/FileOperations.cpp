@@ -233,7 +233,7 @@ BOOL FileExists(LPCSTR lpFileName) {
 }
 
 // Function to create a backup copy of a file
-BOOL CreateBackup(LPCSTR lpFileName, LPCSTR lpBackupSuffix) {
+BOOL CreateFileBackup(LPCSTR lpFileName, LPCSTR lpBackupSuffix) {
     if(! FileExists(lpFileName)) {
         LogError("Source file does not exist: %s", lpFileName);
         return FALSE;

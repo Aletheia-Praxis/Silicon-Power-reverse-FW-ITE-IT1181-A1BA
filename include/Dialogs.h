@@ -5,7 +5,7 @@
 #include <afxinet.h>
 #include <afxwin.h>
 #include <setupapi.h>
-#include <winusb.h>
+// #include <winusb.h>  // Excluded to avoid usbspec.h conflicts
 
 // Dialog Identifiers
 #define IDD_DEVICE_SELECT 140

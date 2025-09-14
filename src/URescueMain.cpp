@@ -1,3 +1,7 @@
+#ifndef _WIN32_WINNT
+    #define _WIN32_WINNT 0x0601  // Windows 7+
+#endif
+
 #include "..//include/URescueMain.h"
 
 #include "..//include/SDKLoader.h"
@@ -8,7 +12,13 @@
 static iTEUFDrs *g_pURescueApp = nullptr;
 
 // Main function of the URescue program
-int RunURescueApplication(void) {
+int RunURescueApplication(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow) {
+    // Ignore unused parameters for now
+    (void)hInstance;
+    (void)hPrevInstance;
+    (void)lpCmdLine;
+    (void)nCmdShow;
+    
     LogMessage("URescue application starting...");
 
     // Get module directory for SDK loading
@@ -81,5 +91,5 @@ int AfxWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, i
     }
 
     // Run the main function
-    return RunURescueApplication();
+    return RunURescueApplication(hInstance, hPrevInstance, lpCmdLine, nCmdShow);
 }

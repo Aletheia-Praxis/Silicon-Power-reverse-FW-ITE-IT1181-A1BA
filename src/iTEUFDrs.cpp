@@ -1015,3 +1015,40 @@ BOOL iTEUFDrs::CopyBankData(BYTE volumeIndex) {
     // Dummy implementation
     return TRUE;
 }
+
+// Missing method implementations
+
+int iTEUFDrs::GetBinFilePath(
+    BYTE controller,
+    const char* basePath,
+    char* binPath,
+    unsigned long pathSize) {
+    if(! basePath || ! binPath || pathSize == 0) {
+        LogError("GetBinFilePath: Invalid parameters");
+        return 0;
+    }
+
+    // Build binary file path based on controller type
+    const char* controllerName = (controller == 0) ? "1181" : "1176";
+    int result = snprintf(binPath, pathSize, "%s\\%s.bin", basePath, controllerName);
+
+    if(result < 0 || result >= (int) pathSize) {
+        LogError("GetBinFilePath: Path too long");
+        return 0;
+    }
+
+    LogMessage("GetBinFilePath: %s", binPath);
+    return 1;
+}
+
+UINT iTEUFDrs::OpenDriveHandleAgain(int deviceIndex) {
+    LogMessage("OpenDriveHandleAgain: deviceIndex=%d", deviceIndex);
+
+    if(deviceIndex < 0 || deviceIndex >= MAX_VOLUMES) {
+        LogError("OpenDriveHandleAgain: Invalid device index");
+        return 0;
+    }
+
+    // Stub implementation - return success for now
+    return 1;
+}

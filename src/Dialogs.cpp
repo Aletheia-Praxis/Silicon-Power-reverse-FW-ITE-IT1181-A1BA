@@ -1,4 +1,8 @@
 // clang-format off
+#ifndef _WIN32_WINNT
+    #define _WIN32_WINNT 0x0601  // Windows 7+
+#endif
+
 #include "../include/WindowsHeaders.h"
 #include "../resources/resource.h"
 #include "../include/Dialogs.h"

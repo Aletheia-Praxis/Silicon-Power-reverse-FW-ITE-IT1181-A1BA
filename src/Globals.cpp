@@ -1,7 +1,11 @@
 // clang-format off
+#ifndef _WIN32_WINNT
+    #define _WIN32_WINNT 0x0601  // Windows 7+
+#endif
+
 #include <windows.h>
 #include <setupapi.h>
-#include <winusb.h>
+// #include <winusb.h>  // Temporarily excluded to avoid usbspec.h conflicts
 // clang-format on
 
 // Global GUIDs for USB devices
