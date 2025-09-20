@@ -15,10 +15,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Enable MFC support with shared DLL
 set(CMAKE_MFC_FLAG 2)  # Use MFC in a Shared DLL
 
-# Set runtime library to MD for MFC
-set(CMAKE_CXX_FLAGS_DEBUG "/MDd /Zi /Ob0 /Od /RTC1")
-set(CMAKE_CXX_FLAGS_RELEASE "/MD /O2 /Ob2 /DNDEBUG")
-
 # Set output directories for all targets
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/$<CONFIG>)
@@ -48,6 +44,12 @@ set(LIB_SOURCES
 # Create static library
 add_library(URescueLib STATIC ${LIB_SOURCES})
 
+# Set compiler options for the library
+target_compile_options(URescueLib PRIVATE
+    $<$<CONFIG:Debug>:/MDd /Zi /Ob0 /Od /RTC1>
+    $<$<CONFIG:Release>:/MD /O2 /Ob2 /DNDEBUG>
+)
+
 # Include directories for the library
 target_include_directories(URescueLib PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -63,6 +65,12 @@ set(APP_SOURCES
 
 # Create executable
 add_executable(URescue ${APP_SOURCES})
+
+# Set compiler options for the executable
+target_compile_options(URescue PRIVATE
+    $<$<CONFIG:Debug>:/MDd /Zi /Ob0 /Od /RTC1>
+    $<$<CONFIG:Release>:/MD /O2 /Ob2 /DNDEBUG>
+)
 
 # Link library to executable
 target_link_libraries(URescue PRIVATE URescueLib)
@@ -100,8 +108,13 @@ set_target_properties(URescue PROPERTIES
 # Add tests subdirectory
 add_subdirectory(tests)
 
-# Copy resources
-file(COPY resources DESTINATION ${CMAKE_BINARY_DIR}/bin)
+# Copy resources after build
+add_custom_command(TARGET URescue POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources"
+        "$<TARGET_FILE_DIR:URescue>/resources"
+    COMMENT "Copying resources to build directory"
+)
 
 # Install rules
 install(TARGETS URescue
