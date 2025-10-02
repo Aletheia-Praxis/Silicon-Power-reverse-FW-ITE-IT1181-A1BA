@@ -1,259 +1,219 @@
 #pragma once
+
+// This file contains reconstructed function definitions for the 181FlashSDK.dll
+// Based on reverse engineering of URescue_v81D.2.24.2.exe
+// Total: 106 functions identified from iTEUFDrs::LoadSDKFunctions analysis
+
 #include <windows.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// Function pointer types
-// TODO: Define proper function signatures instead of using FARPROC
+// =============================================================================
+// Flash Hardware Layer (FLH_*) - Low-level flash operations - 38 functions
+// =============================================================================
+typedef BOOL (*PFN_FLH_GetInfoFromDataBaseByID)(DWORD dwID, LPVOID pInfo);
+typedef BOOL (*PFN_FLH_GetFlashDataFromDataBase)(LPVOID pData);
+typedef BOOL (*PFN_FLH_GetFlashDataFromMemory)(LPVOID pData);
+typedef BOOL (*PFN_FLH_ReadRootTable)(LPVOID pBuffer);
+typedef BOOL (*PFN_FLH_WriteRootTable)(LPVOID pBuffer);
+typedef BOOL (*PFN_FLH_ReadCISTable)(LPVOID pBuffer);
+typedef BOOL (*PFN_FLH_WriteCISTable)(LPVOID pBuffer);
+typedef BOOL (*PFN_FLH_ReadISPData)(LPVOID pBuffer);
+typedef BOOL (*PFN_FLH_WriteISPData)(LPVOID pBuffer);
+typedef BOOL (*PFN_FLH_ReadLatestWBT)(LPVOID pBuffer);
+typedef BOOL (*PFN_FLH_FindRootTable)(LPVOID pBuffer);
+typedef BOOL (*PFN_FLH_LBA2PhysicalFlash)(DWORD dwLBA, LPVOID pPhysAddr);
+typedef BOOL (*PFN_FLH_SetLedBlink)(BOOL bBlink);
+typedef BOOL (
+    *PFN_FLH_PhyiscalRead)(LPVOID pAddr, LPVOID pBuffer, DWORD dwSize);  // Note: typo in original
+typedef BOOL (
+    *PFN_FLH_PhyiscalWrite)(LPVOID pAddr, LPVOID pBuffer, DWORD dwSize);  // Note: typo in original
+typedef BOOL (*PFN_FLH_IsGoodBlock)(DWORD dwBlockAddr);
+typedef BOOL (*PFN_FLH_IsTableBlock)(DWORD dwBlockAddr);
+typedef BOOL (*PFN_FLH_MarkBad)(DWORD dwBlockAddr);
+typedef DWORD (*PFN_FLH_GetRealBlocksPerDie)(void);
+typedef BOOL (*PFN_FLH_BlockIsGap)(DWORD dwBlockAddr);
+typedef BOOL (*PFN_FLH_HandleMassBlocksPerChip)(LPVOID pParams);
+typedef BOOL (*PFN_FLH_ScanNewBlock)(LPVOID pParams);
+typedef DWORD (*PFN_FLH_GetRetryRegister)(void);
+typedef DWORD (*PFN_FLH_CISCheckSum_Calculate)(LPVOID pData, DWORD dwSize);
+typedef DWORD (*PFN_FLH_CalCulate_ECCNO)(LPVOID pData);
+typedef BOOL (*PFN_FLH_ArrangeSegmentPara)(LPVOID pParams);
+typedef BOOL (*PFN_FLH_ReadSpare)(DWORD dwAddr, LPVOID pBuffer);
+typedef BOOL (*PFN_FLH_ReadID)(LPVOID pBuffer);
+typedef BOOL (*PFN_FLH_BlockErase)(DWORD dwBlockAddr);
+typedef BOOL (*PFN_FLH_SetSLCFlag)(BOOL bEnable);
+typedef BOOL (*PFN_FLH_CPUReset)(void);
+typedef BOOL (*PFN_FLH_InitCTRL)(void);
+typedef BOOL (*PFN_FLH_WriteRootTableWithIspPath)(LPVOID pBuffer);
+typedef BOOL (*PFN_FLH_ScanE2NANDBlockPerChip)(LPVOID pParams);
+typedef BOOL (*PFN_FLH_ReadBCM)(LPVOID pBuffer);
+typedef BOOL (*PFN_FLH_InitCodeWithIspPath)(LPVOID pParams);
+typedef BOOL (*PFN_FLH_GetChannelCeNoAndMap)(LPVOID pParams);
+typedef BOOL (*PFN_FLH_InitCodeForReady)(void);
 
-typedef FARPROC FLH_GetInfoFromDataBaseByID_t;
-typedef FARPROC FLH_GetFlashDataFromDataBase_t;
-typedef FARPROC FLH_GetFlashDataFromMemory_t;
-typedef FARPROC FLH_ReadRootTable_t;
-typedef FARPROC FLH_WriteRootTable_t;
-typedef FARPROC FLH_ReadCISTable_t;
-typedef FARPROC FLH_WriteCISTable_t;
-typedef FARPROC FLH_ReadISPData_t;
-typedef FARPROC FLH_WriteISPData_t;
-typedef FARPROC FLH_ReadLatestWBT_t;
-typedef FARPROC FLH_FindRootTable_t;
-typedef FARPROC FLH_LBA2PhysicalFlash_t;
-typedef FARPROC FLH_SetLedBlink_t;
-typedef FARPROC FLH_PhyiscalRead_t;
-typedef FARPROC FLH_PhyiscalWrite_t;
-typedef FARPROC FLH_IsGoodBlock_t;
-typedef FARPROC FLH_IsTableBlock_t;
-typedef FARPROC FLH_MarkBad_t;
-typedef FARPROC FLH_GetRealBlocksPerDie_t;
-typedef FARPROC FLH_BlockIsGap_t;
+// =============================================================================
+// Security (SEC_*) - Authentication and password management - 7 functions
+// =============================================================================
+typedef BOOL (*PFN_SEC_DoAuthentication)(LPCSTR pszPassword);
+typedef BOOL (*PFN_SEC_LeaveAuthenticatedState)(void);
+typedef BOOL (*PFN_SEC_GetPasswordHint)(LPSTR pszHint, DWORD dwSize);
+typedef BOOL (*PFN_SEC_SetPasswordHint)(LPCSTR pszHint);
+typedef BOOL (*PFN_SEC_ChangePassword)(LPCSTR pszOldPass, LPCSTR pszNewPass);
+typedef BOOL (*PFN_SEC_GetUserPassword)(LPSTR pszPassword, DWORD dwSize);
+typedef BOOL (*PFN_SEC_GetEncryptedPassword)(LPVOID pBuffer, DWORD dwSize);
 
-// VDR function pointer types
-typedef FARPROC VDR_LoadDriver_t;
-typedef FARPROC VDR_FreeDriver_t;
-typedef FARPROC VDR_GetSystemAddr_t;
-typedef FARPROC VDR_GetDeviceInquiry_t;
-typedef FARPROC VDR_CheckDeviceSupport_t;
-typedef FARPROC VDR_GetLunIndex_t;
-typedef FARPROC VDR_GetDeviceID_t;
+// =============================================================================
+// Logical Unit Number (LUN_*) - Partition management - 7 functions
+// =============================================================================
+typedef BOOL (*PFN_LUN_CreateLun)(LPVOID pLunConfig);
+typedef DWORD (*PFN_LUN_FindLunStartLBAByItemID)(DWORD dwItemID);
+typedef BOOL (*PFN_LUN_CreateApLunNewItemID)(LPVOID pParams);
+typedef BOOL (*PFN_LUN_WriteBadBlockMapToApLun)(LPVOID pBadBlockMap);
+typedef BOOL (*PFN_LUN_ReadBadBlockMapFromApLun)(LPVOID pBadBlockMap);
+typedef DWORD (*PFN_LUN_FindOptimumOffsetCap)(LPVOID pParams);
+typedef DWORD (*PFN_LUN_CalIsoSize)(LPVOID pParams);
 
-typedef FARPROC SEC_DoAuthentication_t;
-typedef FARPROC SEC_LeaveAuthenticatedState_t;
-typedef FARPROC SEC_GetPasswordHint_t;
-typedef FARPROC SEC_SetPasswordHint_t;
-typedef FARPROC SEC_ChangePassword_t;
-typedef FARPROC LUN_CreateLun_t;
-typedef FARPROC LUN_FindLunStartLBAByItemID_t;
-typedef FARPROC LUN_CreateApLunNewItemID_t;
-typedef FARPROC LUN_WriteBadBlockMapToApLun_t;
-typedef FARPROC LUN_ReadBadBlockMapFromApLun_t;
-typedef FARPROC LUN_FindOptimumOffsetCap_t;
-typedef FARPROC FMT_Format_t;
-typedef FARPROC FMT_GetOptimumCapacity_t;
-typedef FARPROC FMT_GetOptimumLunConfig_t;
-typedef FARPROC FMT_GetOSCapacity_t;
-typedef FARPROC STD_Inquiry_t;
-typedef FARPROC STD_ReadCapacity_t;
-typedef FARPROC STD_LogicalRead_t;
-typedef FARPROC STD_LogicalWrite_t;
-typedef FARPROC SwapDWORD_t;
-typedef FARPROC SwapWORD_t;
-typedef FARPROC CCBAddress2RawAddress_t;
-typedef FARPROC RawAddress2CCBAddress_t;
-typedef FARPROC CCBAddress2ED3Address_t;
-typedef FARPROC ED3Address2CCBAddress_t;
-typedef FARPROC VDR_ReadWriteLUNConfig_t;
-typedef FARPROC VDR_ReadLUNData_t;
-typedef FARPROC VDR_WriteLUNData_t;
-typedef FARPROC VDR_ReadXData_t;
-typedef FARPROC VDR_WriteXData_t;
-typedef FARPROC VDR_ReadIData_t;
-typedef FARPROC VDR_WriteIData_t;
-typedef FARPROC VDR_ReadSysAddr_t;
-typedef FARPROC VDR_WriteSysAddr_t;
-typedef FARPROC VDR_CheckSYSReady_t;
-typedef FARPROC VDR_SetSYSReady_t;
-typedef FARPROC VDR_EndCode_t;
-typedef FARPROC VDR_DeviceChange_t;
-typedef FARPROC VDR_MediaChange_t;
-typedef FARPROC VDR_WriteProtect_t;
-typedef FARPROC VDR_RWCurrentLUNType_t;
-typedef FARPROC VDR_HiddenArea_t;
-typedef FARPROC VDR_ReadWriteLUNNo_t;
-typedef FARPROC VDR_ReadLUNID_t;
-typedef FARPROC VDR_WriteLUNID_t;
-typedef FARPROC VDR_ReadLUNIndex_t;
-typedef FARPROC VDR_FlushCache_t;
-typedef FARPROC VDR_ReadPage_t;
-typedef FARPROC VDR_WritePage_t;
-typedef FARPROC VDR_WriteBlock_TLC_t;
-typedef FARPROC VDR_GetSecurityStatus_t;
-typedef FARPROC MP_CreateSystem_t;
-typedef FARPROC MP_EraseSystemTable_t;
-typedef FARPROC DG_GetBlockPageMapFromFlash_t;
-typedef FARPROC Is168Device_t;
-typedef FARPROC GetLastestPage_t;
-typedef FARPROC SEC_GetUserPassword_t;
-typedef FARPROC SEC_GetEncryptedPassword_t;
-typedef FARPROC FLH_HandleMassBlocksPerChip_t;
-typedef FARPROC FLH_ScanNewBlock_t;
-typedef FARPROC FLH_GetRetryRegister_t;
-typedef FARPROC VDR_ED3PageRead_t;
-typedef FARPROC VDR_BadTFindRead_t;
-typedef FARPROC DG_SearchReadBadTBlk_t;
-typedef FARPROC DG_CalBlkRequire_t;
-typedef FARPROC VDR_Enhance_SLC_Program_t;
-typedef FARPROC VDR_Disable_SLC_Program_t;
-typedef FARPROC LUN_CalIsoSize_t;
-typedef FARPROC FLH_CISCheckSum_Calculate_t;
-typedef FARPROC FLH_CalCulate_ECCNO_t;
-typedef FARPROC FLH_ArrangeSegmentPara_t;
-typedef FARPROC ADDR_ReadRootTable_t;
-typedef FARPROC FLH_ReadSpare_t;
-typedef FARPROC FLH_ReadID_t;
-typedef FARPROC FLH_BlockErase_t;
-typedef FARPROC FLH_SetSLCFlag_t;
-typedef FARPROC BlkAddr2RawAddr_t;
-typedef FARPROC VDR_MassBlocksProcess_t;
-typedef FARPROC VDR_F_RST_t;
-typedef FARPROC FLH_CPUReset_t;
-typedef FARPROC FLH_InitCTRL_t;
-typedef FARPROC VDR_RootFunc_t;
-typedef FARPROC FLH_WriteRootTableWithIspPath_t;
-typedef FARPROC VDR_RootPageWrite_t;
-typedef FARPROC FLH_ScanE2NANDBlockPerChip_t;
-typedef FARPROC FLH_ReadBCM_t;
-typedef FARPROC VDR_RootAccess_t;
-typedef FARPROC FLH_InitCodeWithIspPath_t;
-typedef FARPROC FLH_GetChannelCeNoAndMap_t;
-typedef FARPROC ADDR_ReadISPData_t;
-typedef FARPROC ADDR_ReadCISData_t;
-typedef FARPROC FLH_InitCodeForReady_t;
+// =============================================================================
+// Format (FMT_*) - Device formatting operations - 4 functions
+// =============================================================================
+typedef BOOL (*PFN_FMT_Format)(LPVOID pFormatParams);
+typedef DWORD (*PFN_FMT_GetOptimumCapacity)(void);
+typedef BOOL (*PFN_FMT_GetOptimumLunConfig)(LPVOID pLunConfig);
+typedef DWORD (*PFN_FMT_GetOSCapacity)(void);
 
-// Global function pointers
-extern FLH_GetInfoFromDataBaseByID_t FLH_GetInfoFromDataBaseByID;
-extern FLH_GetFlashDataFromDataBase_t FLH_GetFlashDataFromDataBase;
-extern FLH_GetFlashDataFromMemory_t FLH_GetFlashDataFromMemory;
-extern FLH_ReadRootTable_t FLH_ReadRootTable;
-extern FLH_WriteRootTable_t FLH_WriteRootTable;
-extern FLH_ReadCISTable_t FLH_ReadCISTable;
-extern FLH_WriteCISTable_t FLH_WriteCISTable;
-extern FLH_ReadISPData_t FLH_ReadISPData;
-extern FLH_WriteISPData_t FLH_WriteISPData;
-extern FLH_ReadLatestWBT_t FLH_ReadLatestWBT;
-extern FLH_FindRootTable_t FLH_FindRootTable;
-extern FLH_LBA2PhysicalFlash_t FLH_LBA2PhysicalFlash;
-extern FLH_SetLedBlink_t FLH_SetLedBlink;
-extern FLH_PhyiscalRead_t FLH_PhyiscalRead;
-extern FLH_PhyiscalWrite_t FLH_PhyiscalWrite;
-extern FLH_IsGoodBlock_t FLH_IsGoodBlock;
-extern FLH_IsTableBlock_t FLH_IsTableBlock;
-extern FLH_MarkBad_t FLH_MarkBad;
-extern FLH_GetRealBlocksPerDie_t FLH_GetRealBlocksPerDie;
-extern FLH_BlockIsGap_t FLH_BlockIsGap;
+// =============================================================================
+// Standard Operations (STD_*) - SCSI-like standard commands - 4 functions
+// =============================================================================
+typedef BOOL (*PFN_STD_Inquiry)(LPVOID pInquiryData);
+typedef BOOL (*PFN_STD_ReadCapacity)(LPVOID pCapacityData);
+typedef BOOL (*PFN_STD_LogicalRead)(DWORD dwLBA, DWORD dwSectors, LPVOID pBuffer);
+typedef BOOL (*PFN_STD_LogicalWrite)(DWORD dwLBA, DWORD dwSectors, LPVOID pBuffer);
 
-// VDR functions
-extern VDR_LoadDriver_t VDR_LoadDriver;
-extern VDR_FreeDriver_t VDR_FreeDriver;
-extern VDR_GetSystemAddr_t VDR_GetSystemAddr;
-extern VDR_GetDeviceInquiry_t VDR_GetDeviceInquiry;
-extern VDR_CheckDeviceSupport_t VDR_CheckDeviceSupport;
-extern VDR_GetLunIndex_t VDR_GetLunIndex;
-extern VDR_GetDeviceID_t VDR_GetDeviceID;
+// =============================================================================
+// Vendor Specific (VDR_*) - ITE-specific operations - 35 functions
+// =============================================================================
+typedef BOOL (*PFN_VDR_ReadWriteLUNConfig)(BOOL bWrite, LPVOID pConfig);
+typedef BOOL (*PFN_VDR_ReadLUNData)(DWORD dwLUN, LPVOID pBuffer, DWORD dwSize);
+typedef BOOL (*PFN_VDR_WriteLUNData)(DWORD dwLUN, LPVOID pBuffer, DWORD dwSize);
+typedef BOOL (*PFN_VDR_ReadXData)(LPVOID pBuffer, DWORD dwSize);
+typedef BOOL (*PFN_VDR_WriteXData)(LPVOID pBuffer, DWORD dwSize);
+typedef BOOL (*PFN_VDR_ReadIData)(LPVOID pBuffer, DWORD dwSize);
+typedef BOOL (*PFN_VDR_WriteIData)(LPVOID pBuffer, DWORD dwSize);
+typedef BOOL (*PFN_VDR_ReadSysAddr)(DWORD dwAddr, LPVOID pBuffer);
+typedef BOOL (*PFN_VDR_WriteSysAddr)(DWORD dwAddr, LPVOID pBuffer);
+typedef BOOL (*PFN_VDR_CheckSYSReady)(void);
+typedef BOOL (*PFN_VDR_SetSYSReady)(BOOL bReady);
+typedef DWORD (*PFN_VDR_EndCode)(void);
+typedef BOOL (*PFN_VDR_DeviceChange)(void);
+typedef BOOL (*PFN_VDR_MediaChange)(void);
+typedef BOOL (*PFN_VDR_WriteProtect)(BOOL bProtect);
+typedef BOOL (*PFN_VDR_RWCurrentLUNType)(BOOL bWrite, LPVOID pType);
+typedef BOOL (*PFN_VDR_HiddenArea)(BOOL bEnable);
+typedef BOOL (*PFN_VDR_ReadWriteLUNNo)(BOOL bWrite, LPVOID pLunNo);
+typedef BOOL (*PFN_VDR_ReadLUNID)(DWORD dwLUN, LPVOID pID);
+typedef BOOL (*PFN_VDR_WriteLUNID)(DWORD dwLUN, LPVOID pID);
+typedef BOOL (*PFN_VDR_ReadLUNIndex)(LPVOID pIndex);
+typedef BOOL (*PFN_VDR_FlushCache)(void);
+typedef BOOL (*PFN_VDR_ReadPage)(DWORD dwPageAddr, LPVOID pBuffer);
+typedef BOOL (*PFN_VDR_WritePage)(DWORD dwPageAddr, LPVOID pBuffer);
+typedef BOOL (*PFN_VDR_WriteBlock_TLC)(DWORD dwBlockAddr, LPVOID pBuffer);
+typedef DWORD (*PFN_VDR_GetSecurityStatus)(void);
+typedef BOOL (*PFN_VDR_ED3PageRead)(DWORD dwPageAddr, LPVOID pBuffer);
+typedef BOOL (*PFN_VDR_BadTFindRead)(LPVOID pParams);
+typedef BOOL (*PFN_VDR_Enhance_SLC_Program)(BOOL bEnable);
+typedef BOOL (*PFN_VDR_Disable_SLC_Program)(void);
+typedef BOOL (*PFN_VDR_MassBlocksProcess)(LPVOID pParams);
+typedef BOOL (*PFN_VDR_F_RST)(void);
+typedef BOOL (*PFN_VDR_RootFunc)(LPVOID pParams);
+typedef BOOL (*PFN_VDR_RootPageWrite)(DWORD dwPageAddr, LPVOID pBuffer);
+typedef BOOL (*PFN_VDR_RootAccess)(LPVOID pParams);
 
-extern SEC_DoAuthentication_t SEC_DoAuthentication;
-extern SEC_LeaveAuthenticatedState_t SEC_LeaveAuthenticatedState;
-extern SEC_GetPasswordHint_t SEC_GetPasswordHint;
-extern SEC_SetPasswordHint_t SEC_SetPasswordHint;
-extern SEC_ChangePassword_t SEC_ChangePassword;
-extern LUN_CreateLun_t LUN_CreateLun;
-extern LUN_FindLunStartLBAByItemID_t LUN_FindLunStartLBAByItemID;
-extern LUN_CreateApLunNewItemID_t LUN_CreateApLunNewItemID;
-extern LUN_WriteBadBlockMapToApLun_t LUN_WriteBadBlockMapToApLun;
-extern LUN_ReadBadBlockMapFromApLun_t LUN_ReadBadBlockMapFromApLun;
-extern LUN_FindOptimumOffsetCap_t LUN_FindOptimumOffsetCap;
-extern FMT_Format_t FMT_Format;
-extern FMT_GetOptimumCapacity_t FMT_GetOptimumCapacity;
-extern FMT_GetOptimumLunConfig_t FMT_GetOptimumLunConfig;
-extern FMT_GetOSCapacity_t FMT_GetOSCapacity;
-extern STD_Inquiry_t STD_Inquiry;
-extern STD_ReadCapacity_t STD_ReadCapacity;
-extern STD_LogicalRead_t STD_LogicalRead;
-extern STD_LogicalWrite_t STD_LogicalWrite;
-extern SwapDWORD_t SwapDWORD;
-extern SwapWORD_t SwapWORD;
-extern CCBAddress2RawAddress_t CCBAddress2RawAddress;
-extern RawAddress2CCBAddress_t RawAddress2CCBAddress;
-extern CCBAddress2ED3Address_t CCBAddress2ED3Address;
-extern ED3Address2CCBAddress_t ED3Address2CCBAddress;
-extern VDR_ReadWriteLUNConfig_t VDR_ReadWriteLUNConfig;
-extern VDR_ReadLUNData_t VDR_ReadLUNData;
-extern VDR_WriteLUNData_t VDR_WriteLUNData;
-extern VDR_ReadXData_t VDR_ReadXData;
-extern VDR_WriteXData_t VDR_WriteXData;
-extern VDR_ReadIData_t VDR_ReadIData;
-extern VDR_WriteIData_t VDR_WriteIData;
-extern VDR_ReadSysAddr_t VDR_ReadSysAddr;
-extern VDR_WriteSysAddr_t VDR_WriteSysAddr;
-extern VDR_CheckSYSReady_t VDR_CheckSYSReady;
-extern VDR_SetSYSReady_t VDR_SetSYSReady;
-extern VDR_EndCode_t VDR_EndCode;
-extern VDR_DeviceChange_t VDR_DeviceChange;
-extern VDR_MediaChange_t VDR_MediaChange;
-extern VDR_WriteProtect_t VDR_WriteProtect;
-extern VDR_RWCurrentLUNType_t VDR_RWCurrentLUNType;
-extern VDR_HiddenArea_t VDR_HiddenArea;
-extern VDR_ReadWriteLUNNo_t VDR_ReadWriteLUNNo;
-extern VDR_ReadLUNID_t VDR_ReadLUNID;
-extern VDR_WriteLUNID_t VDR_WriteLUNID;
-extern VDR_ReadLUNIndex_t VDR_ReadLUNIndex;
-extern VDR_FlushCache_t VDR_FlushCache;
-extern VDR_ReadPage_t VDR_ReadPage;
-extern VDR_WritePage_t VDR_WritePage;
-extern VDR_WriteBlock_TLC_t VDR_WriteBlock_TLC;
-extern VDR_GetSecurityStatus_t VDR_GetSecurityStatus;
-extern MP_CreateSystem_t MP_CreateSystem;
-extern MP_EraseSystemTable_t MP_EraseSystemTable;
-extern DG_GetBlockPageMapFromFlash_t DG_GetBlockPageMapFromFlash;
-extern Is168Device_t Is168Device;
-extern GetLastestPage_t GetLastestPage;
-extern SEC_GetUserPassword_t SEC_GetUserPassword;
-extern SEC_GetEncryptedPassword_t SEC_GetEncryptedPassword;
-extern FLH_HandleMassBlocksPerChip_t FLH_HandleMassBlocksPerChip;
-extern FLH_ScanNewBlock_t FLH_ScanNewBlock;
-extern FLH_GetRetryRegister_t FLH_GetRetryRegister;
-extern VDR_ED3PageRead_t VDR_ED3PageRead;
-extern VDR_BadTFindRead_t VDR_BadTFindRead;
-extern DG_SearchReadBadTBlk_t DG_SearchReadBadTBlk;
-extern DG_CalBlkRequire_t DG_CalBlkRequire;
-extern VDR_Enhance_SLC_Program_t VDR_Enhance_SLC_Program;
-extern VDR_Disable_SLC_Program_t VDR_Disable_SLC_Program;
-extern LUN_CalIsoSize_t LUN_CalIsoSize;
-extern FLH_CISCheckSum_Calculate_t FLH_CISCheckSum_Calculate;
-extern FLH_CalCulate_ECCNO_t FLH_CalCulate_ECCNO;
-extern FLH_ArrangeSegmentPara_t FLH_ArrangeSegmentPara;
-extern ADDR_ReadRootTable_t ADDR_ReadRootTable;
-extern FLH_ReadSpare_t FLH_ReadSpare;
-extern FLH_ReadID_t FLH_ReadID;
-extern FLH_BlockErase_t FLH_BlockErase;
-extern FLH_SetSLCFlag_t FLH_SetSLCFlag;
-extern BlkAddr2RawAddr_t BlkAddr2RawAddr;
-extern VDR_MassBlocksProcess_t VDR_MassBlocksProcess;
-extern VDR_F_RST_t VDR_F_RST;
-extern FLH_CPUReset_t FLH_CPUReset;
-extern FLH_InitCTRL_t FLH_InitCTRL;
-extern VDR_RootFunc_t VDR_RootFunc;
-extern FLH_WriteRootTableWithIspPath_t FLH_WriteRootTableWithIspPath;
-extern VDR_RootPageWrite_t VDR_RootPageWrite;
-extern FLH_ScanE2NANDBlockPerChip_t FLH_ScanE2NANDBlockPerChip;
-extern FLH_ReadBCM_t FLH_ReadBCM;
-extern VDR_RootAccess_t VDR_RootAccess;
-extern FLH_InitCodeWithIspPath_t FLH_InitCodeWithIspPath;
-extern FLH_GetChannelCeNoAndMap_t FLH_GetChannelCeNoAndMap;
-extern ADDR_ReadISPData_t ADDR_ReadISPData;
-extern ADDR_ReadCISData_t ADDR_ReadCISData;
-extern FLH_InitCodeForReady_t FLH_InitCodeForReady;
+// =============================================================================
+// Utility Functions - Data conversion and device info - 9 functions
+// =============================================================================
+typedef DWORD (*PFN_SwapDWORD)(DWORD dwValue);
+typedef WORD (*PFN_SwapWORD)(WORD wValue);
+typedef DWORD (*PFN_CCBAddress2RawAddress)(DWORD dwCCBAddr);
+typedef DWORD (*PFN_RawAddress2CCBAddress)(DWORD dwRawAddr);
+typedef DWORD (*PFN_CCBAddress2ED3Address)(DWORD dwCCBAddr);
+typedef DWORD (*PFN_ED3Address2CCBAddress)(DWORD dwED3Addr);
+typedef DWORD (*PFN_BlkAddr2RawAddr)(DWORD dwBlockAddr);
+typedef BOOL (*PFN_Is168Device)(void);
+typedef DWORD (*PFN_GetLastestPage)(void);
+
+// =============================================================================
+// Mass Production (MP_*) - Factory operations - 2 functions
+// =============================================================================
+typedef BOOL (*PFN_MP_CreateSystem)(LPVOID pParams);
+typedef BOOL (*PFN_MP_EraseSystemTable)(void);
+
+// =============================================================================
+// Diagnostics (DG_*) - Debug and diagnostic functions - 3 functions
+// =============================================================================
+typedef BOOL (*PFN_DG_GetBlockPageMapFromFlash)(LPVOID pMap);
+typedef BOOL (*PFN_DG_SearchReadBadTBlk)(LPVOID pParams);
+typedef DWORD (*PFN_DG_CalBlkRequire)(LPVOID pParams);
+
+// =============================================================================
+// Address Functions (ADDR_*) - Alternative address-based access - 3 functions
+// =============================================================================
+typedef BOOL (*PFN_ADDR_ReadRootTable)(LPVOID pBuffer);
+typedef BOOL (*PFN_ADDR_ReadISPData)(LPVOID pBuffer);
+typedef BOOL (*PFN_ADDR_ReadCISData)(LPVOID pBuffer);
+
+// =============================================================================
+// Global Function Pointers - Initialized by iTEUFDrs::LoadSDKFunctions
+// =============================================================================
+extern PFN_FLH_GetInfoFromDataBaseByID g_pFLH_GetInfoFromDataBaseByID;
+extern PFN_FLH_GetFlashDataFromDataBase g_pFLH_GetFlashDataFromDataBase;
+extern PFN_FLH_GetFlashDataFromMemory g_pFLH_GetFlashDataFromMemory;
+extern PFN_FLH_ReadRootTable g_pFLH_ReadRootTable;
+extern PFN_FLH_WriteRootTable g_pFLH_WriteRootTable;
+extern PFN_FLH_ReadCISTable g_pFLH_ReadCISTable;
+extern PFN_FLH_WriteCISTable g_pFLH_WriteCISTable;
+extern PFN_FLH_ReadISPData g_pFLH_ReadISPData;
+extern PFN_FLH_WriteISPData g_pFLH_WriteISPData;
+extern PFN_FLH_ReadLatestWBT g_pFLH_ReadLatestWBT;
+extern PFN_FLH_FindRootTable g_pFLH_FindRootTable;
+extern PFN_FLH_LBA2PhysicalFlash g_pFLH_LBA2PhysicalFlash;
+extern PFN_FLH_SetLedBlink g_pFLH_SetLedBlink;
+extern PFN_FLH_PhyiscalRead g_pFLH_PhyiscalRead;
+extern PFN_FLH_PhyiscalWrite g_pFLH_PhyiscalWrite;
+extern PFN_FLH_IsGoodBlock g_pFLH_IsGoodBlock;
+extern PFN_FLH_IsTableBlock g_pFLH_IsTableBlock;
+extern PFN_FLH_MarkBad g_pFLH_MarkBad;
+extern PFN_FLH_GetRealBlocksPerDie g_pFLH_GetRealBlocksPerDie;
+extern PFN_FLH_BlockIsGap g_pFLH_BlockIsGap;
+
+extern PFN_SEC_DoAuthentication g_pSEC_DoAuthentication;
+extern PFN_SEC_LeaveAuthenticatedState g_pSEC_LeaveAuthenticatedState;
+extern PFN_SEC_GetPasswordHint g_pSEC_GetPasswordHint;
+extern PFN_SEC_SetPasswordHint g_pSEC_SetPasswordHint;
+extern PFN_SEC_ChangePassword g_pSEC_ChangePassword;
+extern PFN_SEC_GetUserPassword g_pSEC_GetUserPassword;
+extern PFN_SEC_GetEncryptedPassword g_pSEC_GetEncryptedPassword;
+
+extern PFN_LUN_CreateLun g_pLUN_CreateLun;
+extern PFN_LUN_FindLunStartLBAByItemID g_pLUN_FindLunStartLBAByItemID;
+extern PFN_LUN_CreateApLunNewItemID g_pLUN_CreateApLunNewItemID;
+
+extern PFN_FMT_Format g_pFMT_Format;
+extern PFN_FMT_GetOptimumCapacity g_pFMT_GetOptimumCapacity;
+extern PFN_FMT_GetOptimumLunConfig g_pFMT_GetOptimumLunConfig;
+extern PFN_FMT_GetOSCapacity g_pFMT_GetOSCapacity;
+
+extern PFN_STD_Inquiry g_pSTD_Inquiry;
+extern PFN_STD_ReadCapacity g_pSTD_ReadCapacity;
+extern PFN_STD_LogicalRead g_pSTD_LogicalRead;
+extern PFN_STD_LogicalWrite g_pSTD_LogicalWrite;
+
+// ... Additional function pointers for VDR, MP, DG, ADDR categories
+
+// Helper function for loading SDK functions
+BOOL LoadSDKFunctions(HMODULE hSDK);
 
 #ifdef __cplusplus
 }
