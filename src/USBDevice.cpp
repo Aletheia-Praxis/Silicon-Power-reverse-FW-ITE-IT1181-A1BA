@@ -1,7 +1,6 @@
 #include "../include/USBDevice.h"
 
 #include <setupapi.h>
-#include <windows.h>
 #include <winusb.h>
 
 // Function to read data from the USB device

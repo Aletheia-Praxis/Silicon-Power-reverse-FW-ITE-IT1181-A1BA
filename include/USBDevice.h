@@ -1,6 +1,6 @@
 #pragma once
 
-#include <windows.h>
+#include "USBHeaders.h"
 
 // USB device functions
 BOOL Read(

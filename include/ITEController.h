@@ -1,6 +1,6 @@
 #pragma once
 
-#include <windows.h>
+#include "USBHeaders.h"
 
 // ITE Controller Info structure
 typedef struct _ITE_CONTROLLER_INFO {
