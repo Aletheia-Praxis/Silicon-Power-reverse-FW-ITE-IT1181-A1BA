@@ -1,7 +1,5 @@
 // clang-format off
-#include <winsock2.h>
-#include <windows.h>
-
+#include "../include/WindowsHeaders.h"
 #include "../include/SDKLoader.h"
 #include "../include/FlashSDK.h"
 #include "../include/Utilities.h"
@@ -28,7 +26,7 @@ BOOL InitializeFlashSDK(HMODULE hModule) {
         return FALSE;
 
 #define LOAD_PROC(name)                                   \
-    name = (name##_t) GetProcAddress(hModule, #name);     \
+    name = (PFN_##name) GetProcAddress(hModule, #name);   \
     if(! name) {                                          \
         LogMessage("Failed to load function: %s", #name); \
         return FALSE;                                     \
