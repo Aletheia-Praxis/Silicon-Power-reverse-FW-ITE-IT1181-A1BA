@@ -6,7 +6,9 @@
 #include <afxwin.h>
 
 #include "../include/CRTFunctions.h"
+#include "../include/CUrescueApp.h"
 #include "../include/WindowsHeaders.h"
+
 
 // Main application wrapper (this is what the real AfxWinMain calls)
 int RunURescueApplication(
@@ -97,6 +99,10 @@ int URescue_tmainCRTStartup(void) {
 int FUN_004845e0(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow) {
     // In the original binary, this function simply calls AfxWinMain.
     // The actual application logic is in the CWinApp-derived class's InitInstance.
-    // Here, we call our renamed application entry point.
+    // Call the reconstructed CUrescueApp::InitInstance logic
+    if(! CUrescueApp_InitInstance()) {
+        return -1;
+    }
+
     return RunURescueApplication(hInstance, hPrevInstance, lpCmdLine, nCmdShow);
 }
