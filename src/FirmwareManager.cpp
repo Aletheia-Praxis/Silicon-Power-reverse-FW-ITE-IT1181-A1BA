@@ -1,14 +1,12 @@
-#define WIN32_LEAN_AND_MEAN
-
 #include "../include/FirmwareManager.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <windows.h>
 
 #include "../include/USBDevice.h"
 #include "../include/Utilities.h"
+#include "../include/WindowsHeaders.h"
 
 // Firmware loading function
 BOOL LoadFirmware(LPCSTR firmwarePath, LPVOID* ppBuffer, DWORD* pSize) {
@@ -118,7 +116,9 @@ BOOL WriteFirmware(HANDLE hDevice, LPCVOID pFirmware, DWORD firmwareSize) {
 
     // Writing firmware in blocks
     while(totalWritten < firmwareSize) {
-        DWORD blockSize = min(USB_BUFFER_SIZE, firmwareSize - totalWritten);
+        DWORD blockSize = (USB_BUFFER_SIZE < (firmwareSize - totalWritten))
+                              ? USB_BUFFER_SIZE
+                              : (firmwareSize - totalWritten);
 
         BOOL result = Write(hDevice, pData + totalWritten, blockSize, &bytesWritten, NULL);
         if(! result) {
@@ -152,7 +152,9 @@ BOOL VerifyFirmware(HANDLE hDevice, LPCVOID pFirmware, DWORD firmwareSize) {
     DWORD totalRead = 0;
 
     while(totalRead < firmwareSize) {
-        DWORD blockSize = min(USB_BUFFER_SIZE, firmwareSize - totalRead);
+        DWORD blockSize = (USB_BUFFER_SIZE < (firmwareSize - totalRead))
+                              ? USB_BUFFER_SIZE
+                              : (firmwareSize - totalRead);
 
         BOOL result = Read(hDevice, pReadBuffer + totalRead, blockSize, &bytesRead, NULL);
         if(! result) {
