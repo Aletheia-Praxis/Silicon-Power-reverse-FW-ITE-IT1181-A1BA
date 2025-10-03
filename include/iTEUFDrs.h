@@ -147,6 +147,7 @@ private:
 
     // Internal initialization functions
     BOOL InitializeSDK();
+    BOOL LoadSDKFunctions(HMODULE hSDK);
     BOOL VerifySDKIntegrity();
     void InitializeMembers();
     BOOL InitializeDeviceStructures();
