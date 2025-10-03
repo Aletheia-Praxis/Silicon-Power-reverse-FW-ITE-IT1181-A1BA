@@ -18,7 +18,7 @@
     #define NOMINMAX
 #endif
 
-// Fix USB spec struct conflicts by defining ULONG before including USB headers
+// Fix USB spec struct conflicts by defining types before any Windows includes
 #ifndef ULONG
 typedef unsigned long ULONG;
 #endif
@@ -31,14 +31,28 @@ typedef unsigned short USHORT;
 typedef unsigned char UCHAR;
 #endif
 
-// Include winsock2 first to prevent redefinition errors
-#include <winsock2.h>
-#include <ws2tcpip.h>
+// For projects that don't need networking, exclude winsock entirely
+#ifndef NO_WINSOCK
+    // Prevent old winsock.h inclusion
+    #ifndef _WINSOCKAPI_
+        #define _WINSOCKAPI_
+    #endif
+    // Include winsock2 first to prevent redefinition errors
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+#endif
 
-// Now include MFC headers
-#include <afxdisp.h>
-#include <afxext.h>
-#include <afxwin.h>
+// Standard Windows API
+#include <windows.h>
+
+// Skip MFC for now to avoid networking conflicts
+#ifndef NO_MFC
+    // MFC headers - only if needed
+    #include <afxdisp.h>
+    #include <afxext.h>
+    #include <afxwin.h>
+
+#endif
 
 // Additional Windows APIs
 #include <cfgmgr32.h>
