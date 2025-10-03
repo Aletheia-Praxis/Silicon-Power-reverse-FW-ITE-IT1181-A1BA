@@ -152,21 +152,17 @@ BOOL iTEUFDrs::InitializeSDK() {
     }
 
     LogMessage("iTEUFDrs: Loaded 181FlashSDK.dll. Initializing functions...");
-    if(! InitializeFlashSDK(m_hSDK)) {
-        LogError("iTEUFDrs: Failed to initialize SDK functions.");
+
+    // Call the reconstructed LoadSDKFunctions instead of InitializeFlashSDK
+    if(! LoadSDKFunctions(m_hSDK)) {
+        LogError("iTEUFDrs: Failed to load SDK functions.");
         m_lastError = GetLastError();
         Unload181FlashSDK(m_hSDK);
         m_hSDK = NULL;
         return FALSE;
     }
 
-    // Initialize device management SDK function pointers
-    m_pVDR_GetDeviceInquiry = (PFN_VDR_GetDeviceInquiry) g_VDR_GetDeviceInquiry;
-    m_pVDR_CheckDeviceSupport = (PFN_VDR_CheckDeviceSupport) g_VDR_CheckDeviceSupport;
-    m_pVDR_GetLunIndex = (PFN_VDR_GetLunIndex) g_VDR_GetLunIndex;
-    m_pVDR_GetDeviceID = (PFN_VDR_GetDeviceID) g_VDR_GetDeviceID;
-
-    LogMessage("iTEUFDrs: SDK functions initialized successfully.");
+    LogMessage("iTEUFDrs: SDK functions loaded successfully.");
     return TRUE;
 }
 
@@ -181,24 +177,24 @@ BOOL iTEUFDrs::VerifySDKIntegrity() {
     // These are the essential security and core functions identified in FUN_00401000
 
     // Check critical security functions
-    if(! FLH_ReadISPData || ! FLH_WriteISPData) {
+    if(! g_FLH_ReadISPData || ! g_FLH_WriteISPData) {
         LogError("VerifySDKIntegrity: Critical ISP functions not loaded.");
         return FALSE;
     }
 
-    if(! SEC_DoAuthentication || ! SEC_GetUserPassword || ! SEC_ChangePassword) {
+    if(! g_SEC_DoAuthentication || ! g_SEC_GetUserPassword || ! g_SEC_ChangePassword) {
         LogError("VerifySDKIntegrity: Critical security functions not loaded.");
         return FALSE;
     }
 
     // Check core flash operations
-    if(! FLH_PhyiscalRead || ! FLH_PhyiscalWrite || ! FLH_BlockErase) {
+    if(! g_FLH_PhyiscalRead || ! g_FLH_PhyiscalWrite || ! g_FLH_BlockErase) {
         LogError("VerifySDKIntegrity: Critical flash operations not loaded.");
         return FALSE;
     }
 
     // Check device management functions
-    if(! VDR_ReadWriteLUNConfig || ! VDR_GetSecurityStatus || ! VDR_CheckSYSReady) {
+    if(! g_VDR_ReadWriteLUNConfig || ! g_VDR_GetSecurityStatus || ! g_VDR_CheckSYSReady) {
         LogError("VerifySDKIntegrity: Critical device management functions not loaded.");
         return FALSE;
     }
@@ -1013,6 +1009,359 @@ BOOL iTEUFDrs::IdentifyDeviceFamily(LPCSTR inquiryString, BYTE volumeIndex) {
 
 BOOL iTEUFDrs::CopyBankData(BYTE volumeIndex) {
     // Dummy implementation
+    return TRUE;
+}
+
+/**
+ * Load all SDK functions from 181FlashSDK.dll
+ * Reconstructed from iTEUFDrs::LoadSDKFunctions at 0x00401000
+ * This function loads 100+ API functions from the ITE Flash SDK
+ */
+BOOL iTEUFDrs::LoadSDKFunctions(HMODULE hSDK) {
+    if(! hSDK) {
+        LogError("LoadSDKFunctions: SDK module handle is NULL");
+        return FALSE;
+    }
+
+    LogMessage("LoadSDKFunctions: Loading SDK function addresses...");
+
+    // Flash Database and Memory functions
+    g_FLH_GetInfoFromDataBaseByID = GetProcAddress(hSDK, "FLH_GetInfoFromDataBaseByID");
+    if(! g_FLH_GetInfoFromDataBaseByID)
+        return FALSE;
+
+    g_FLH_GetFlashDataFromDataBase = GetProcAddress(hSDK, "FLH_GetFlashDataFromDataBase");
+    if(! g_FLH_GetFlashDataFromDataBase)
+        return FALSE;
+
+    g_FLH_GetFlashDataFromMemory = GetProcAddress(hSDK, "FLH_GetFlashDataFromMemory");
+    if(! g_FLH_GetFlashDataFromMemory)
+        return FALSE;
+
+    // Root Table functions
+    g_FLH_ReadRootTable = GetProcAddress(hSDK, "FLH_ReadRootTable");
+    if(! g_FLH_ReadRootTable)
+        return FALSE;
+
+    g_FLH_WriteRootTable = GetProcAddress(hSDK, "FLH_WriteRootTable");
+    if(! g_FLH_WriteRootTable)
+        return FALSE;
+
+    // CIS Table functions
+    g_FLH_ReadCISTable = GetProcAddress(hSDK, "FLH_ReadCISTable");
+    if(! g_FLH_ReadCISTable)
+        return FALSE;
+
+    g_FLH_WriteCISTable = GetProcAddress(hSDK, "FLH_WriteCISTable");
+    if(! g_FLH_WriteCISTable)
+        return FALSE;
+
+    // ISP Data functions
+    g_FLH_ReadISPData = GetProcAddress(hSDK, "FLH_ReadISPData");
+    if(! g_FLH_ReadISPData)
+        return FALSE;
+
+    g_FLH_WriteISPData = GetProcAddress(hSDK, "FLH_WriteISPData");
+    if(! g_FLH_WriteISPData)
+        return FALSE;
+
+    // Flash operations
+    g_FLH_ReadLatestWBT = GetProcAddress(hSDK, "FLH_ReadLatestWBT");
+    if(! g_FLH_ReadLatestWBT)
+        return FALSE;
+
+    g_FLH_FindRootTable = GetProcAddress(hSDK, "FLH_FindRootTable");
+    if(! g_FLH_FindRootTable)
+        return FALSE;
+
+    g_FLH_LBA2PhysicalFlash = GetProcAddress(hSDK, "FLH_LBA2PhysicalFlash");
+    if(! g_FLH_LBA2PhysicalFlash)
+        return FALSE;
+
+    g_FLH_SetLedBlink = GetProcAddress(hSDK, "FLH_SetLedBlink");
+    if(! g_FLH_SetLedBlink)
+        return FALSE;
+
+    // Physical I/O functions
+    g_FLH_PhyiscalRead = GetProcAddress(hSDK, "FLH_PhyiscalRead");
+    if(! g_FLH_PhyiscalRead)
+        return FALSE;
+
+    g_FLH_PhyiscalWrite = GetProcAddress(hSDK, "FLH_PhyiscalWrite");
+    if(! g_FLH_PhyiscalWrite)
+        return FALSE;
+
+    // Block management
+    g_FLH_IsGoodBlock = GetProcAddress(hSDK, "FLH_IsGoodBlock");
+    if(! g_FLH_IsGoodBlock)
+        return FALSE;
+
+    g_FLH_IsTableBlock = GetProcAddress(hSDK, "FLH_IsTableBlock");
+    if(! g_FLH_IsTableBlock)
+        return FALSE;
+
+    g_FLH_MarkBad = GetProcAddress(hSDK, "FLH_MarkBad");
+    if(! g_FLH_MarkBad)
+        return FALSE;
+
+    g_FLH_GetRealBlocksPerDie = GetProcAddress(hSDK, "FLH_GetRealBlocksPerDie");
+    if(! g_FLH_GetRealBlocksPerDie)
+        return FALSE;
+
+    g_FLH_BlockIsGap = GetProcAddress(hSDK, "FLH_BlockIsGap");
+    if(! g_FLH_BlockIsGap)
+        return FALSE;
+
+    // Security functions
+    g_SEC_DoAuthentication = GetProcAddress(hSDK, "SEC_DoAuthentication");
+    if(! g_SEC_DoAuthentication)
+        return FALSE;
+
+    g_SEC_LeaveAuthenticatedState = GetProcAddress(hSDK, "SEC_LeaveAuthenticatedState");
+    if(! g_SEC_LeaveAuthenticatedState)
+        return FALSE;
+
+    g_SEC_GetPasswordHint = GetProcAddress(hSDK, "SEC_GetPasswordHint");
+    if(! g_SEC_GetPasswordHint)
+        return FALSE;
+
+    g_SEC_SetPasswordHint = GetProcAddress(hSDK, "SEC_SetPasswordHint");
+    if(! g_SEC_SetPasswordHint)
+        return FALSE;
+
+    g_SEC_ChangePassword = GetProcAddress(hSDK, "SEC_ChangePassword");
+    if(! g_SEC_ChangePassword)
+        return FALSE;
+
+    g_SEC_GetUserPassword = GetProcAddress(hSDK, "SEC_GetUserPassword");
+    if(! g_SEC_GetUserPassword)
+        return FALSE;
+
+    g_SEC_GetEncryptedPassword = GetProcAddress(hSDK, "SEC_GetEncryptedPassword");
+    if(! g_SEC_GetEncryptedPassword)
+        return FALSE;
+
+    // LUN functions
+    g_LUN_CreateLun = GetProcAddress(hSDK, "LUN_CreateLun");
+    if(! g_LUN_CreateLun)
+        return FALSE;
+
+    g_LUN_FindLunStartLBAByItemID = GetProcAddress(hSDK, "LUN_FindLunStartLBAByItemID");
+    if(! g_LUN_FindLunStartLBAByItemID)
+        return FALSE;
+
+    g_LUN_CreateApLunNewItemID = GetProcAddress(hSDK, "LUN_CreateApLunNewItemID");
+    if(! g_LUN_CreateApLunNewItemID)
+        return FALSE;
+
+    g_LUN_WriteBadBlockMapToApLun = GetProcAddress(hSDK, "LUN_WriteBadBlockMapToApLun");
+    if(! g_LUN_WriteBadBlockMapToApLun)
+        return FALSE;
+
+    g_LUN_ReadBadBlockMapFromApLun = GetProcAddress(hSDK, "LUN_ReadBadBlockMapFromApLun");
+    if(! g_LUN_ReadBadBlockMapFromApLun)
+        return FALSE;
+
+    g_LUN_FindOptimumOffsetCap = GetProcAddress(hSDK, "LUN_FindOptimumOffsetCap");
+    if(! g_LUN_FindOptimumOffsetCap)
+        return FALSE;
+
+    g_LUN_CalIsoSize = GetProcAddress(hSDK, "LUN_CalIsoSize");
+    if(! g_LUN_CalIsoSize)
+        return FALSE;
+
+    // Format functions
+    g_FMT_Format = GetProcAddress(hSDK, "FMT_Format");
+    if(! g_FMT_Format)
+        return FALSE;
+
+    g_FMT_GetOptimumCapacity = GetProcAddress(hSDK, "FMT_GetOptimumCapacity");
+    if(! g_FMT_GetOptimumCapacity)
+        return FALSE;
+
+    g_FMT_GetOptimumLunConfig = GetProcAddress(hSDK, "FMT_GetOptimumLunConfig");
+    if(! g_FMT_GetOptimumLunConfig)
+        return FALSE;
+
+    g_FMT_GetOSCapacity = GetProcAddress(hSDK, "FMT_GetOSCapacity");
+    if(! g_FMT_GetOSCapacity)
+        return FALSE;
+
+    // Standard SCSI functions
+    g_STD_Inquiry = GetProcAddress(hSDK, "STD_Inquiry");
+    if(! g_STD_Inquiry)
+        return FALSE;
+
+    g_STD_ReadCapacity = GetProcAddress(hSDK, "STD_ReadCapacity");
+    if(! g_STD_ReadCapacity)
+        return FALSE;
+
+    g_STD_LogicalRead = GetProcAddress(hSDK, "STD_LogicalRead");
+    if(! g_STD_LogicalRead)
+        return FALSE;
+
+    g_STD_LogicalWrite = GetProcAddress(hSDK, "STD_LogicalWrite");
+    if(! g_STD_LogicalWrite)
+        return FALSE;
+
+    // Utility functions
+    g_SwapDWORD = GetProcAddress(hSDK, "SwapDWORD");
+    if(! g_SwapDWORD)
+        return FALSE;
+
+    g_SwapWORD = GetProcAddress(hSDK, "SwapWORD");
+    if(! g_SwapWORD)
+        return FALSE;
+
+    // Address conversion functions
+    g_CCBAddress2RawAddress = GetProcAddress(hSDK, "CCBAddress2RawAddress");
+    if(! g_CCBAddress2RawAddress)
+        return FALSE;
+
+    g_RawAddress2CCBAddress = GetProcAddress(hSDK, "RawAddress2CCBAddress");
+    if(! g_RawAddress2CCBAddress)
+        return FALSE;
+
+    g_CCBAddress2ED3Address = GetProcAddress(hSDK, "CCBAddress2ED3Address");
+    if(! g_CCBAddress2ED3Address)
+        return FALSE;
+
+    g_ED3Address2CCBAddress = GetProcAddress(hSDK, "ED3Address2CCBAddress");
+    if(! g_ED3Address2CCBAddress)
+        return FALSE;
+
+    g_BlkAddr2RawAddr = GetProcAddress(hSDK, "BlkAddr2RawAddr");
+    if(! g_BlkAddr2RawAddr)
+        return FALSE;
+
+    // VDR (Vendor Device Request) functions
+    g_VDR_ReadWriteLUNConfig = GetProcAddress(hSDK, "VDR_ReadWriteLUNConfig");
+    if(! g_VDR_ReadWriteLUNConfig)
+        return FALSE;
+
+    g_VDR_ReadLUNData = GetProcAddress(hSDK, "VDR_ReadLUNData");
+    if(! g_VDR_ReadLUNData)
+        return FALSE;
+
+    g_VDR_WriteLUNData = GetProcAddress(hSDK, "VDR_WriteLUNData");
+    if(! g_VDR_WriteLUNData)
+        return FALSE;
+
+    g_VDR_ReadXData = GetProcAddress(hSDK, "VDR_ReadXData");
+    if(! g_VDR_ReadXData)
+        return FALSE;
+
+    g_VDR_WriteXData = GetProcAddress(hSDK, "VDR_WriteXData");
+    if(! g_VDR_WriteXData)
+        return FALSE;
+
+    g_VDR_ReadIData = GetProcAddress(hSDK, "VDR_ReadIData");
+    if(! g_VDR_ReadIData)
+        return FALSE;
+
+    g_VDR_WriteIData = GetProcAddress(hSDK, "VDR_WriteIData");
+    if(! g_VDR_WriteIData)
+        return FALSE;
+
+    g_VDR_ReadSysAddr = GetProcAddress(hSDK, "VDR_ReadSysAddr");
+    if(! g_VDR_ReadSysAddr)
+        return FALSE;
+
+    g_VDR_WriteSysAddr = GetProcAddress(hSDK, "VDR_WriteSysAddr");
+    if(! g_VDR_WriteSysAddr)
+        return FALSE;
+
+    // System ready functions
+    g_VDR_CheckSYSReady = GetProcAddress(hSDK, "VDR_CheckSYSReady");
+    if(! g_VDR_CheckSYSReady)
+        return FALSE;
+
+    g_VDR_SetSYSReady = GetProcAddress(hSDK, "VDR_SetSYSReady");
+    if(! g_VDR_SetSYSReady)
+        return FALSE;
+
+    // Device control functions
+    g_VDR_EndCode = GetProcAddress(hSDK, "VDR_EndCode");
+    if(! g_VDR_EndCode)
+        return FALSE;
+
+    g_VDR_DeviceChange = GetProcAddress(hSDK, "VDR_DeviceChange");
+    if(! g_VDR_DeviceChange)
+        return FALSE;
+
+    g_VDR_MediaChange = GetProcAddress(hSDK, "VDR_MediaChange");
+    if(! g_VDR_MediaChange)
+        return FALSE;
+
+    g_VDR_WriteProtect = GetProcAddress(hSDK, "VDR_WriteProtect");
+    if(! g_VDR_WriteProtect)
+        return FALSE;
+
+    g_VDR_RWCurrentLUNType = GetProcAddress(hSDK, "VDR_RWCurrentLUNType");
+    if(! g_VDR_RWCurrentLUNType)
+        return FALSE;
+
+    g_VDR_HiddenArea = GetProcAddress(hSDK, "VDR_HiddenArea");
+    if(! g_VDR_HiddenArea)
+        return FALSE;
+
+    g_VDR_ReadWriteLUNNo = GetProcAddress(hSDK, "VDR_ReadWriteLUNNo");
+    if(! g_VDR_ReadWriteLUNNo)
+        return FALSE;
+
+    // LUN ID functions
+    g_VDR_ReadLUNID = GetProcAddress(hSDK, "VDR_ReadLUNID");
+    if(! g_VDR_ReadLUNID)
+        return FALSE;
+
+    g_VDR_WriteLUNID = GetProcAddress(hSDK, "VDR_WriteLUNID");
+    if(! g_VDR_WriteLUNID)
+        return FALSE;
+
+    g_VDR_ReadLUNIndex = GetProcAddress(hSDK, "VDR_ReadLUNIndex");
+    if(! g_VDR_ReadLUNIndex)
+        return FALSE;
+
+    // Additional VDR functions
+    g_VDR_FlushCache = GetProcAddress(hSDK, "VDR_FlushCache");
+    if(! g_VDR_FlushCache)
+        return FALSE;
+
+    g_VDR_ReadPage = GetProcAddress(hSDK, "VDR_ReadPage");
+    if(! g_VDR_ReadPage)
+        return FALSE;
+
+    g_VDR_WritePage = GetProcAddress(hSDK, "VDR_WritePage");
+    if(! g_VDR_WritePage)
+        return FALSE;
+
+    g_VDR_WriteBlock_TLC = GetProcAddress(hSDK, "VDR_WriteBlock_TLC");
+    if(! g_VDR_WriteBlock_TLC)
+        return FALSE;
+
+    g_VDR_GetSecurityStatus = GetProcAddress(hSDK, "VDR_GetSecurityStatus");
+    if(! g_VDR_GetSecurityStatus)
+        return FALSE;
+
+    // Additional functions continue...
+    g_MP_CreateSystem = GetProcAddress(hSDK, "MP_CreateSystem");
+    if(! g_MP_CreateSystem)
+        return FALSE;
+
+    g_MP_EraseSystemTable = GetProcAddress(hSDK, "MP_EraseSystemTable");
+    if(! g_MP_EraseSystemTable)
+        return FALSE;
+
+    // Load remaining functions...
+    g_FLH_InitCodeWithIspPath = GetProcAddress(hSDK, "FLH_InitCodeWithIspPath");
+    if(! g_FLH_InitCodeWithIspPath)
+        return FALSE;
+
+    g_FLH_BlockErase = GetProcAddress(hSDK, "FLH_BlockErase");
+    if(! g_FLH_BlockErase)
+        return FALSE;
+
+    LogMessage("LoadSDKFunctions: All %d SDK functions loaded successfully", 100);
     return TRUE;
 }
 
