@@ -166,6 +166,8 @@ typedef int (*PFN_VDR_RootFunc_Alt)(
     LPVOID pSegmentData,
     LPVOID pBcmBuffer,
     HANDLE hDevice);
+typedef BOOL (*PFN_FLH_CalculateBlockAddress)(LPVOID pControllerData, DWORD blockAddress, LPVOID pOutAddress);
+typedef int (*PFN_FLH_ReadSpare_Alt)(LPVOID pAddress, int page, LPVOID pControllerData, LPVOID pSpareBuffer, int bufferSize, DWORD unknown);
 typedef BOOL (*PFN_VDR_RootFunc)(LPVOID pParams);
 typedef BOOL (*PFN_VDR_RootPageWrite)(DWORD dwPageAddr, LPVOID pBuffer);
 typedef BOOL (*PFN_VDR_RootAccess)(LPVOID pParams);
