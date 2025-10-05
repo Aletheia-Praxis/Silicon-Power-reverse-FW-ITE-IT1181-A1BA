@@ -92,6 +92,10 @@ private:
 
     // Cryptographic manager for hash functions (from Ghidra analysis)
     CryptoManager m_cryptoManager;
+
+    // Internal helper functions
+    DWORD AnalyzeSpareAreaAndClassifyBlock(DWORD blockIndex, DWORD unknown, BYTE* spareBuffer);
+    BOOL CheckDeviceTypeAndFlag(BYTE* spareBuffer, BYTE flag);
 };
 
 // Error codes for iTEUFDrs
