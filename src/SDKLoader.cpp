@@ -27,13 +27,14 @@ BOOL InitializeFlashSDK(HMODULE hModule) {
     if(! hModule)
         return FALSE;
 
-#define LOAD_PROC(name)                                   \
-    g_sdk_api.name = GetProcAddress(hModule, #name);      \
-    if(! g_sdk_api.name) {                                \
-        LogMessage("Failed to load function: %s", #name); \
-        return FALSE;                                     \
+#define LOAD_PROC(name)                                        \
+    g_sdk_api.name = (FARPROC) GetProcAddress(hModule, #name); \
+    if(! g_sdk_api.name) {                                     \
+        LogMessage("Failed to load function: %s", #name);      \
+        return FALSE;                                          \
     }
 
+    // Flash (FLH) functions
     LOAD_PROC(FLH_GetInfoFromDataBaseByID);
     LOAD_PROC(FLH_GetFlashDataFromDataBase);
     LOAD_PROC(FLH_GetFlashDataFromMemory);
@@ -60,7 +61,6 @@ BOOL InitializeFlashSDK(HMODULE hModule) {
     LOAD_PROC(FLH_CISCheckSum_Calculate);
     LOAD_PROC(FLH_CalCulate_ECCNO);
     LOAD_PROC(FLH_ArrangeSegmentPara);
-    LOAD_PROC(ADDR_ReadRootTable);
     LOAD_PROC(FLH_ReadSpare);
     LOAD_PROC(FLH_ReadID);
     LOAD_PROC(FLH_BlockErase);
@@ -72,9 +72,9 @@ BOOL InitializeFlashSDK(HMODULE hModule) {
     LOAD_PROC(FLH_ReadBCM);
     LOAD_PROC(FLH_InitCodeWithIspPath);
     LOAD_PROC(FLH_GetChannelCeNoAndMap);
-    LOAD_PROC(ADDR_ReadISPData);
-    LOAD_PROC(ADDR_ReadCISData);
     LOAD_PROC(FLH_InitCodeForReady);
+
+    // Security (SEC) functions
     LOAD_PROC(SEC_DoAuthentication);
     LOAD_PROC(SEC_LeaveAuthenticatedState);
     LOAD_PROC(SEC_GetPasswordHint);
@@ -82,6 +82,8 @@ BOOL InitializeFlashSDK(HMODULE hModule) {
     LOAD_PROC(SEC_ChangePassword);
     LOAD_PROC(SEC_GetUserPassword);
     LOAD_PROC(SEC_GetEncryptedPassword);
+
+    // LUN functions
     LOAD_PROC(LUN_CreateLun);
     LOAD_PROC(LUN_FindLunStartLBAByItemID);
     LOAD_PROC(LUN_CreateApLunNewItemID);
@@ -89,34 +91,40 @@ BOOL InitializeFlashSDK(HMODULE hModule) {
     LOAD_PROC(LUN_ReadBadBlockMapFromApLun);
     LOAD_PROC(LUN_FindOptimumOffsetCap);
     LOAD_PROC(LUN_CalIsoSize);
+
+    // Format (FMT) functions
     LOAD_PROC(FMT_Format);
     LOAD_PROC(FMT_GetOptimumCapacity);
     LOAD_PROC(FMT_GetOptimumLunConfig);
     LOAD_PROC(FMT_GetOSCapacity);
+
+    // Standard (STD) commands
     LOAD_PROC(STD_Inquiry);
     LOAD_PROC(STD_ReadCapacity);
     LOAD_PROC(STD_LogicalRead);
     LOAD_PROC(STD_LogicalWrite);
-    g_sdk_api.STD_TestUnitReady = GetProcAddress(hModule, "VDR_CheckSYSReady");
+    g_sdk_api.STD_TestUnitReady = (FARPROC) GetProcAddress(hModule, "VDR_CheckSYSReady");
     if(! g_sdk_api.STD_TestUnitReady) {
         LogMessage("Failed to load function: VDR_CheckSYSReady as STD_TestUnitReady");
         return FALSE;
     }
-    g_sdk_api.STD_GetDeviceID = GetProcAddress(hModule, "VDR_ReadLUNID");
+    g_sdk_api.STD_GetDeviceID = (FARPROC) GetProcAddress(hModule, "VDR_ReadLUNID");
     if(! g_sdk_api.STD_GetDeviceID) {
         LogMessage("Failed to load function: VDR_ReadLUNID as STD_GetDeviceID");
         return FALSE;
     }
-    g_sdk_api.STD_SetDeviceID = GetProcAddress(hModule, "VDR_WriteLUNID");
+    g_sdk_api.STD_SetDeviceID = (FARPROC) GetProcAddress(hModule, "VDR_WriteLUNID");
     if(! g_sdk_api.STD_SetDeviceID) {
         LogMessage("Failed to load function: VDR_WriteLUNID as STD_SetDeviceID");
         return FALSE;
     }
-    g_sdk_api.STD_GetLUNIndex = GetProcAddress(hModule, "VDR_ReadLUNIndex");
+    g_sdk_api.STD_GetLUNIndex = (FARPROC) GetProcAddress(hModule, "VDR_ReadLUNIndex");
     if(! g_sdk_api.STD_GetLUNIndex) {
         LogMessage("Failed to load function: VDR_ReadLUNIndex as STD_GetLUNIndex");
         return FALSE;
     }
+
+    // Utility and Address Conversion functions
     LOAD_PROC(SwapDWORD);
     LOAD_PROC(SwapWORD);
     LOAD_PROC(CCBAddress2RawAddress);
@@ -124,6 +132,11 @@ BOOL InitializeFlashSDK(HMODULE hModule) {
     LOAD_PROC(CCBAddress2ED3Address);
     LOAD_PROC(ED3Address2CCBAddress);
     LOAD_PROC(BlkAddr2RawAddr);
+    LOAD_PROC(ADDR_ReadRootTable);
+    LOAD_PROC(ADDR_ReadISPData);
+    LOAD_PROC(ADDR_ReadCISData);
+
+    // Vendor (VDR) functions
     LOAD_PROC(VDR_ReadWriteLUNConfig);
     LOAD_PROC(VDR_ReadLUNData);
     LOAD_PROC(VDR_WriteLUNData);
@@ -155,17 +168,23 @@ BOOL InitializeFlashSDK(HMODULE hModule) {
     LOAD_PROC(VDR_RootFunc);
     LOAD_PROC(VDR_RootPageWrite);
     LOAD_PROC(VDR_RootAccess);
+
+    // Mass Production (MP) functions
     LOAD_PROC(MP_CreateSystem);
     LOAD_PROC(MP_EraseSystemTable);
+
+    // Diagnostic (DG) functions
     LOAD_PROC(DG_GetBlockPageMapFromFlash);
     LOAD_PROC(DG_SearchReadBadTBlk);
     LOAD_PROC(DG_CalBlkRequire);
+
+    // Misc functions
     LOAD_PROC(Is168Device);
     LOAD_PROC(GetLastestPage);
 
 #undef LOAD_PROC
 
-    LogMessage("All Flash SDK functions initialized successfully.");
+    LogMessage("All 106 Flash SDK functions initialized successfully.");
     return TRUE;
 }
 
