@@ -166,8 +166,11 @@ BOOL CUrescueApp_InitInstance() {
 
         LogMessage("CUrescueApp::InitInstance - System ready flag set");
 
-        // Create and run the main application dialog
-        CUrescueDlg dlg;
+        // Create the device manager object
+        iTEUFDrs deviceManager;
+
+        // Create and run the main application dialog, passing the device manager
+        CUrescueDlg dlg(NULL, (void*) &deviceManager);
         // m_pMainWnd = &dlg; // In a real CWinApp, you would set the main window pointer
 
         INT_PTR nResponse = dlg.DoModal();
