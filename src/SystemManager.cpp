@@ -197,7 +197,7 @@ LONG DeleteRegistryValue(HKEY hKey, LPCSTR lpValueName) {
 }
 
 // Function to get device information
-BOOL GetDeviceInfo(DEVICE_INFO* pDeviceInfo) {
+BOOL GetDeviceInfo(_DEVICE_INFO* pDeviceInfo) {
     if(! pDeviceInfo) {
         LogError("Invalid parameter for GetDeviceInfo");
         return FALSE;
