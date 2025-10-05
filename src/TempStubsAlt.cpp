@@ -2,19 +2,6 @@
 
 // Alternative stub file with correct signatures based on linker errors
 
-// SDK functions - using HMODULE like original
-BOOL Load181FlashSDK(const char* path, HMODULE* outModule) {
-    if(outModule)
-        *outModule = nullptr;
-    return TRUE;  // Return TRUE like original
-}
-
-BOOL InitializeFlashSDK(HMODULE hModule) {
-    return TRUE;  // Return TRUE like original
-}
-
-void Unload181FlashSDK(HMODULE hModule) {}
-
 // Other functions from TempStubs.cpp
 int LoadFirmware(const char* path, void** data, unsigned long* size) {
     return 0;
