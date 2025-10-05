@@ -176,27 +176,44 @@ typedef struct _DEVICE_INFO {
     BYTE deviceParams[0xFF];    // Device parameters
     BOOL lunArrayLoaded;        // LUN array loaded flag
     BYTE firmwareLayout[512];   // Placeholder for firmware segment data
-    BYTE currentDeviceIndex; // Placeholder for the field at offset 0x29f
-    int numBlocks;           // Placeholder for the field at offset 0x99e
 } _DEVICE_INFO, *PDEVICE_INFO;
 
-// Structure to hold controller-specific data (replaces object at this+0x24f)
+// Structure to hold controller-specific data
 #pragma pack(push, 1)
 typedef struct _CONTROLLER_DATA {
-    BYTE unknown_data[0x29f];
-    BYTE currentDeviceIndex;
-    BYTE bcm[512];
-    DWORD segmentIds[4];
-    BOOL segmentPresent[4];
-    BYTE firmwareSegments[4][512]; // Placeholder for segment data
-    int numBlocks;
+    HANDLE hDevice;                 // Handle to the physical device
+    BYTE unknown_data[0x29f];       // Placeholder for unknown data up to this point
+    BYTE currentDeviceIndex;        // Index of the current device being processed
+    BYTE bcm[512];                  // BCM data buffer
+    BYTE firmwareSegments[4][512];  // Firmware segment data
+    int numBlocks;                  // Number of blocks for the device
+    BOOL isValid;                   // Flag indicating if the controller data is valid
+    BOOL isReady;                   // Flag indicating if the controller is ready
+    BYTE volumeIndexes[4];          // Indexes of associated volumes
+    BYTE volumeCount;               // Count of associated volumes
+    DWORD deviceId;                 // Device ID
+    DWORD lunId;                    // LUN ID
+    DWORD targetId;                 // Target ID
+    DWORD pathId;                   // Path ID
+    DWORD busId;                    // Bus ID
+    DWORD scsiId;                   // SCSI ID
+    DWORD reserved1;                // Reserved
+    DWORD reserved2;                // Reserved
+    DWORD productId_from_inquiry;   // Product ID from inquiry
+    DWORD controllerType;           // Type of the controller
+    BYTE controllerVersion;         // Version of the controller (e.g., A0AA, A1BA)
+    BYTE controllerSubVersion;      // Sub-version of the controller
+    char vendorId[9];               // Vendor ID string
+    char productId[17];             // Product ID string
+    BOOL lunInfoLoaded;             // Flag indicating if LUN info is loaded
+    BYTE lunData[64];               // LUN data buffer
+    DWORD capacity;                 // Device capacity
+    DWORD precalculatedCapacity;    // Pre-calculated capacity
+    BOOL mpInfoLoaded;              // Flag indicating if MP info is loaded
+    DWORD segmentIds[4];            // IDs of the firmware segments
+    BOOL segmentPresent[4];         // Flags indicating presence of firmware segments
 } CONTROLLER_DATA, *PCONTROLLER_DATA;
 #pragma pack(pop)
-
-// Structure for flash device information
-// ...existing code...
-
-#pragma pack(push, 1)
 
 // Device constants
 #define MAX_VOLUMES         8
@@ -218,30 +235,4 @@ typedef struct _CONTROLLER_DATA {
 #define DEVICE_STATUS_FOUND     0x01
 #define DEVICE_STATUS_ERROR     0xFF
 
-// Controller data structure (reconstructed from Ghidra analysis)
-typedef struct _CONTROLLER_DATA {
-    BOOL isValid;
-    BOOL isReady;
-    BYTE volumeIndexes[4];
-    BYTE volumeCount;
-    DWORD deviceId;
-    DWORD lunId;
-    DWORD targetId;
-    DWORD pathId;
-    DWORD busId;
-    DWORD scsiId;
-    DWORD reserved1;
-    DWORD reserved2;
-    DWORD productId;
-    DWORD controllerType;
-    BOOL lunInfoLoaded;
-    BYTE lunData[64];
-    DWORD capacity;
-    DWORD precalculatedCapacity;
-    BOOL mpInfoLoaded;
-    DWORD segmentIds[4];
-    BOOL segmentPresent[4];
-} CONTROLLER_DATA, *PCONTROLLER_DATA;
-
-#pragma pack(pop)
 #endif  // DEVICE_STRUCTURES_H
