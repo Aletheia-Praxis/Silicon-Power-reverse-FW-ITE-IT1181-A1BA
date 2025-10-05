@@ -179,6 +179,8 @@ typedef struct _DEVICE_INFO {
 
 } DEVICE_INFO, *PDEVICE_INFO;
 
+#pragma pack(push, 1)
+
 // Device constants
 #define MAX_VOLUMES         8
 #define MAX_CONTROLLERS     3
@@ -203,36 +205,26 @@ typedef struct _DEVICE_INFO {
 typedef struct _CONTROLLER_DATA {
     BOOL isValid;
     BOOL isReady;
-    DWORD deviceId;
-    BYTE pathId;
-    BYTE targetId;
-    BYTE lunId;
-    BYTE busId;
-    BYTE scsiId;
-    BYTE reserved1;
-    BYTE reserved2;
     BYTE volumeIndexes[4];
     BYTE volumeCount;
-    BYTE productId;
-    BYTE controllerType;
-
-    // MP Info
-    BOOL mpInfoLoaded;
-    BYTE mpData[0x10];
-    BYTE mpStatus;
-    WORD mpChecksums[8];
-    WORD totalMpChecksum;
-
-    // LUN Info
+    DWORD deviceId;
+    DWORD lunId;
+    DWORD targetId;
+    DWORD pathId;
+    DWORD busId;
+    DWORD scsiId;
+    DWORD reserved1;
+    DWORD reserved2;
+    DWORD productId;
+    DWORD controllerType;
     BOOL lunInfoLoaded;
     BYTE lunData[64];
-
-    // Capacity Info
     DWORD capacity;
     DWORD precalculatedCapacity;
-
-    DEVICE_BANK_INFO banks[2];
-
+    BOOL mpInfoLoaded;
+    DWORD segmentIds[4];
+    BOOL segmentPresent[4];
 } CONTROLLER_DATA, *PCONTROLLER_DATA;
 
+#pragma pack(pop)
 #endif  // DEVICE_STRUCTURES_H
