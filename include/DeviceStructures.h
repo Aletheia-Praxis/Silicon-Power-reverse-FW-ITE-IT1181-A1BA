@@ -176,8 +176,25 @@ typedef struct _DEVICE_INFO {
     BYTE deviceParams[0xFF];    // Device parameters
     BOOL lunArrayLoaded;        // LUN array loaded flag
     BYTE firmwareLayout[512];   // Placeholder for firmware segment data
+    BYTE currentDeviceIndex; // Placeholder for the field at offset 0x29f
+    int numBlocks;           // Placeholder for the field at offset 0x99e
+} _DEVICE_INFO, *PDEVICE_INFO;
 
-} DEVICE_INFO, *PDEVICE_INFO;
+// Structure to hold controller-specific data (replaces object at this+0x24f)
+#pragma pack(push, 1)
+typedef struct _CONTROLLER_DATA {
+    BYTE unknown_data[0x29f];
+    BYTE currentDeviceIndex;
+    BYTE bcm[512];
+    DWORD segmentIds[4];
+    BOOL segmentPresent[4];
+    BYTE firmwareSegments[4][512]; // Placeholder for segment data
+    int numBlocks;
+} CONTROLLER_DATA, *PCONTROLLER_DATA;
+#pragma pack(pop)
+
+// Structure for flash device information
+// ...existing code...
 
 #pragma pack(push, 1)
 
