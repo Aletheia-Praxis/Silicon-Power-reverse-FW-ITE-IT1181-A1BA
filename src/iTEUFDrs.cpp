@@ -6,7 +6,6 @@
 #include <winioctl.h>
 
 #include "../include/DeviceStructures.h"
-#include "../include/FlashSDK.h"
 #include "../include/SDKAPIs.h"
 #include "../include/SDKLoader.h"
 #include "../include/Utilities.h"
@@ -25,73 +24,9 @@ void buildVolumePath(char driveLetter, char* path, size_t pathSize) {
     }
 }
 
-// Typedefs for SDK calls (best-effort based on decompilation patterns)
-typedef int(__stdcall* PFN_VDR_SYSREADY)(void* bcmBuffer, HANDLE hDevice);
-typedef int(__stdcall* PFN_VDR_SETSYSREADY)(DWORD mode, void* bcmBuffer, HANDLE hDevice);
-typedef int(__stdcall* PFN_FLH_INITCODE)(
-    DWORD param1,
-    void* param2,
-    void* param3,
-    void* param4,
-    LPCSTR basePath,
-    void* bcmBuffer,
-    HANDLE hDevice);
-typedef int(__stdcall* PFN_STD_INQUIRY)(void* outBuffer, HANDLE deviceHandle);
-
-// Typedefs for SDK calls (best-effort based on decompilation patterns)
-typedef int(__stdcall* PFN_FLH_SCAN_MASS_BLOCKS_PER_CHIP)(
-    DWORD ctx,
-    BYTE ce,
-    BYTE ch,
-    int rtPtr,
-    void* outBuf,
-    BYTE mode,
-    BYTE* outFlag,
-    int* outRet);
-typedef int(__stdcall* PFN_FLH_SCAN_E2NAND)(DWORD ctx, BYTE ce, BYTE ch, int rtPtr, void* outBuf);
-typedef int(__stdcall* PFN_MP_ERASE_SYSTEM_TABLE)(DWORD ctx, int rtPtr, void* blockMap);
-typedef int(__stdcall* PFN_FLH_ARRANGE_SEGMENT_PARA)(BYTE* outBuf, void* segmentInfo);
-typedef int(__stdcall* PFN_FLH_INIT_CTRL)(DWORD ctx, BYTE* segmentParams, void* bankInfo);
-typedef int(__stdcall* PFN_FLH_BLOCK_ERASE)(DWORD ctx, DWORD handle, int rtPtr);
-typedef int(__stdcall* PFN_FLH_READISP)(
-    DWORD deviceId,
-    BYTE* buffer,
-    DWORD bufferSize,
-    BYTE lunIndex,
-    BYTE* bcmInfo,
-    BYTE mode);
-typedef int(__stdcall* PFN_ADDR_READCIS)(DWORD deviceId, DWORD* buffer, DWORD lunId, BYTE* bcmInfo);
-typedef int(__stdcall* PFN_FLH_GETFLASHDATAFROMDATABASE)(
-    DWORD deviceId,
-    BYTE* flashData,
-    BYTE* deviceData,
-    CHAR* devicePath);
-typedef int(__stdcall* PFN_FLH_GETFLASHDATAFROMMEMORY)(DWORD deviceId, BYTE* flashData);
-typedef int(__stdcall* PFN_VDR_READWRITELUNCONFIG)(
-    DWORD mode,
-    DWORD* buffer,
-    BYTE* bcmInfo,
-    DWORD deviceId);
-typedef int(__stdcall* PFN_FLH_FINDROOTTABLE)(
-    DWORD deviceId,
-    DWORD* rootTableEntries,
-    BYTE* bcmInfo,
-    DWORD mode);
-typedef int(__stdcall* PFN_VDR_ROOTFUNC)(
-    DWORD address,
-    DWORD mode,
-    DWORD param1,
-    DWORD param2,
-    DWORD param3,
-    BYTE* buffer,
-    BYTE* bcmInfo,
-    DWORD deviceId);
-typedef int(__stdcall* PFN_VDR_READSYSADDR)(DWORD* sysAddrData, BYTE* bcmInfo, DWORD deviceId);
-
 // Constructor implementation (equivalent to the original FUN_0040d690)
 iTEUFDrs::iTEUFDrs(LPCSTR basePath)
     : m_vtable(nullptr), m_isInitialized(FALSE), m_lastError(0), m_hSDK(NULL),
-      m_pVDR_GetDeviceInquiry(nullptr), m_pVDR_CheckDeviceSupport(nullptr),
       m_pVDR_GetLunIndex(nullptr), m_pVDR_GetDeviceID(nullptr) {
     LogMessage("iTEUFDrs: constructor called with basePath: %s", basePath);
 
@@ -177,24 +112,27 @@ BOOL iTEUFDrs::VerifySDKIntegrity() {
     // These are the essential security and core functions identified in FUN_00401000
 
     // Check critical security functions
-    if(! g_FLH_ReadISPData || ! g_FLH_WriteISPData) {
+    if(! g_sdk_api.FLH_ReadISPData || ! g_sdk_api.FLH_WriteISPData) {
         LogError("VerifySDKIntegrity: Critical ISP functions not loaded.");
         return FALSE;
     }
 
-    if(! g_SEC_DoAuthentication || ! g_SEC_GetUserPassword || ! g_SEC_ChangePassword) {
+    if(! g_sdk_api.SEC_DoAuthentication || ! g_sdk_api.SEC_GetUserPassword
+       || ! g_sdk_api.SEC_ChangePassword) {
         LogError("VerifySDKIntegrity: Critical security functions not loaded.");
         return FALSE;
     }
 
     // Check core flash operations
-    if(! g_FLH_PhyiscalRead || ! g_FLH_PhyiscalWrite || ! g_FLH_BlockErase) {
+    if(! g_sdk_api.FLH_PhyiscalRead || ! g_sdk_api.FLH_PhyiscalWrite
+       || ! g_sdk_api.FLH_BlockErase) {
         LogError("VerifySDKIntegrity: Critical flash operations not loaded.");
         return FALSE;
     }
 
     // Check device management functions
-    if(! g_VDR_ReadWriteLUNConfig || ! g_VDR_GetSecurityStatus || ! g_VDR_CheckSYSReady) {
+    if(! g_sdk_api.VDR_ReadWriteLUNConfig || ! g_sdk_api.VDR_GetSecurityStatus
+       || ! g_sdk_api.STD_TestUnitReady) {
         LogError("VerifySDKIntegrity: Critical device management functions not loaded.");
         return FALSE;
     }
@@ -236,10 +174,15 @@ void iTEUFDrs::InitializeMembers() {
     // Initialize all members to zero
     memset(&m_deviceInfo, 0, sizeof(m_deviceInfo));
     memset(m_basePath, 0, sizeof(m_basePath));
+    memset(m_controllerData, 0, sizeof(m_controllerData));
+    memset(m_bcmBuffer, 0, sizeof(m_bcmBuffer));
+    memset(m_deviceIDTable, 0, sizeof(m_deviceIDTable));
     m_vtable = nullptr;
     m_isInitialized = FALSE;
     m_lastError = 0;
     m_hSDK = NULL;
+    m_controllerCount = 0;
+    m_volumeCount = 0;
 }
 
 BOOL iTEUFDrs::InitializeDeviceStructures() {
@@ -277,118 +220,223 @@ BOOL iTEUFDrs::InitializeDeviceStructures() {
     return TRUE;
 }
 
-// Main GetDeviceInfo function (equivalent to the original FUN_0040cf30)
+// Main GetDeviceInfo function (reconstructed from iTEUFDrs_DetectAndInitializeDevices)
 BOOL iTEUFDrs::GetDeviceInfoInternal() {
     LogMessage("GetDeviceInfo: Start");
+    m_deviceInfo.isInitialized = FALSE;
 
-    // Initialize parameter values
     if(! InitializeParaValue()) {
         LogError("GetDeviceInfo: InitializeParaValue fails.");
         return FALSE;
     }
     LogMessage("GetDeviceInfo: InitializeParaValue OK.");
 
-    // Check if drives exist
-    if(! CheckDriveExist()) {
+    m_volumeCount = CheckDriveExist();
+    if(m_volumeCount == 0) {
         LogMessage("Open Drive Handle Again !");
-        if(! OpenDriveHandleAgain(0)) {
-            LogError("GetDeviceInfo: Device Not Found.");
+        if(! OpenDriveHandleAgain(0)) {  // The parameter seems unused in the stub
+            m_deviceInfo.driveOpened = FALSE;
+            LogError("GetDeviceInfo: Device Not Found after trying again.");
             return FALSE;
         }
         m_deviceInfo.driveOpened = TRUE;
+        m_volumeCount = CheckDriveExist();
     }
 
-    if(! CheckDriveExist()) {
-        LogError("GetDeviceInfo: Device Not Found.");
+    if(m_volumeCount == 0 || m_volumeCount == (BYTE) -1) {
+        LogError("GetDeviceInfo: Device Not Found or CheckDriveExist Error.");
         return FALSE;
     }
 
     LogMessage("GetDeviceInfo CheckDriveExist OK.");
 
-    // Set device ID
     SetDeviceID();
     LogMessage("GetDeviceInfo SetDeviceID OK.");
 
-    // Initialize volume pair controller
     VolumePairController();
     LogMessage("GetDeviceInfo VolumePairController OK.");
 
-    // Process each volume
-    for(BYTE i = 0; i < m_deviceInfo.volumeCount; i++) {
-        if(m_deviceInfo.volumes[i].deviceFound) {
-            BYTE volumeIndex = i;
-            DWORD deviceId = m_deviceInfo.volumes[i].inquiryData1;
+    for(BYTE i = 0; i < m_controllerCount; ++i) {
+        CONTROLLER_DATA& controller = m_controllerData[i];
+        if(! controller.isValid)
+            continue;
 
-            // Check system ready IO
-            if(! CheckSystemReadyIO(volumeIndex, deviceId)) {
-                LogError("Check system ready IO fail ....");
+        BYTE volumeIndex = controller.volumeIndexes[0];  // Assuming first volume for the controller
+        if(volumeIndex >= MAX_VOLUMES)
+            continue;
+
+        DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+
+        if(m_deviceInfo.driveOpened) {
+            // If we reopened handles, we need to use the physical drive handle
+            if(! OpenPhysicalDrive(volumeIndex)) {
+                controller.isReady = FALSE;
                 continue;
             }
-
-            // Set current volume
-            m_deviceInfo.selectedVolume = volumeIndex;
-
-            // Load bank C
-            if(! LoadBankC(volumeIndex, deviceId)) {
-                LogError("Load BankC fail (Path not exist?)");
+        } else {
+            if(! OpenLogicalDriveHandle(volumeIndex)) {
+                controller.isReady = FALSE;
                 continue;
             }
-
-            // Get BCM information
-            if(! GetBCMInformation(volumeIndex, deviceId)) {
-                LogError("Get BCM information failed");
-                continue;
-            }
-
-            // Copy bank data
-            CopyBankData(volumeIndex);
-
-            // Load bank data
-            LoadBankData(volumeIndex, deviceId);
-
-            // Format device string
-            FormatDeviceIdentification();
-
-            // Set system ready flag
-            if(m_deviceInfo.ispLoaded && m_deviceInfo.deviceFound) {
-                LogMessage("DoRepairDevice System Yes bISPLoaded");
-                m_deviceInfo.systemReady = TRUE;
-            } else {
-                LogMessage("DoRepairDevice No System (!ISPLoad)");
-                m_deviceInfo.repairMode = TRUE;
-            }
-
-            // Set bank as processed
-            m_deviceInfo.banks[volumeIndex].isProcessed = TRUE;
         }
+
+        m_deviceInfo.selectedVolume = volumeIndex;
+
+        // In the original code, there's a check for `param_1 + 0x9f9` which seems to be an ISP
+        // loaded flag. We'll simulate this with a member variable.
+        if(! volume.ispCodeInitialized) {
+            PrepareFirmwareFilePath();  // Placeholder
+            ReadBinaryFileVersion();    // Placeholder
+            if(! InitializeISPCode(i, controller.deviceId)) {
+                LogError("GetDeviceInfo: InitializeISPCode failed for controller %d", i);
+                controller.isReady = FALSE;
+                CloseDeviceHandle(volumeIndex);
+                continue;
+            }
+            volume.ispCodeInitialized = TRUE;
+        }
+
+        if(! NotifyFwSegmentInfo(i, controller.deviceId)) {
+            AfxMessageBox("Load BankC fail (Path not exist?)", 0, 0);
+            controller.isReady = FALSE;
+            CloseDeviceHandle(volumeIndex);
+            continue;
+        }
+
+        typedef int(__stdcall * PFN_FLH_ReadBCM)(void*, HANDLE);
+        PFN_FLH_ReadBCM pFLH_ReadBCM = (PFN_FLH_ReadBCM) g_sdk_api.FLH_ReadBCM;
+        if(! pFLH_ReadBCM || pFLH_ReadBCM(m_bcmBuffer, volume.hDevice) != 1) {
+            AfxMessageBox("Get BCM information CMD fail", 0, 0);
+            controller.isReady = FALSE;
+            CloseDeviceHandle(volumeIndex);
+            continue;
+        }
+
+        // Copy the BCM data from the main buffer to the specific bank's buffer
+        memcpy(volume.banks[0].bcmInfo, m_bcmBuffer, sizeof(m_bcmBuffer));
+        volume.banks[0].bcmLoaded = TRUE;
+
+        if(! volume.firmwareSegmentsLoaded) {
+            LoadAndVerifyFirmwareSegments(i, controller.deviceId);
+        } else {
+            UpdateFirmwareBankInfo(i, controller.deviceId);
+        }
+
+        if(! GetLunArrayData(i, controller.deviceId)) {
+            CalculateDeviceCapacity(i);
+        } else {
+            UpdateDeviceCapacityOrCalculate(i);
+        }
+
+        if(! GetMPInfo(i, controller.deviceId)) {
+            strcpy_s(m_deviceInfo.deviceString, sizeof(m_deviceInfo.deviceString), " NONE");
+            m_deviceInfo.systemReady = FALSE;
+        } else {
+            // Format string like " %s - %s "
+            m_deviceInfo.systemReady = TRUE;
+        }
+
+        if(m_deviceInfo.systemReady) {
+            LogMessage("DoRepairDevice System Yes bISPLoaded");
+            m_deviceInfo.repairMode = FALSE;
+        } else {
+            LogMessage("DoRepairDevice No System (!ISPLoad)");
+            m_deviceInfo.repairMode = TRUE;
+        }
+
+        controller.isReady = TRUE;
+        CloseDeviceHandle(volumeIndex);
     }
 
-    // Find first available volume
+    // Find first ready controller and format final display string
     m_deviceInfo.selectedVolume = 0xFF;
-    for(BYTE i = 0; i < m_deviceInfo.volumeCount; i++) {
-        if(m_deviceInfo.banks[i].isProcessed) {
-            m_deviceInfo.selectedVolume = i;
+    for(BYTE i = 0; i < m_controllerCount; ++i) {
+        if(m_controllerData[i].isReady) {
+            m_deviceInfo.selectedVolume = m_controllerData[i].volumeIndexes[0];
             break;
         }
     }
 
-    // Format final device string
     if(m_deviceInfo.selectedVolume != 0xFF) {
-        DEVICE_VOLUME_INFO* pVolume = &m_deviceInfo.volumes[m_deviceInfo.selectedVolume];
-        FormatDeviceString(
-            m_deviceInfo.deviceString,
-            sizeof(m_deviceInfo.deviceString),
-            " %s%s , ( %C )\n%s",
-            pVolume->vendorName,
-            pVolume->productName,
-            pVolume->familyType,
-            "");
-
-        // Copy device ID
-        memcpy(m_deviceInfo.deviceData, &pVolume->inquiryData1, 8);
+        FormatFinalDeviceString(m_deviceInfo.selectedVolume);
     }
 
     LogMessage("GetDeviceInfo: completed successfully");
+    m_isInitialized = TRUE;
+    return m_isInitialized;
+}
+
+BOOL iTEUFDrs::NotifyFwSegmentInfo(BYTE controllerIndex, DWORD deviceId) {
+    LogMessage("NotifyFwSegmentInfo for controller %d, deviceId 0x%X", controllerIndex, deviceId);
+
+    if(controllerIndex >= m_controllerCount) {
+        LogError("NotifyFwSegmentInfo: Invalid controller index %d", controllerIndex);
+        return FALSE;
+    }
+
+    CONTROLLER_DATA& controller = m_controllerData[controllerIndex];
+    if(! controller.isValid) {
+        LogWarning("NotifyFwSegmentInfo: Controller %d is not valid.", controllerIndex);
+        return FALSE;
+    }
+
+    BYTE volumeIndex = controller.volumeIndexes[0];
+    if(volumeIndex >= MAX_VOLUMES) {
+        LogError(
+            "NotifyFwSegmentInfo: Invalid volume index %d for controller %d",
+            volumeIndex,
+            controllerIndex);
+        return FALSE;
+    }
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+
+    // In the original code, this flag is at an offset like +0x9fb from the start of a large
+    // structure. We'll use a specific member in our reconstructed struct.
+    if(volume.fwSegmentNotified) {
+        LogMessage(
+            "NotifyFwSegmentInfo: Firmware segments already notified for volume %d.", volumeIndex);
+        return TRUE;
+    }
+
+    // Prepare segment parameter buffer (128 bytes)
+    BYTE segmentParams[128];
+    memset(segmentParams, 0, sizeof(segmentParams));
+
+    // Call SDK function to arrange segment parameters
+    if(! g_sdk_api.FLH_ArrangeSegmentPara) {
+        LogError("NotifyFwSegmentInfo: FLH_ArrangeSegmentPara function not found in SDK.");
+        return FALSE;
+    }
+    // The original code passes a pointer to a large structure + 0x1866. This likely contains
+    // firmware layout info. We'll pass a placeholder or a similarly structured part of our data.
+    // For now, let's assume m_deviceInfo.deviceData holds some of this info.
+    ((int(__stdcall*)(BYTE*, void*)) g_sdk_api.FLH_ArrangeSegmentPara)(
+        segmentParams, m_deviceInfo.deviceData);
+
+    // Call SDK function to initialize the controller with the segment parameters
+    if(! g_sdk_api.FLH_InitCTRL) {
+        LogError("NotifyFwSegmentInfo: FLH_InitCTRL function not found in SDK.");
+        return FALSE;
+    }
+
+    // The original code passes the device handle, the arranged segment params, and a buffer from
+    // the device structure (+0xa26). We'll use our m_bcmBuffer for that.
+    int result = ((int(__stdcall*)(HANDLE, BYTE*, void*)) g_sdk_api.FLH_InitCTRL)(
+        volume.hDevice, segmentParams, m_bcmBuffer);
+
+    if(result != 1) {
+        LogError(
+            "NotifyFwSegmentInfo: FLH_InitCTRL failed for volume %d. Result: %d",
+            volumeIndex,
+            result);
+        return FALSE;
+    }
+
+    // Mark as notified on success
+    volume.fwSegmentNotified = TRUE;
+    LogMessage(
+        "NotifyFwSegmentInfo: Successfully notified firmware segments for volume %d.", volumeIndex);
+
     return TRUE;
 }
 
@@ -407,7 +455,7 @@ BOOL iTEUFDrs::InitializeParaValue() {
     for(int i = 0; i < MAX_CONTROLLERS; ++i) {
         CONTROLLER_DATA* pController = &m_controllerData[i];
 
-        pController->isValid = TRUE;  // Based on loop structure, seems it's set to valid
+        pController->isValid = TRUE;
         pController->deviceId = -1;
         pController->lunId = -1;
         pController->targetId = -1;
@@ -416,9 +464,8 @@ BOOL iTEUFDrs::InitializeParaValue() {
         pController->scsiId = -1;
         pController->reserved1 = -1;
         pController->reserved2 = -1;
+        pController->isReady = FALSE;
 
-        // The original code had complex loops initializing parts of a larger structure.
-        // This is a simplified interpretation based on the available structure definitions.
         for(int j = 0; j < 4; ++j) {
             pController->volumeIndexes[j] = 0xFF;  // -1 for byte
         }
@@ -429,19 +476,20 @@ BOOL iTEUFDrs::InitializeParaValue() {
 }
 
 BYTE iTEUFDrs::CheckDriveExist() {
-    LogMessage("CheckDriveExist: checking for physical drives");
+    LogMessage("CheckDriveExist: scanning for ITE devices on logical drives");
     m_deviceInfo.volumeCount = 0;
+    char drivePath[] = "\\\\.\\A:";
 
     // Allocate buffer for inquiry data
-    BYTE inquiryBuffer[176];  // 0xB0 bytes
+    BYTE inquiryBuffer[0xB0];  // 176 bytes
 
-    // Scan PhysicalDrive1-8 (as per Ghidra analysis - original binary behavior)
-    for(int i = 1; i <= 8 && m_deviceInfo.volumeCount < MAX_VOLUMES; ++i) {
-        char physicalPath[32];
-        wsprintfA(physicalPath, "\\\\.\\PhysicalDrive%d", i);
+    // Scan drive letters 'A' through 'Z' && m_deviceInfo.volumeCount < MAX_VOLUMES;
+    for(char driveLetter = 'A'; driveLetter <= 'Z' && m_deviceInfo.volumeCount < MAX_VOLUMES;
+        driveLetter++) {
+        drivePath[4] = driveLetter;
 
         HANDLE hDevice = CreateFileA(
-            physicalPath,
+            drivePath,
             GENERIC_READ | GENERIC_WRITE,
             FILE_SHARE_READ | FILE_SHARE_WRITE,
             NULL,
@@ -454,49 +502,50 @@ BYTE iTEUFDrs::CheckDriveExist() {
         }
 
         // Use the bound SDK function for Inquiry
-        PFN_STD_INQUIRY pInquiry = (PFN_STD_INQUIRY) g_STD_Inquiry;
-        if(! pInquiry || pInquiry(inquiryBuffer, hDevice) == 0) {
-            LogWarning("CheckDriveExist: STD_Inquiry failed for drive %d", i);
+        if(! g_sdk_api.STD_Inquiry
+           || ((PFN_STD_Inquiry) g_sdk_api.STD_Inquiry)(
+                  0, inquiryBuffer, sizeof(inquiryBuffer), 0, m_bcmBuffer, 0)
+                  != 0) {
+            LogWarning("CheckDriveExist: STD_Inquiry failed for drive %c:", driveLetter);
             CloseHandle(hDevice);
             continue;
         }
 
-        // Check for "ITEu" signature
-        char* inquiryString = (char*) inquiryBuffer;
-        if(strstr(inquiryString + 8, "ITEu") == NULL) {
-            LogMessage("CheckDriveExist: Not an ITE device on drive %d", i);
+        // Check for "ITEu" signature in the inquiry data (starting from offset 8)
+        if(memcmp(inquiryBuffer + 8, "ITEu", 4) != 0) {
             CloseHandle(hDevice);
             continue;
         }
+
+        LogMessage("CheckDriveExist: Found ITE device on drive %c:", driveLetter);
 
         // It's our device, populate the structure
         BYTE volIdx = m_deviceInfo.volumeCount;
         DEVICE_VOLUME_INFO& vol = m_deviceInfo.volumes[volIdx];
 
         vol.volumeIndex = volIdx;
-        vol.volumeLetter = (char) ('C' + i - 1);  // Placeholder letter
-        vol.driveType = GetDriveTypeA(NULL);      // Placeholder
-        vol.hDevice = hDevice;                    // Keep handle open for now
+        vol.volumeLetter = driveLetter;
+        vol.driveType = GetDriveTypeA(drivePath);
+        vol.hDevice = hDevice;  // Keep handle open for now
         vol.deviceFound = TRUE;
 
         // Copy inquiry data parts
         memcpy(&vol.inquiryData1, inquiryBuffer + 0x24, 16);
 
-        // Copy Vendor and Product strings
-        for(int j = 0; j < 8; ++j)
-            vol.vendorName[j] = (inquiryBuffer[8 + j] == 0) ? ' ' : inquiryBuffer[8 + j];
+        // Copy Vendor and Product strings, ensuring they are null-terminated
+        memcpy(vol.vendorName, inquiryBuffer + 8, 8);
         vol.vendorName[7] = '\0';
-        for(int j = 0; j < 16; ++j)
-            vol.productName[j] = (inquiryBuffer[16 + j] == 0) ? ' ' : inquiryBuffer[16 + j];
+        memcpy(vol.productName, inquiryBuffer + 16, 16);
         vol.productName[15] = '\0';
+
         // Build ASCII inquiry string for substring search
-        char asciiBuf[256];
-        int off = 0;
-        for(int k = 8; k < 36 && off < 200; ++k) {
+        char asciiBuf[256] = { 0 };
+        for(int k = 8; k < 36; ++k) {
             char c = (char) inquiryBuffer[k];
-            asciiBuf[off++] = (c == 0) ? ' ' : c;
+            if(c >= 32 && c < 127) {  // isprint()
+                asciiBuf[strlen(asciiBuf)] = c;
+            }
         }
-        asciiBuf[off] = '\0';
 
         // Detect controller and flags
         vol.controllerType = 200;  // not supported by default
@@ -515,11 +564,28 @@ BYTE iTEUFDrs::CheckDriveExist() {
             vol.controllerType = 2;
             vol.a1baFlag = (strstr(asciiBuf, "A0AA")) ? 0 : 0xFF;
         }
-        // Copy raw inquiry
-        memcpy(&vol.inquiryData1, inquiryBuffer, sizeof(vol.inquiryData1));
-        SafeCloseHandle(vol.hDevice);
+
+        // Get LUN Index and Device ID
+        if(g_sdk_api.STD_TestUnitReady
+           && ((PFN_VDR_CheckSYSReady) g_sdk_api.STD_TestUnitReady)(
+                  0, m_bcmBuffer, sizeof(m_bcmBuffer), 0, m_bcmBuffer, 0)
+                  == 0) {
+            if(g_sdk_api.STD_GetLUNIndex) {
+                ((PFN_VDR_ReadLUNIndex) g_sdk_api.STD_GetLUNIndex)(
+                    0, &vol.lunIndex, 1, 0, m_bcmBuffer, 0);
+            }
+            if(g_sdk_api.STD_GetDeviceID) {
+                ((PFN_VDR_ReadLUNID) g_sdk_api.STD_GetDeviceID)(
+                    0, &vol.deviceId, 1, 0, m_bcmBuffer, 0);
+            }
+        }
+
+        m_deviceInfo.volumeCount++;
+        CloseHandle(hDevice);  // Close handle after processing
     }
-    return (m_deviceInfo.volumeCount > 0);
+
+    LogMessage("CheckDriveExist: Found %d ITE devices.", m_deviceInfo.volumeCount);
+    return m_deviceInfo.volumeCount;
 }
 
 BOOL iTEUFDrs::OpenDriveHandleAgain(BYTE volumeIndex) {
@@ -690,28 +756,178 @@ BOOL iTEUFDrs::ValidatePhysicalDevice(HANDLE hDevice, BYTE driveIndex) {
 }
 
 BOOL iTEUFDrs::SetDeviceID() {
-    // This function sets device ID
-    // Implementation based on decompiled code analysis
-    LogMessage("SetDeviceID: setting device identification");
+    LogMessage("SetDeviceID: processing device IDs for %d volumes", m_volumeCount);
 
-    // Process device inquiry for each volume
-    for(BYTE i = 0; i < m_deviceInfo.volumeCount; i++) {
-        if(m_deviceInfo.volumes[i].deviceFound) {
-            // Set device ID based on inquiry data
-            m_deviceInfo.volumes[i].inquiryData1 = 0x12345678;  // Placeholder
+    for(BYTE i = 0; i < m_volumeCount; i++) {
+        DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[i];
+        if(! volume.deviceFound) {
+            continue;
         }
+
+        // Open the correct handle type
+        if(m_deviceInfo.driveOpened) {
+            if(! OpenPhysicalDrive(i)) {
+                LogWarning("SetDeviceID: Could not open physical drive %d", i);
+                continue;
+            }
+        } else {
+            if(! OpenLogicalDriveHandle(i)) {
+                LogWarning("SetDeviceID: Could not open logical drive %c:", volume.volumeLetter);
+                continue;
+            }
+        }
+
+        // Check if device ID already exists
+        if(volume.deviceId == 0xFF || volume.deviceId == 0) {  // 0xFF is our uninitialized value
+            // Device ID not set, find a new one
+            BYTE newDeviceID = 0;
+            BOOL idFound = FALSE;
+            for(int j = 0; j < 255; j++) {
+                if(m_deviceIDTable[j] == 0) {
+                    newDeviceID = (BYTE) j;
+                    idFound = TRUE;
+                    break;
+                }
+            }
+
+            if(! idFound) {
+                LogError("SetDeviceID: DeviceID table is full. Cannot assign new ID.");
+                CloseDeviceHandle(i);
+                continue;
+            }
+
+            if(g_sdk_api.STD_SetDeviceID) {
+                int result = ((PFN_VDR_WriteLUNID) g_sdk_api.STD_SetDeviceID)(
+                    newDeviceID, m_bcmBuffer, 0, 0, m_bcmBuffer, 1);
+                if(result == 0) {
+                    LogMessage(
+                        "SetDeviceID: Successfully set DeviceID %d for volume %d", newDeviceID, i);
+                    m_deviceIDTable[newDeviceID] = 1;  // Mark as used
+                    volume.deviceId = newDeviceID;
+                } else {
+                    LogError("SetDeviceID: Failed to set DeviceID for volume %d", i);
+                }
+            } else {
+                LogError("SetDeviceID: STD_SetDeviceID function not found in SDK.");
+            }
+        } else {
+            // Device ID already exists, let's verify it
+            BYTE currentDeviceID = 0xFF;
+            if(g_sdk_api.STD_GetDeviceID) {
+                int result = ((PFN_VDR_ReadLUNID) g_sdk_api.STD_GetDeviceID)(
+                    0, &currentDeviceID, 1, 0, m_bcmBuffer, 0);
+                if(result == 0) {
+                    if(currentDeviceID != volume.deviceId) {
+                        LogWarning(
+                            "SetDeviceID: Mismatch! Stored DeviceID is %d but hardware reports %d "
+                            "for volume %d.",
+                            volume.deviceId,
+                            currentDeviceID,
+                            i);
+                        // Optionally, update our stored ID
+                        volume.deviceId = currentDeviceID;
+                    } else {
+                        LogMessage(
+                            "SetDeviceID: Verified existing DeviceID %d for volume %d",
+                            currentDeviceID,
+                            i);
+                    }
+                    // Ensure the device ID is marked in our table
+                    if(currentDeviceID < 255) {
+                        m_deviceIDTable[currentDeviceID] = 1;
+                    }
+                } else {
+                    LogError("SetDeviceID: Failed to read existing DeviceID for volume %d", i);
+                }
+            } else {
+                LogError("SetDeviceID: STD_GetDeviceID function not found in SDK.");
+            }
+        }
+
+        // Close the handle after processing
+        CloseDeviceHandle(i);
     }
 
+    LogMessage("SetDeviceID: finished processing.");
     return TRUE;
 }
 
 void iTEUFDrs::VolumePairController() {
-    // This function initializes volume pair controller
-    // Implementation based on decompiled code analysis
-    LogMessage("VolumePairController: initializing volume controller");
+    LogMessage("VolumePairController: Pairing %d volumes into controllers.", m_volumeCount);
 
-    // Initialize bank structures
-    InitializeDeviceStructures();
+    // Reset controller count before pairing
+    m_controllerCount = 0;
+
+    // This array tracks which volume indices have been assigned to a controller
+    bool volumesProcessed[MAX_VOLUMES] = { false };
+
+    // Outer loop: Iterate through each volume to see if it needs to be paired
+    for(BYTE i = 0; i < m_volumeCount; i++) {
+        // If this volume has already been processed, skip it
+        if(volumesProcessed[i]) {
+            continue;
+        }
+
+        // We've found an unpaired volume, so create a new controller for it.
+        // Make sure we don't exceed the max number of controllers.
+        if(m_controllerCount >= MAX_CONTROLLERS) {
+            LogError(
+                "VolumePairController: Exceeded maximum number of controllers (%d).",
+                MAX_CONTROLLERS);
+            break;
+        }
+
+        CONTROLLER_DATA& newController = m_controllerData[m_controllerCount];
+        newController.isValid = TRUE;
+        newController.volumeCount = 0;
+
+        // The deviceId of the first unpaired volume determines the ID for the new controller
+        BYTE controllerDeviceId = m_deviceInfo.volumes[i].deviceId;
+        newController.deviceId = controllerDeviceId;
+
+        LogMessage(
+            "VolumePairController: Creating new controller #%d with DeviceID %d (from volume %d)",
+            m_controllerCount,
+            controllerDeviceId,
+            i);
+
+        // Inner loop: Find all other volumes that belong to this new controller
+        for(BYTE j = 0; j < m_volumeCount; j++) {
+            // Check if this volume has the same deviceId and hasn't been processed
+            if(! volumesProcessed[j] && m_deviceInfo.volumes[j].deviceId == controllerDeviceId) {
+                // Make sure we don't add more volumes than the controller can hold
+                if(newController.volumeCount < 4) {
+                    newController.volumeIndexes[newController.volumeCount] = j;
+                    newController.volumeCount++;
+                    volumesProcessed[j] = true;  // Mark this volume as processed
+                    LogMessage(
+                        "VolumePairController: ... added volume %d to controller #%d",
+                        j,
+                        m_controllerCount);
+                } else {
+                    LogWarning(
+                        "VolumePairController: Controller #%d is full. Cannot add volume %d.",
+                        m_controllerCount,
+                        j);
+                }
+            }
+        }
+
+        // Inherit properties from the first volume in the group
+        if(newController.volumeCount > 0) {
+            BYTE firstVolumeIndex = newController.volumeIndexes[0];
+            newController.productId =
+                m_deviceInfo.volumes[firstVolumeIndex].familyType  // Or some other ID
+                ;
+            newController.controllerType = m_deviceInfo.volumes[firstVolumeIndex].controllerType;
+        }
+
+        // Increment the total number of controllers found
+        m_controllerCount++;
+    }
+
+    LogMessage(
+        "VolumePairController: Finished pairing. Found %d unique controllers.", m_controllerCount);
 }
 
 BOOL iTEUFDrs::CheckSystemReadyIO(BYTE volumeIndex, DWORD deviceId) {
@@ -860,14 +1076,14 @@ BOOL iTEUFDrs::GetBCMInformation(BYTE volumeIndex, DWORD deviceId) {
     BOOL result = FALSE;
 
     // Call VDR_CheckSYSReady to check system ready status
-    PFN_VDR_SYSREADY pCheckSYSReady = (PFN_VDR_SYSREADY) g_VDR_CheckSYSReady;
-    if(pCheckSYSReady) {
-        int sysReadyResult = pCheckSYSReady(bcmBuffer, hDevice);
+    if(g_sdk_api.STD_TestUnitReady) {
+        int sysReadyResult = ((PFN_VDR_CheckSYSReady) g_sdk_api.STD_TestUnitReady)(
+            0, bcmBuffer, sizeof(bcmBuffer), 0, bcmBuffer, 0);
         if(sysReadyResult == 0) {
             // System is ready, now call VDR_SetSYSReady
-            PFN_VDR_SETSYSREADY pSetSYSReady = (PFN_VDR_SETSYSREADY) g_VDR_SetSYSReady;
-            if(pSetSYSReady) {
-                int setReadyResult = pSetSYSReady(0, bcmBuffer, hDevice);
+            if(g_sdk_api.VDR_SetSYSReady) {
+                int setReadyResult = ((PFN_VDR_SetSYSReady) g_sdk_api.VDR_SetSYSReady)(
+                    deviceId, bcmBuffer, sizeof(bcmBuffer), 0, bcmBuffer, 0);
                 if(setReadyResult != 0) {
                     // Set ready failed
                     LogError(
@@ -881,16 +1097,16 @@ BOOL iTEUFDrs::GetBCMInformation(BYTE volumeIndex, DWORD deviceId) {
                     initParams[3] = 0x08;  // Parameter length
 
                     // Call FLH_InitCodeWithIspPath
-                    PFN_FLH_INITCODE pInitCode = (PFN_FLH_INITCODE) g_FLH_InitCodeWithIspPath;
-                    if(pInitCode) {
-                        int initResult = pInitCode(
-                            1,
-                            &initParams[1],
-                            &initParams[0],
-                            &initParams[2],
-                            m_basePath,
-                            bcmBuffer,
-                            hDevice);
+                    if(g_sdk_api.FLH_InitCodeWithIspPath) {
+                        int initResult =
+                            ((PFN_FLH_InitCodeWithIspPath) g_sdk_api.FLH_InitCodeWithIspPath)(
+                                1,
+                                (BYTE*) &initParams[1],
+                                (BYTE*) &initParams[0],
+                                (BYTE*) &initParams[2],
+                                m_basePath,
+                                bcmBuffer,
+                                hDevice);
                         if(initResult == 0) {
                             LogMessage(
                                 "GetBCMInformation: Successfully initialized ISP code for volume "
@@ -1007,11 +1223,6 @@ BOOL iTEUFDrs::IdentifyDeviceFamily(LPCSTR inquiryString, BYTE volumeIndex) {
     return FALSE;
 }
 
-BOOL iTEUFDrs::CopyBankData(BYTE volumeIndex) {
-    // Dummy implementation
-    return TRUE;
-}
-
 /**
  * Load all SDK functions from 181FlashSDK.dll
  * Reconstructed from iTEUFDrs::LoadSDKFunctions at 0x00401000
@@ -1025,343 +1236,147 @@ BOOL iTEUFDrs::LoadSDKFunctions(HMODULE hSDK) {
 
     LogMessage("LoadSDKFunctions: Loading SDK function addresses...");
 
-    // Flash Database and Memory functions
-    g_FLH_GetInfoFromDataBaseByID = GetProcAddress(hSDK, "FLH_GetInfoFromDataBaseByID");
-    if(! g_FLH_GetInfoFromDataBaseByID)
-        return FALSE;
-
-    g_FLH_GetFlashDataFromDataBase = GetProcAddress(hSDK, "FLH_GetFlashDataFromDataBase");
-    if(! g_FLH_GetFlashDataFromDataBase)
-        return FALSE;
-
-    g_FLH_GetFlashDataFromMemory = GetProcAddress(hSDK, "FLH_GetFlashDataFromMemory");
-    if(! g_FLH_GetFlashDataFromMemory)
-        return FALSE;
-
-    // Root Table functions
-    g_FLH_ReadRootTable = GetProcAddress(hSDK, "FLH_ReadRootTable");
-    if(! g_FLH_ReadRootTable)
-        return FALSE;
-
-    g_FLH_WriteRootTable = GetProcAddress(hSDK, "FLH_WriteRootTable");
-    if(! g_FLH_WriteRootTable)
-        return FALSE;
-
-    // CIS Table functions
-    g_FLH_ReadCISTable = GetProcAddress(hSDK, "FLH_ReadCISTable");
-    if(! g_FLH_ReadCISTable)
-        return FALSE;
-
-    g_FLH_WriteCISTable = GetProcAddress(hSDK, "FLH_WriteCISTable");
-    if(! g_FLH_WriteCISTable)
-        return FALSE;
-
-    // ISP Data functions
-    g_FLH_ReadISPData = GetProcAddress(hSDK, "FLH_ReadISPData");
-    if(! g_FLH_ReadISPData)
-        return FALSE;
-
-    g_FLH_WriteISPData = GetProcAddress(hSDK, "FLH_WriteISPData");
-    if(! g_FLH_WriteISPData)
-        return FALSE;
-
-    // Flash operations
-    g_FLH_ReadLatestWBT = GetProcAddress(hSDK, "FLH_ReadLatestWBT");
-    if(! g_FLH_ReadLatestWBT)
-        return FALSE;
-
-    g_FLH_FindRootTable = GetProcAddress(hSDK, "FLH_FindRootTable");
-    if(! g_FLH_FindRootTable)
-        return FALSE;
-
-    g_FLH_LBA2PhysicalFlash = GetProcAddress(hSDK, "FLH_LBA2PhysicalFlash");
-    if(! g_FLH_LBA2PhysicalFlash)
-        return FALSE;
-
-    g_FLH_SetLedBlink = GetProcAddress(hSDK, "FLH_SetLedBlink");
-    if(! g_FLH_SetLedBlink)
-        return FALSE;
-
-    // Physical I/O functions
-    g_FLH_PhyiscalRead = GetProcAddress(hSDK, "FLH_PhyiscalRead");
-    if(! g_FLH_PhyiscalRead)
-        return FALSE;
-
-    g_FLH_PhyiscalWrite = GetProcAddress(hSDK, "FLH_PhyiscalWrite");
-    if(! g_FLH_PhyiscalWrite)
-        return FALSE;
-
-    // Block management
-    g_FLH_IsGoodBlock = GetProcAddress(hSDK, "FLH_IsGoodBlock");
-    if(! g_FLH_IsGoodBlock)
-        return FALSE;
-
-    g_FLH_IsTableBlock = GetProcAddress(hSDK, "FLH_IsTableBlock");
-    if(! g_FLH_IsTableBlock)
-        return FALSE;
-
-    g_FLH_MarkBad = GetProcAddress(hSDK, "FLH_MarkBad");
-    if(! g_FLH_MarkBad)
-        return FALSE;
-
-    g_FLH_GetRealBlocksPerDie = GetProcAddress(hSDK, "FLH_GetRealBlocksPerDie");
-    if(! g_FLH_GetRealBlocksPerDie)
-        return FALSE;
-
-    g_FLH_BlockIsGap = GetProcAddress(hSDK, "FLH_BlockIsGap");
-    if(! g_FLH_BlockIsGap)
-        return FALSE;
-
-    // Security functions
-    g_SEC_DoAuthentication = GetProcAddress(hSDK, "SEC_DoAuthentication");
-    if(! g_SEC_DoAuthentication)
-        return FALSE;
-
-    g_SEC_LeaveAuthenticatedState = GetProcAddress(hSDK, "SEC_LeaveAuthenticatedState");
-    if(! g_SEC_LeaveAuthenticatedState)
-        return FALSE;
-
-    g_SEC_GetPasswordHint = GetProcAddress(hSDK, "SEC_GetPasswordHint");
-    if(! g_SEC_GetPasswordHint)
-        return FALSE;
-
-    g_SEC_SetPasswordHint = GetProcAddress(hSDK, "SEC_SetPasswordHint");
-    if(! g_SEC_SetPasswordHint)
-        return FALSE;
-
-    g_SEC_ChangePassword = GetProcAddress(hSDK, "SEC_ChangePassword");
-    if(! g_SEC_ChangePassword)
-        return FALSE;
-
-    g_SEC_GetUserPassword = GetProcAddress(hSDK, "SEC_GetUserPassword");
-    if(! g_SEC_GetUserPassword)
-        return FALSE;
-
-    g_SEC_GetEncryptedPassword = GetProcAddress(hSDK, "SEC_GetEncryptedPassword");
-    if(! g_SEC_GetEncryptedPassword)
-        return FALSE;
-
-    // LUN functions
-    g_LUN_CreateLun = GetProcAddress(hSDK, "LUN_CreateLun");
-    if(! g_LUN_CreateLun)
-        return FALSE;
-
-    g_LUN_FindLunStartLBAByItemID = GetProcAddress(hSDK, "LUN_FindLunStartLBAByItemID");
-    if(! g_LUN_FindLunStartLBAByItemID)
-        return FALSE;
-
-    g_LUN_CreateApLunNewItemID = GetProcAddress(hSDK, "LUN_CreateApLunNewItemID");
-    if(! g_LUN_CreateApLunNewItemID)
-        return FALSE;
-
-    g_LUN_WriteBadBlockMapToApLun = GetProcAddress(hSDK, "LUN_WriteBadBlockMapToApLun");
-    if(! g_LUN_WriteBadBlockMapToApLun)
-        return FALSE;
-
-    g_LUN_ReadBadBlockMapFromApLun = GetProcAddress(hSDK, "LUN_ReadBadBlockMapFromApLun");
-    if(! g_LUN_ReadBadBlockMapFromApLun)
-        return FALSE;
-
-    g_LUN_FindOptimumOffsetCap = GetProcAddress(hSDK, "LUN_FindOptimumOffsetCap");
-    if(! g_LUN_FindOptimumOffsetCap)
-        return FALSE;
-
-    g_LUN_CalIsoSize = GetProcAddress(hSDK, "LUN_CalIsoSize");
-    if(! g_LUN_CalIsoSize)
-        return FALSE;
-
-    // Format functions
-    g_FMT_Format = GetProcAddress(hSDK, "FMT_Format");
-    if(! g_FMT_Format)
-        return FALSE;
-
-    g_FMT_GetOptimumCapacity = GetProcAddress(hSDK, "FMT_GetOptimumCapacity");
-    if(! g_FMT_GetOptimumCapacity)
-        return FALSE;
-
-    g_FMT_GetOptimumLunConfig = GetProcAddress(hSDK, "FMT_GetOptimumLunConfig");
-    if(! g_FMT_GetOptimumLunConfig)
-        return FALSE;
-
-    g_FMT_GetOSCapacity = GetProcAddress(hSDK, "FMT_GetOSCapacity");
-    if(! g_FMT_GetOSCapacity)
-        return FALSE;
-
-    // Standard SCSI functions
-    g_STD_Inquiry = GetProcAddress(hSDK, "STD_Inquiry");
-    if(! g_STD_Inquiry)
-        return FALSE;
-
-    g_STD_ReadCapacity = GetProcAddress(hSDK, "STD_ReadCapacity");
-    if(! g_STD_ReadCapacity)
-        return FALSE;
-
-    g_STD_LogicalRead = GetProcAddress(hSDK, "STD_LogicalRead");
-    if(! g_STD_LogicalRead)
-        return FALSE;
-
-    g_STD_LogicalWrite = GetProcAddress(hSDK, "STD_LogicalWrite");
-    if(! g_STD_LogicalWrite)
-        return FALSE;
-
-    // Utility functions
-    g_SwapDWORD = GetProcAddress(hSDK, "SwapDWORD");
-    if(! g_SwapDWORD)
-        return FALSE;
-
-    g_SwapWORD = GetProcAddress(hSDK, "SwapWORD");
-    if(! g_SwapWORD)
-        return FALSE;
-
-    // Address conversion functions
-    g_CCBAddress2RawAddress = GetProcAddress(hSDK, "CCBAddress2RawAddress");
-    if(! g_CCBAddress2RawAddress)
-        return FALSE;
-
-    g_RawAddress2CCBAddress = GetProcAddress(hSDK, "RawAddress2CCBAddress");
-    if(! g_RawAddress2CCBAddress)
-        return FALSE;
-
-    g_CCBAddress2ED3Address = GetProcAddress(hSDK, "CCBAddress2ED3Address");
-    if(! g_CCBAddress2ED3Address)
-        return FALSE;
-
-    g_ED3Address2CCBAddress = GetProcAddress(hSDK, "ED3Address2CCBAddress");
-    if(! g_ED3Address2CCBAddress)
-        return FALSE;
-
-    g_BlkAddr2RawAddr = GetProcAddress(hSDK, "BlkAddr2RawAddr");
-    if(! g_BlkAddr2RawAddr)
-        return FALSE;
-
-    // VDR (Vendor Device Request) functions
-    g_VDR_ReadWriteLUNConfig = GetProcAddress(hSDK, "VDR_ReadWriteLUNConfig");
-    if(! g_VDR_ReadWriteLUNConfig)
-        return FALSE;
-
-    g_VDR_ReadLUNData = GetProcAddress(hSDK, "VDR_ReadLUNData");
-    if(! g_VDR_ReadLUNData)
-        return FALSE;
-
-    g_VDR_WriteLUNData = GetProcAddress(hSDK, "VDR_WriteLUNData");
-    if(! g_VDR_WriteLUNData)
-        return FALSE;
-
-    g_VDR_ReadXData = GetProcAddress(hSDK, "VDR_ReadXData");
-    if(! g_VDR_ReadXData)
-        return FALSE;
-
-    g_VDR_WriteXData = GetProcAddress(hSDK, "VDR_WriteXData");
-    if(! g_VDR_WriteXData)
-        return FALSE;
-
-    g_VDR_ReadIData = GetProcAddress(hSDK, "VDR_ReadIData");
-    if(! g_VDR_ReadIData)
-        return FALSE;
-
-    g_VDR_WriteIData = GetProcAddress(hSDK, "VDR_WriteIData");
-    if(! g_VDR_WriteIData)
-        return FALSE;
-
-    g_VDR_ReadSysAddr = GetProcAddress(hSDK, "VDR_ReadSysAddr");
-    if(! g_VDR_ReadSysAddr)
-        return FALSE;
-
-    g_VDR_WriteSysAddr = GetProcAddress(hSDK, "VDR_WriteSysAddr");
-    if(! g_VDR_WriteSysAddr)
-        return FALSE;
-
-    // System ready functions
-    g_VDR_CheckSYSReady = GetProcAddress(hSDK, "VDR_CheckSYSReady");
-    if(! g_VDR_CheckSYSReady)
-        return FALSE;
-
-    g_VDR_SetSYSReady = GetProcAddress(hSDK, "VDR_SetSYSReady");
-    if(! g_VDR_SetSYSReady)
-        return FALSE;
-
-    // Device control functions
-    g_VDR_EndCode = GetProcAddress(hSDK, "VDR_EndCode");
-    if(! g_VDR_EndCode)
-        return FALSE;
-
-    g_VDR_DeviceChange = GetProcAddress(hSDK, "VDR_DeviceChange");
-    if(! g_VDR_DeviceChange)
-        return FALSE;
-
-    g_VDR_MediaChange = GetProcAddress(hSDK, "VDR_MediaChange");
-    if(! g_VDR_MediaChange)
-        return FALSE;
-
-    g_VDR_WriteProtect = GetProcAddress(hSDK, "VDR_WriteProtect");
-    if(! g_VDR_WriteProtect)
-        return FALSE;
-
-    g_VDR_RWCurrentLUNType = GetProcAddress(hSDK, "VDR_RWCurrentLUNType");
-    if(! g_VDR_RWCurrentLUNType)
-        return FALSE;
-
-    g_VDR_HiddenArea = GetProcAddress(hSDK, "VDR_HiddenArea");
-    if(! g_VDR_HiddenArea)
-        return FALSE;
-
-    g_VDR_ReadWriteLUNNo = GetProcAddress(hSDK, "VDR_ReadWriteLUNNo");
-    if(! g_VDR_ReadWriteLUNNo)
-        return FALSE;
-
-    // LUN ID functions
-    g_VDR_ReadLUNID = GetProcAddress(hSDK, "VDR_ReadLUNID");
-    if(! g_VDR_ReadLUNID)
-        return FALSE;
-
-    g_VDR_WriteLUNID = GetProcAddress(hSDK, "VDR_WriteLUNID");
-    if(! g_VDR_WriteLUNID)
-        return FALSE;
-
-    g_VDR_ReadLUNIndex = GetProcAddress(hSDK, "VDR_ReadLUNIndex");
-    if(! g_VDR_ReadLUNIndex)
-        return FALSE;
-
-    // Additional VDR functions
-    g_VDR_FlushCache = GetProcAddress(hSDK, "VDR_FlushCache");
-    if(! g_VDR_FlushCache)
-        return FALSE;
-
-    g_VDR_ReadPage = GetProcAddress(hSDK, "VDR_ReadPage");
-    if(! g_VDR_ReadPage)
-        return FALSE;
-
-    g_VDR_WritePage = GetProcAddress(hSDK, "VDR_WritePage");
-    if(! g_VDR_WritePage)
-        return FALSE;
-
-    g_VDR_WriteBlock_TLC = GetProcAddress(hSDK, "VDR_WriteBlock_TLC");
-    if(! g_VDR_WriteBlock_TLC)
-        return FALSE;
-
-    g_VDR_GetSecurityStatus = GetProcAddress(hSDK, "VDR_GetSecurityStatus");
-    if(! g_VDR_GetSecurityStatus)
-        return FALSE;
-
-    // Additional functions continue...
-    g_MP_CreateSystem = GetProcAddress(hSDK, "MP_CreateSystem");
-    if(! g_MP_CreateSystem)
-        return FALSE;
-
-    g_MP_EraseSystemTable = GetProcAddress(hSDK, "MP_EraseSystemTable");
-    if(! g_MP_EraseSystemTable)
-        return FALSE;
-
-    // Load remaining functions...
-    g_FLH_InitCodeWithIspPath = GetProcAddress(hSDK, "FLH_InitCodeWithIspPath");
-    if(! g_FLH_InitCodeWithIspPath)
-        return FALSE;
-
-    g_FLH_BlockErase = GetProcAddress(hSDK, "FLH_BlockErase");
-    if(! g_FLH_BlockErase)
-        return FALSE;
-
-    LogMessage("LoadSDKFunctions: All %d SDK functions loaded successfully", 100);
+#define LOAD_PROC(name)                                   \
+    g_sdk_api.name = GetProcAddress(hSDK, #name);         \
+    if(! g_sdk_api.name) {                                \
+        LogMessage("Failed to load function: %s", #name); \
+        return FALSE;                                     \
+    }
+
+    LOAD_PROC(FLH_GetInfoFromDataBaseByID);
+    LOAD_PROC(FLH_GetFlashDataFromDataBase);
+    LOAD_PROC(FLH_GetFlashDataFromMemory);
+    LOAD_PROC(FLH_ReadRootTable);
+    LOAD_PROC(FLH_WriteRootTable);
+    LOAD_PROC(FLH_ReadCISTable);
+    LOAD_PROC(FLH_WriteCISTable);
+    LOAD_PROC(FLH_ReadISPData);
+    LOAD_PROC(FLH_WriteISPData);
+    LOAD_PROC(FLH_ReadLatestWBT);
+    LOAD_PROC(FLH_FindRootTable);
+    LOAD_PROC(FLH_LBA2PhysicalFlash);
+    LOAD_PROC(FLH_SetLedBlink);
+    LOAD_PROC(FLH_PhyiscalRead);
+    LOAD_PROC(FLH_PhyiscalWrite);
+    LOAD_PROC(FLH_IsGoodBlock);
+    LOAD_PROC(FLH_IsTableBlock);
+    LOAD_PROC(FLH_MarkBad);
+    LOAD_PROC(FLH_GetRealBlocksPerDie);
+    LOAD_PROC(FLH_BlockIsGap);
+    LOAD_PROC(FLH_HandleMassBlocksPerChip);
+    LOAD_PROC(FLH_ScanNewBlock);
+    LOAD_PROC(FLH_GetRetryRegister);
+    LOAD_PROC(FLH_CISCheckSum_Calculate);
+    LOAD_PROC(FLH_CalCulate_ECCNO);
+    LOAD_PROC(FLH_ArrangeSegmentPara);
+    LOAD_PROC(ADDR_ReadRootTable);
+    LOAD_PROC(FLH_ReadSpare);
+    LOAD_PROC(FLH_ReadID);
+    LOAD_PROC(FLH_BlockErase);
+    LOAD_PROC(FLH_SetSLCFlag);
+    LOAD_PROC(FLH_CPUReset);
+    LOAD_PROC(FLH_InitCTRL);
+    LOAD_PROC(FLH_WriteRootTableWithIspPath);
+    LOAD_PROC(FLH_ScanE2NANDBlockPerChip);
+    LOAD_PROC(FLH_ReadBCM);
+    LOAD_PROC(FLH_InitCodeWithIspPath);
+    LOAD_PROC(FLH_GetChannelCeNoAndMap);
+    LOAD_PROC(ADDR_ReadISPData);
+    LOAD_PROC(ADDR_ReadCISData);
+    LOAD_PROC(FLH_InitCodeForReady);
+    LOAD_PROC(SEC_DoAuthentication);
+    LOAD_PROC(SEC_LeaveAuthenticatedState);
+    LOAD_PROC(SEC_GetPasswordHint);
+    LOAD_PROC(SEC_SetPasswordHint);
+    LOAD_PROC(SEC_ChangePassword);
+    LOAD_PROC(SEC_GetUserPassword);
+    LOAD_PROC(SEC_GetEncryptedPassword);
+    LOAD_PROC(LUN_CreateLun);
+    LOAD_PROC(LUN_FindLunStartLBAByItemID);
+    LOAD_PROC(LUN_CreateApLunNewItemID);
+    LOAD_PROC(LUN_WriteBadBlockMapToApLun);
+    LOAD_PROC(LUN_ReadBadBlockMapFromApLun);
+    LOAD_PROC(LUN_FindOptimumOffsetCap);
+    LOAD_PROC(LUN_CalIsoSize);
+    LOAD_PROC(FMT_Format);
+    LOAD_PROC(FMT_GetOptimumCapacity);
+    LOAD_PROC(FMT_GetOptimumLunConfig);
+    LOAD_PROC(FMT_GetOSCapacity);
+    LOAD_PROC(STD_Inquiry);
+    LOAD_PROC(STD_ReadCapacity);
+    LOAD_PROC(STD_LogicalRead);
+    LOAD_PROC(STD_LogicalWrite);
+
+    g_sdk_api.STD_TestUnitReady = GetProcAddress(hSDK, "VDR_CheckSYSReady");
+    if(! g_sdk_api.STD_TestUnitReady) {
+        LogMessage("Failed to load function: VDR_CheckSYSReady as STD_TestUnitReady");
+        return FALSE;
+    }
+    g_sdk_api.STD_GetDeviceID = GetProcAddress(hSDK, "VDR_ReadLUNID");
+    if(! g_sdk_api.STD_GetDeviceID) {
+        LogMessage("Failed to load function: VDR_ReadLUNID as STD_GetDeviceID");
+        return FALSE;
+    }
+    g_sdk_api.STD_SetDeviceID = GetProcAddress(hSDK, "VDR_WriteLUNID");
+    if(! g_sdk_api.STD_SetDeviceID) {
+        LogMessage("Failed to load function: VDR_WriteLUNID as STD_SetDeviceID");
+        return FALSE;
+    }
+    g_sdk_api.STD_GetLUNIndex = GetProcAddress(hSDK, "VDR_ReadLUNIndex");
+    if(! g_sdk_api.STD_GetLUNIndex) {
+        LogMessage("Failed to load function: VDR_ReadLUNIndex as STD_GetLUNIndex");
+        return FALSE;
+    }
+
+    LOAD_PROC(SwapDWORD);
+    LOAD_PROC(SwapWORD);
+    LOAD_PROC(CCBAddress2RawAddress);
+    LOAD_PROC(RawAddress2CCBAddress);
+    LOAD_PROC(CCBAddress2ED3Address);
+    LOAD_PROC(ED3Address2CCBAddress);
+    LOAD_PROC(BlkAddr2RawAddr);
+    LOAD_PROC(VDR_ReadWriteLUNConfig);
+    LOAD_PROC(VDR_ReadLUNData);
+    LOAD_PROC(VDR_WriteLUNData);
+    LOAD_PROC(VDR_ReadXData);
+    LOAD_PROC(VDR_WriteXData);
+    LOAD_PROC(VDR_ReadIData);
+    LOAD_PROC(VDR_WriteIData);
+    LOAD_PROC(VDR_ReadSysAddr);
+    LOAD_PROC(VDR_WriteSysAddr);
+    LOAD_PROC(VDR_SetSYSReady);
+    LOAD_PROC(VDR_EndCode);
+    LOAD_PROC(VDR_DeviceChange);
+    LOAD_PROC(VDR_MediaChange);
+    LOAD_PROC(VDR_WriteProtect);
+    LOAD_PROC(VDR_RWCurrentLUNType);
+    LOAD_PROC(VDR_HiddenArea);
+    LOAD_PROC(VDR_ReadWriteLUNNo);
+    LOAD_PROC(VDR_FlushCache);
+    LOAD_PROC(VDR_ReadPage);
+    LOAD_PROC(VDR_WritePage);
+    LOAD_PROC(VDR_WriteBlock_TLC);
+    LOAD_PROC(VDR_GetSecurityStatus);
+    LOAD_PROC(VDR_ED3PageRead);
+    LOAD_PROC(VDR_BadTFindRead);
+    LOAD_PROC(VDR_Enhance_SLC_Program);
+    LOAD_PROC(VDR_Disable_SLC_Program);
+    LOAD_PROC(VDR_MassBlocksProcess);
+    LOAD_PROC(VDR_F_RST);
+    LOAD_PROC(VDR_RootFunc);
+    LOAD_PROC(VDR_RootPageWrite);
+    LOAD_PROC(VDR_RootAccess);
+    LOAD_PROC(MP_CreateSystem);
+    LOAD_PROC(MP_EraseSystemTable);
+    LOAD_PROC(DG_GetBlockPageMapFromFlash);
+    LOAD_PROC(DG_SearchReadBadTBlk);
+    LOAD_PROC(DG_CalBlkRequire);
+    LOAD_PROC(Is168Device);
+    LOAD_PROC(GetLastestPage);
+
+#undef LOAD_PROC
+
+    LogMessage("LoadSDKFunctions: All SDK functions loaded successfully");
     return TRUE;
 }
 
@@ -1400,4 +1415,287 @@ UINT iTEUFDrs::OpenDriveHandleAgain(int deviceIndex) {
 
     // Stub implementation - return success for now
     return 1;
+}
+
+// Stubs for missing functions
+BOOL iTEUFDrs::OpenLogicalDriveHandle(BYTE volumeIndex) {
+    LogMessage("STUB: OpenLogicalDriveHandle for volume %d", volumeIndex);
+    if(volumeIndex < MAX_VOLUMES) {
+        // Simulate opening a handle
+        m_deviceInfo.volumes[volumeIndex].hDevice = (HANDLE) (uintptr_t) (volumeIndex + 1);
+        return TRUE;
+    }
+    return FALSE;
+}
+
+void iTEUFDrs::CloseDeviceHandle(BYTE volumeIndex) {
+    LogMessage("STUB: CloseDeviceHandle for volume %d", volumeIndex);
+    if(volumeIndex < MAX_VOLUMES
+       && m_deviceInfo.volumes[volumeIndex].hDevice != INVALID_HANDLE_VALUE) {
+        m_deviceInfo.volumes[volumeIndex].hDevice = INVALID_HANDLE_VALUE;
+    }
+}
+
+void iTEUFDrs::PrepareFirmwareFilePath() {
+    LogMessage("STUB: PrepareFirmwareFilePath");
+}
+
+void iTEUFDrs::ReadBinaryFileVersion() {
+    LogMessage("STUB: ReadBinaryFileVersion");
+}
+
+BOOL iTEUFDrs::InitializeISPCode(BYTE controllerIndex, DWORD deviceId) {
+    LogMessage(
+        "STUB: InitializeISPCode for controller %d, deviceId 0x%X", controllerIndex, deviceId);
+    return TRUE;
+}
+
+void iTEUFDrs::LoadAndVerifyFirmwareSegments(BYTE controllerIndex, DWORD deviceId) {
+    LogMessage(
+        "STUB: LoadAndVerifyFirmwareSegments for controller %d, deviceId 0x%X",
+        controllerIndex,
+        deviceId);
+}
+
+void iTEUFDrs::UpdateFirmwareBankInfo(BYTE controllerIndex, DWORD deviceId) {
+    LogMessage(
+        "STUB: UpdateFirmwareBankInfo for controller %d, deviceId 0x%X", controllerIndex, deviceId);
+}
+
+BOOL iTEUFDrs::GetLunArrayData(BYTE controllerIndex, DWORD deviceId) {
+    LogMessage("GetLunArrayData for controller %d, deviceId 0x%X", controllerIndex, deviceId);
+
+    if(controllerIndex >= m_controllerCount) {
+        LogError("GetLunArrayData: Invalid controller index %d", controllerIndex);
+        return FALSE;
+    }
+
+    CONTROLLER_DATA& controller = m_controllerData[controllerIndex];
+    if(! controller.isValid) {
+        LogWarning("GetLunArrayData: Controller %d is not valid.", controllerIndex);
+        return FALSE;
+    }
+
+    BYTE lunConfigBuffer[64];
+    memset(lunConfigBuffer, 0, sizeof(lunConfigBuffer));
+
+    if(! g_sdk_api.VDR_ReadWriteLUNConfig) {
+        LogError("GetLunArrayData: VDR_ReadWriteLUNConfig function not found in SDK.");
+        controller.lunInfoLoaded = FALSE;
+        return FALSE;
+    }
+
+    // Mode 0 is for reading the LUN configuration
+    int result = ((int(__stdcall*)(BOOL, LPVOID)) g_sdk_api.VDR_ReadWriteLUNConfig)(
+        FALSE, (LPVOID) lunConfigBuffer);
+
+    if(result == 0) {
+        LogError("GetLunArrayData: Get Lun information fail for controller %d", controllerIndex);
+        controller.lunInfoLoaded = FALSE;
+        return FALSE;
+    }
+
+    memcpy(controller.lunData, lunConfigBuffer, sizeof(lunConfigBuffer));
+    controller.lunInfoLoaded = TRUE;
+    LogMessage(
+        "GetLunArrayData: Successfully retrieved LUN info for controller %d", controllerIndex);
+
+    return TRUE;
+}
+
+void iTEUFDrs::CalculateDeviceCapacity(BYTE controllerIndex) {
+    LogMessage("CalculateDeviceCapacity for controller %d", controllerIndex);
+
+    if(controllerIndex >= m_controllerCount) {
+        LogError("CalculateDeviceCapacity: Invalid controller index %d", controllerIndex);
+        return;
+    }
+
+    CONTROLLER_DATA& controller = m_controllerData[controllerIndex];
+    if(! controller.isValid) {
+        LogWarning("CalculateDeviceCapacity: Controller %d is not valid.", controllerIndex);
+        return;
+    }
+
+    // The calculation is based on values from the BCM buffer.
+    // We assume the relevant BCM data is in the first bank of the first volume.
+    BYTE volumeIndex = controller.volumeIndexes[0];
+    if(volumeIndex >= MAX_VOLUMES) {
+        LogError(
+            "CalculateDeviceCapacity: Invalid volume index %d for controller %d",
+            volumeIndex,
+            controllerIndex);
+        return;
+    }
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    if(! volume.banks[0].bcmLoaded) {
+        LogError(
+            "CalculateDeviceCapacity: BCM not loaded for controller %d, volume %d",
+            controllerIndex,
+            volumeIndex);
+        return;
+    }
+
+    BYTE* bcm = volume.banks[0].bcmInfo;
+
+    // Replicate the logic from Ghidra decompilation
+    // iVar1 = 1 << (*(byte *)(param_1 + 0xa30) >> 2 & 3);
+    int iVar1 = 1 << ((bcm[0x20] >> 2) & 3);
+
+    // uVar3 = __aulldiv(*(undefined2 *)(param_1 + 0xa36),0,iVar1,iVar1 >> 0x1f);
+    unsigned __int64 uVar3 = *(WORD*) (bcm + 0x26) / iVar1;
+
+    // uVar3 = __allmul(uVar3,*(undefined4 *)(param_1 + 0xcb6),0);
+    uVar3 *= *(DWORD*) (bcm + 0x2A6);
+
+    // uVar3 = __allmul(uVar3,*(undefined2 *)(param_1 + 0xa38),0);
+    uVar3 *= *(WORD*) (bcm + 0x28);
+
+    // uVar3 = __allmul(uVar3,*(undefined1 *)(param_1 + 0xa20),0);
+    uVar3 *= bcm[0x10];
+
+    // uVar4 = __allmul(uVar3,iVar1,iVar1 >> 0x1f);
+    unsigned __int64 uVar4 = uVar3 * iVar1;
+
+    // *(uint *)(param_1 + 0x9ee) = (uint)uVar4 >> 9 | uVar2 << 0x17;
+    // This calculates the capacity in some unit (likely sectors or MB)
+    DWORD capacity = ((DWORD) uVar4 >> 9) | ((DWORD) (uVar4 >> 32) << 23);
+
+    controller.capacity = capacity;
+
+    LogMessage(
+        "CalculateDeviceCapacity: Calculated capacity for controller %d is %lu",
+        controllerIndex,
+        capacity);
+}
+
+void iTEUFDrs::UpdateDeviceCapacityOrCalculate(BYTE controllerIndex) {
+    LogMessage("UpdateDeviceCapacityOrCalculate for controller %d", controllerIndex);
+
+    if(controllerIndex >= m_controllerCount) {
+        LogError("UpdateDeviceCapacityOrCalculate: Invalid controller index %d", controllerIndex);
+        return;
+    }
+
+    CONTROLLER_DATA& controller = m_controllerData[controllerIndex];
+    if(! controller.isValid) {
+        LogWarning("UpdateDeviceCapacityOrCalculate: Controller %d is not valid.", controllerIndex);
+        return;
+    }
+
+    // In the original code, a flag is checked at an offset like `param_1 + 0xa1e`.
+    // This seems to correspond to a field within the BCM buffer.
+    BYTE volumeIndex = controller.volumeIndexes[0];
+    if(volumeIndex >= MAX_VOLUMES) {
+        LogError("UpdateDeviceCapacityOrCalculate: Invalid volume index %d", volumeIndex);
+        return;
+    }
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    if(! volume.banks[0].bcmLoaded) {
+        LogError(
+            "UpdateDeviceCapacityOrCalculate: BCM not loaded for controller %d", controllerIndex);
+        // Fallback to calculation
+        CalculateDeviceCapacity(controllerIndex);
+        return;
+    }
+
+    BYTE* bcm = volume.banks[0].bcmInfo;
+    char capacityFlag = bcm[0xE];  // Corresponds to offset 0xa1e if bcm starts at 0xa10
+
+    controller.capacity = 0;
+
+    if(capacityFlag != 0) {
+        // Use pre-calculated capacity. This value is at an offset like `param_1 + 0x9de`.
+        // This is outside the BCM buffer. It seems to be a separate field.
+        // We've added `precalculatedCapacity` to our CONTROLLER_DATA struct for this.
+        // Let's assume it's populated somewhere before this call.
+        LogMessage(
+            "UpdateDeviceCapacityOrCalculate: Using pre-calculated capacity %lu for controller %d",
+            controller.precalculatedCapacity,
+            controllerIndex);
+        controller.capacity = controller.precalculatedCapacity;
+    } else {
+        // If the flag is not set, calculate the capacity now.
+        LogMessage(
+            "UpdateDeviceiacOrCalculate: Flag not set, calculating capacity for controller %d",
+            controllerIndex);
+        CalculateDeviceCapacity(controllerIndex);
+    }
+}
+
+void iTEUFDrs::FormatFinalDeviceString(BYTE volumeIndex) {
+    LogMessage("FormatFinalDeviceString for volume %d", volumeIndex);
+
+    if(volumeIndex >= m_deviceInfo.volumeCount) {
+        LogError("FormatFinalDeviceString: Invalid volume index %d", volumeIndex);
+        return;
+    }
+
+    DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
+    BYTE controllerIndex = 0xFF;
+    for(BYTE i = 0; i < m_controllerCount; ++i) {
+        for(int j = 0; j < 4; ++j) {
+            if(m_controllerData[i].volumeIndexes[j] == volumeIndex) {
+                controllerIndex = i;
+                break;
+            }
+        }
+        if(controllerIndex != 0xFF)
+            break;
+    }
+
+    if(controllerIndex == 0xFF) {
+        LogError("FormatFinalDeviceString: Could not find controller for volume %d", volumeIndex);
+        return;
+    }
+
+    CONTROLLER_DATA& controller = m_controllerData[controllerIndex];
+
+    if(m_deviceInfo.systemReady && controller.mpInfoLoaded) {
+        // This part corresponds to the successful case where MP info is loaded.
+        // The original code formats a string with version and capacity.
+        // " %s - %s " where the first part is the version string from the bank,
+        // and the second part is the capacity.
+        char capacityStr[32];
+        sprintf_s(capacityStr, sizeof(capacityStr), "%lu.0M", controller.capacity);
+
+        char bankVersion[256] = "NoVer";
+        if(strlen(volume.banks[0].versionString) > 0) {
+            strncpy_s(bankVersion, sizeof(bankVersion), volume.banks[0].versionString, _TRUNCATE);
+        }
+
+        sprintf_s(
+            m_deviceInfo.deviceString,
+            sizeof(m_deviceInfo.deviceString),
+            " %s - %s ",
+            bankVersion,
+            capacityStr);
+
+        LogMessage("FormatFinalDeviceString: Formatted string: %s", m_deviceInfo.deviceString);
+    } else {
+        // This is the fallback case if system is not ready or MP info failed.
+        strcpy_s(m_deviceInfo.deviceString, sizeof(m_deviceInfo.deviceString), " NONE");
+        LogWarning(
+            "FormatFinalDeviceString: System not ready or MP info not loaded for volume %d.",
+            volumeIndex);
+    }
+
+    // The original code also copies some inquiry data. Let's replicate that.
+    // This seems to be part of setting the final device identification.
+    memcpy(m_deviceInfo.deviceData, &volume.inquiryData1, 8);
+}
+
+BOOL iTEUFDrs::GetMPInfo(BYTE controllerIndex, DWORD deviceId) {
+    LogMessage("STUB: GetMPInfo for controller %d, deviceId 0x%X", controllerIndex, deviceId);
+    return TRUE;
+}
+
+BOOL iTEUFDrs::CopyBankData(BYTE volumeIndex) {
+    LogMessage("STUB: CopyBankData for volume %d", volumeIndex);
+    return TRUE;
+}
+
+BOOL iTEUFDrs::OpenPhysicalDrive(int deviceIndex) {
+    LogMessage("STUB: OpenPhysicalDrive for device %d", deviceIndex);
+    return TRUE;
 }
