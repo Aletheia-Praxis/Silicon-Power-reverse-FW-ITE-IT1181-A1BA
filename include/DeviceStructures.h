@@ -175,6 +175,7 @@ typedef struct _DEVICE_INFO {
     HANDLE hDevice;             // Device handle
     BYTE deviceParams[0xFF];    // Device parameters
     BOOL lunArrayLoaded;        // LUN array loaded flag
+    BYTE firmwareLayout[512];   // Placeholder for firmware segment data
 
 } DEVICE_INFO, *PDEVICE_INFO;
 

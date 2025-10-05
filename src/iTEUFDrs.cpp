@@ -404,39 +404,35 @@ BOOL iTEUFDrs::NotifyFwSegmentInfo(BYTE controllerIndex, DWORD deviceId) {
     }
     DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
 
-    // In the original code, this flag is at an offset like +0x9fb from the start of a large
-    // structure. We'll use a specific member in our reconstructed struct.
     if(volume.fwSegmentNotified) {
         LogMessage(
             "NotifyFwSegmentInfo: Firmware segments already notified for volume %d.", volumeIndex);
         return TRUE;
     }
 
-    // Prepare segment parameter buffer (128 bytes)
     BYTE segmentParams[128];
     memset(segmentParams, 0, sizeof(segmentParams));
 
-    // Call SDK function to arrange segment parameters
     if(! g_sdk_api.FLH_ArrangeSegmentPara) {
         LogError("NotifyFwSegmentInfo: FLH_ArrangeSegmentPara function not found in SDK.");
         return FALSE;
     }
-    // The original code passes a pointer to a large structure + 0x1866. This likely contains
-    // firmware layout info. We'll pass a placeholder or a similarly structured part of our data.
-    // For now, let's assume m_deviceInfo.deviceData holds some of this info.
-    ((int(__stdcall*)(BYTE*, void*)) g_sdk_api.FLH_ArrangeSegmentPara)(
-        segmentParams, m_deviceInfo.deviceData);
+    // The original code passes a pointer to a large structure + 0x1866.
+    // This seems to be where firmware layout/segment info is stored.
+    // In our structure, this might correspond to a dedicated buffer.
+    // For now, we'll pass a placeholder from our device info struct.
+    ((PFN_FLH_ArrangeSegmentPara) g_sdk_api.FLH_ArrangeSegmentPara)(
+        segmentParams, m_deviceInfo.firmwareLayout);
 
-    // Call SDK function to initialize the controller with the segment parameters
     if(! g_sdk_api.FLH_InitCTRL) {
         LogError("NotifyFwSegmentInfo: FLH_InitCTRL function not found in SDK.");
         return FALSE;
     }
 
     // The original code passes the device handle, the arranged segment params, and a buffer from
-    // the device structure (+0xa26). We'll use our m_bcmBuffer for that.
-    int result = ((int(__stdcall*)(HANDLE, BYTE*, void*)) g_sdk_api.FLH_InitCTRL)(
-        volume.hDevice, segmentParams, m_bcmBuffer);
+    // the device structure (+0xa26), which we use as m_bcmBuffer.
+    int result =
+        ((PFN_FLH_InitCTRL) g_sdk_api.FLH_InitCTRL)(volume.hDevice, segmentParams, m_bcmBuffer);
 
     if(result != 1) {
         LogError(
@@ -446,7 +442,6 @@ BOOL iTEUFDrs::NotifyFwSegmentInfo(BYTE controllerIndex, DWORD deviceId) {
         return FALSE;
     }
 
-    // Mark as notified on success
     volume.fwSegmentNotified = TRUE;
     LogMessage(
         "NotifyFwSegmentInfo: Successfully notified firmware segments for volume %d.", volumeIndex);
