@@ -1,14 +1,20 @@
+// clang-format off
+#include "../include/CUrescueApp.h"
+#include "../include/Dialogs.h"
+#include "../include/FirmwareManager.h"
+#include "../include/Globals.h"
+#include "../include/iTEUFDrs.h"
 #include "../include/ErrorHandler.h"
 #include "../include/URescueMain.h"
 #include "../include/Utilities.h"
 #include "../include/WindowsHeaders.h"
-#include "../include/iTEUFDrs.h"
+// clang-format on
 
 // Global variables based on Ghidra analysis
-extern char g_cmdLineArgs[128];         // DAT_004ad6c0
-extern BOOL g_calledFromURescueM;       // DAT_004ad740
-extern BOOL g_systemReadyFlag;          // DAT_004ad744
-extern char g_tempDirectory[MAX_PATH];  // DAT_004ad74c
+char g_cmdLineArgs[128];         // DAT_004ad6c0
+BOOL g_calledFromURescueM;       // DAT_004ad740
+BOOL g_systemReadyFlag;          // DAT_004ad744
+char g_tempDirectory[MAX_PATH];  // DAT_004ad74c
 
 // Background thread function prototypes
 UINT WINAPI BackgroundMonitorThread(LPVOID pParam);
@@ -160,31 +166,25 @@ BOOL CUrescueApp_InitInstance() {
 
         LogMessage("CUrescueApp::InitInstance - System ready flag set");
 
-        // Create main iTEUFDrs dialog
-        iTEUFDrs* pMainDialog = new iTEUFDrs(longTempPath);
-        if(! pMainDialog) {
-            LogError("CUrescueApp::InitInstance - Failed to create iTEUFDrs dialog");
-            if(hMonitorThread)
-                CloseHandle(hMonitorThread);
-            if(hProcessingThread)
-                CloseHandle(hProcessingThread);
-            return FALSE;
+        // Create and run the main application dialog
+        CUrescueDlg dlg;
+        // m_pMainWnd = &dlg; // In a real CWinApp, you would set the main window pointer
+
+        INT_PTR nResponse = dlg.DoModal();
+
+        if(nResponse == IDOK) {
+            // TODO: Handle dialog closed with OK
+            LogMessage("CUrescueApp::InitInstance - Dialog closed with OK");
+        } else if(nResponse == IDCANCEL) {
+            // TODO: Handle dialog closed with Cancel
+            LogMessage("CUrescueApp::InitInstance - Dialog closed with Cancel");
+        } else if(nResponse == -1) {
+            LogError("CUrescueApp::InitInstance - Dialog creation failed!");
         }
 
-        // Store dialog pointer globally and initialize
-        // This would be stored in the CWinApp-derived class
-        LogMessage("CUrescueApp::InitInstance - iTEUFDrs dialog created successfully");
-
-        // Initialize additional UI components and message loop
-        // The actual UI loop would be handled by the framework
-
-        // Cleanup thread handles
-        if(hMonitorThread)
-            CloseHandle(hMonitorThread);
-        if(hProcessingThread)
-            CloseHandle(hProcessingThread);
-
-        return TRUE;
+        // Since the dialog has been closed, return FALSE so that we exit the
+        // application, rather than start the application's message pump.
+        return FALSE;
 
     } else {
         // We need to copy to temp directory and restart
@@ -268,7 +268,7 @@ BOOL CUrescueApp_InitInstance() {
         char commandLine[512];
         if(g_calledFromURescueM) {
             // Include command line arguments
-            sprintf_s(commandLine, sizeof(commandLine), "%s %s", targetPath, g_cmdLineArgs);
+            sprintf_s(commandLine, sizeof(commandLine), "\"%s\" %s", targetPath, g_cmdLineArgs);
 
             BOOL processCreated = CreateProcessA(
                 NULL,          // lpApplicationName
