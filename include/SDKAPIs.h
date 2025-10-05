@@ -58,6 +58,8 @@ typedef BOOL (*PFN_FLH_GetFlashDataFromDataBase)(LPVOID pData);
 typedef BOOL (*PFN_FLH_GetFlashDataFromMemory)(LPVOID pData);
 typedef BOOL (*PFN_FLH_ReadRootTable)(LPVOID pBuffer);
 typedef BOOL (*PFN_FLH_WriteRootTable)(LPVOID pBuffer);
+typedef BYTE (
+    *PFN_FLH_FindRootTable_Alt)(HANDLE hDevice, DWORD* pSegmentIDs, LPVOID pBcmBuffer, DWORD mode);
 typedef BOOL (*PFN_FLH_ReadCISTable)(LPVOID pBuffer);
 typedef BOOL (*PFN_FLH_WriteCISTable)(LPVOID pBuffer);
 typedef BOOL (*PFN_FLH_ReadISPData)(LPVOID pBuffer);
@@ -155,6 +157,15 @@ typedef BOOL (*PFN_VDR_Enhance_SLC_Program)(BOOL bEnable);
 typedef BOOL (*PFN_VDR_Disable_SLC_Program)(void);
 typedef BOOL (*PFN_VDR_MassBlocksProcess)(LPVOID pParams);
 typedef BOOL (*PFN_VDR_F_RST)(void);
+typedef int (*PFN_VDR_RootFunc_Alt)(
+    DWORD segmentId,
+    DWORD p1,
+    DWORD p2,
+    DWORD p3,
+    DWORD p4,
+    LPVOID pSegmentData,
+    LPVOID pBcmBuffer,
+    HANDLE hDevice);
 typedef BOOL (*PFN_VDR_RootFunc)(LPVOID pParams);
 typedef BOOL (*PFN_VDR_RootPageWrite)(DWORD dwPageAddr, LPVOID pBuffer);
 typedef BOOL (*PFN_VDR_RootAccess)(LPVOID pParams);
