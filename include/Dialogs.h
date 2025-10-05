@@ -55,7 +55,7 @@ protected:
 // Reconstructed from Ghidra analysis (e.g., constructor at 0x00415780)
 class CUrescueDlg : public CDialog {
 public:
-    CUrescueDlg(CWnd* pParent = NULL);  // Constructor
+    CUrescueDlg(CWnd* pParent, void* pUnknown);  // Updated Constructor
 
     // Dialog Data
     enum { IDD = 102 };  // Assuming IDD_URESCUE_DIALOG is 102
