@@ -11,6 +11,7 @@ class CUrescueDlg;
 // iTEUFDrs class (represents the main application logic)
 class iTEUFDrs {
 public:
+    iTEUFDrs();  // Default constructor
     iTEUFDrs(LPCSTR basePath);
     ~iTEUFDrs();
 
