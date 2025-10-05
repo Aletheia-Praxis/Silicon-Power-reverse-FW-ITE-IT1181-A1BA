@@ -30,7 +30,7 @@ set(LIB_SOURCES
     src/Utilities.cpp
     src/ErrorHandler.cpp
     src/iTEUFDrs.cpp
-    # src/SDKLoader.cpp        # Temporarily excluded due to SDK function dependencies
+    src/SDKLoader.cpp
     src/SDKAPIs.cpp
     # src/FlashSDK.cpp         # Re-disabled - still has winsock conflicts via includes
     src/MemoryManager.cpp
