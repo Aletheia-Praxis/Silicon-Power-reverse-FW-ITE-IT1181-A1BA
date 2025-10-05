@@ -45,7 +45,7 @@ LONG DeleteRegistryKey(HKEY hKey, LPCSTR lpSubKey);
 LONG DeleteRegistryValue(HKEY hKey, LPCSTR lpValueName);
 
 // Additional system functions
-BOOL GetDeviceInfo(DEVICE_INFO* pDeviceInfo);
+BOOL GetDeviceInfo(_DEVICE_INFO* pDeviceInfo);
 
 BOOL SaveSettingsToRegistry(LPCSTR settingsPath, LPCVOID pSettings, DWORD settingsSize);
 
