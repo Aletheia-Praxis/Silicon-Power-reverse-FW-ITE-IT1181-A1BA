@@ -1,3 +1,4 @@
+// clang-format off
 #ifndef _WIN32_WINNT
     #define _WIN32_WINNT 0x0601  // Windows 7+
 #endif
@@ -8,6 +9,8 @@
 #include "../include/ITEController.h"
 #include "../include/USBDevice.h"
 #include "../include/WindowsHeaders.h"
+#include "../include/Dialogs.h"
+// clang-format on
 
 // Main window constructor
 CMainFrame::CMainFrame() : m_hDevice(INVALID_HANDLE_VALUE), m_pFirmware(NULL), m_firmwareSize(0) {
@@ -200,81 +203,5 @@ void CMainFrame::OnHelpAbout() {
 }
 
 //=============================================================================
-// Device Selection Dialog Implementation
+// Implementations for dialogs are now in Dialogs.cpp
 //=============================================================================
-
-// Device selection dialog constructor
-CDeviceSelectDialog::CDeviceSelectDialog(CWnd* pParent) : CDialog(IDD_DEVICE_SELECT, pParent) {
-    m_selectedDevice = _T("");
-}
-
-// Data exchange
-void CDeviceSelectDialog::DoDataExchange(CDataExchange* pDX) {
-    CDialog::DoDataExchange(pDX);
-    DDX_Control(pDX, IDC_DEVICE_LIST, m_deviceList);
-    DDX_Text(pDX, IDC_SELECTED_DEVICE, m_selectedDevice);
-}
-
-// Message map for device dialog
-BEGIN_MESSAGE_MAP(CDeviceSelectDialog, CDialog)
-ON_LBN_SELCHANGE(IDC_DEVICE_LIST, &CDeviceSelectDialog::OnDeviceListSelChange)
-ON_BN_CLICKED(IDC_REFRESH, &CDeviceSelectDialog::OnRefresh)
-END_MESSAGE_MAP()
-
-// Dialog initialization
-BOOL CDeviceSelectDialog::OnInitDialog() {
-    CDialog::OnInitDialog();
-
-    // Initialize device list
-    OnRefresh();
-
-    return TRUE;
-}
-
-// Device list selection change
-void CDeviceSelectDialog::OnDeviceListSelChange() {
-    int nSel = m_deviceList.GetCurSel();
-    if(nSel != LB_ERR) {
-        m_deviceList.GetText(nSel, m_selectedDevice);
-        UpdateData(FALSE);
-    }
-}
-
-// Refresh device list
-void CDeviceSelectDialog::OnRefresh() {
-    m_deviceList.ResetContent();
-
-    // Add sample devices (in real implementation, scan for USB devices)
-    m_deviceList.AddString(_T("Silicon Power IT1181 Device 1"));
-    m_deviceList.AddString(_T("Silicon Power IT1181 Device 2"));
-
-    if(m_deviceList.GetCount() > 0) {
-        m_deviceList.SetCurSel(0);
-        OnDeviceListSelChange();
-    }
-}
-
-//=============================================================================
-// About Dialog Implementation
-//=============================================================================
-
-// About dialog constructor
-CAboutDialog::CAboutDialog(CWnd* pParent) : CDialog(IDD_ABOUT, pParent) {}
-
-// Data exchange
-void CAboutDialog::DoDataExchange(CDataExchange* pDX) {
-    CDialog::DoDataExchange(pDX);
-}
-
-// Message map for about dialog
-BEGIN_MESSAGE_MAP(CAboutDialog, CDialog)
-END_MESSAGE_MAP()
-
-// Dialog initialization
-BOOL CAboutDialog::OnInitDialog() {
-    CDialog::OnInitDialog();
-
-    SetWindowText(_T("About URescue"));
-
-    return TRUE;
-}

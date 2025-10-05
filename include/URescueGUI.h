@@ -1,5 +1,6 @@
 #pragma once
 
+// clang-format off
 #include <afxcmn.h>
 #include <afxdlgs.h>
 #include <afxext.h>
@@ -8,12 +9,12 @@
 
 #include "FirmwareManager.h"
 #include "ITEController.h"
+#include "Dialogs.h"
+// clang-format on
 
 // Resource identifiers
 #define IDR_MAINFRAME        128
 #define IDD_MAIN             129
-#define IDD_DEVICE_SELECT    130
-#define IDD_ABOUT            131
 #define ID_DEVICE_CONNECT    132
 #define ID_DEVICE_DISCONNECT 133
 #define ID_FIRMWARE_LOAD     134
@@ -56,38 +57,6 @@ protected:
     afx_msg void OnFirmwareWrite();
     afx_msg void OnFirmwareVerify();
     afx_msg void OnHelpAbout();
-
-    DECLARE_MESSAGE_MAP()
-};
-
-// Device selection dialog
-class CDeviceSelectDialog : public CDialog {
-public:
-    CDeviceSelectDialog(CWnd* pParent = NULL);
-
-    CString GetSelectedDevice() const { return m_selectedDevice; }
-
-protected:
-    virtual void DoDataExchange(CDataExchange* pDX) override;
-    virtual BOOL OnInitDialog() override;
-
-    afx_msg void OnDeviceListSelChange();
-    afx_msg void OnRefresh();
-
-    CListBox m_deviceList;
-    CString m_selectedDevice;
-
-    DECLARE_MESSAGE_MAP()
-};
-
-// About dialog
-class CAboutDialog : public CDialog {
-public:
-    CAboutDialog(CWnd* pParent = NULL);
-
-protected:
-    virtual void DoDataExchange(CDataExchange* pDX) override;
-    virtual BOOL OnInitDialog() override;
 
     DECLARE_MESSAGE_MAP()
 };

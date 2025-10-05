@@ -6,6 +6,7 @@
 #include "../include/WindowsHeaders.h"
 #include "../resources/resource.h"
 #include "../include/Dialogs.h"
+#include "../include/iTEUFDrs.h" // Include iTEUFDrs header for device manager
 // clang-format on
 
 // Device selection dialog constructor
@@ -172,29 +173,26 @@ void CAboutDialog::DoDataExchange(CDataExchange *pDX) {
 BEGIN_MESSAGE_MAP(CAboutDialog, CDialog)
 END_MESSAGE_MAP()
 
-
 // --- CUrescueDlg Implementation ---
 
 // Constructor for the main dialog
 // Based on Ghidra analysis of function at 0x00415780
-CUrescueDlg::CUrescueDlg(CWnd* pParent /*=NULL*/)
-    : CDialog(CUrescueDlg::IDD, pParent) {
+CUrescueDlg::CUrescueDlg(CWnd *pParent, void *pUnknown) : CDialog(CUrescueDlg::IDD, pParent) {
     // The original constructor initializes custom controls (CPieChartCtrl, CTextProgressCtrl)
     // and CString members here. It also loads the application icon.
-    
+
     // Initialize CString members (reconstructed from offsets 0x2ec and 0x2f0)
     m_string1 = "";
     m_string2 = "";
 
     // Store the unknown parameter (reconstructed from offset 0x2f8)
-    // The original takes a second parameter in the constructor. We'll set it to NULL.
-    m_unknownParam = NULL; 
+    m_unknownParam = pUnknown;
 
     // Load the application icon (IDR_MAINFRAME, which is typically 128)
     m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
 
-void CUrescueDlg::DoDataExchange(CDataExchange* pDX) {
+void CUrescueDlg::DoDataExchange(CDataExchange *pDX) {
     CDialog::DoDataExchange(pDX);
     // DDX mapping for controls would go here
     // Example: DDX_Control(pDX, IDC_MY_STATIC, m_staticCtrl1);
@@ -203,14 +201,81 @@ void CUrescueDlg::DoDataExchange(CDataExchange* pDX) {
 BOOL CUrescueDlg::OnInitDialog() {
     CDialog::OnInitDialog();
 
-    // Set the icon for this dialog. The framework does this automatically
-    // when the application's main window is not a dialog
-    SetIcon(m_hIcon, TRUE);  // Set big icon
-    SetIcon(m_hIcon, FALSE); // Set small icon
+    // Set the icon for this dialog
+    SetIcon(m_hIcon, TRUE);   // Set big icon
+    SetIcon(m_hIcon, FALSE);  // Set small icon
 
-    // TODO: Add extra initialization here
+    // Subclass controls and set initial states
+    // The original code subclasses a control at IDC_STATIC_INFO (assumed 1000)
+    // and hides a global CWnd object (DAT_004ad750).
+    GetDlgItem(1000)->ShowWindow(SW_HIDE);  // Assuming 1000 is the ID for the info static text
 
-    return TRUE; // return TRUE unless you set the focus to a control
+    // Set window position to top
+    SetWindowPos(NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
+
+    // --- Version and Title Setup ---
+    char windowTitle[64];
+    // This part of the code gets the file version info and formats the window title.
+    // We will use a simplified version for now.
+    // In the original, it calls a CFileVersionInfo class.
+    sprintf_s(windowTitle, sizeof(windowTitle), "URescue v%dD.%d.%d.%d", 2, 24, 2, 81);  // Example
+                                                                                         // version
+    SetWindowText(windowTitle);
+
+    // The original code stores the title in a global app state.
+    // AfxGetApp()->m_pszAppName = _strdup(windowTitle);
+
+    // --- Main Logic ---
+    // The core logic depends on the iTEUFDrs object passed via m_unknownParam.
+    iTEUFDrs *pDeviceManager = (iTEUFDrs *) m_unknownParam;
+    if(! pDeviceManager) {
+        AfxMessageBox("Device manager object is null!", MB_OK | MB_ICONERROR);
+        EndDialog(IDCANCEL);
+        return TRUE;
+    }
+
+    // Pass 'this' pointer to the device manager
+    pDeviceManager->SetParentDialog(this);
+
+    // Check for initialization errors from the device manager
+    DWORD lastError = pDeviceManager->GetLastError();
+    if(lastError != ITEUFDRS_ERROR_NONE) {
+        // The original code has a complex error reporting mechanism.
+        // We will show a simple message based on the error code.
+        CString errorMsg;
+        errorMsg.Format("Initialization failed with error code: %d", lastError);
+        AfxMessageBox(errorMsg, MB_OK | MB_ICONERROR);
+        EndDialog(IDCANCEL);
+        return TRUE;
+    }
+
+    if(! pDeviceManager->IsInitialized()) {
+        // This case handles when no device is found.
+        // The original shows a message box with string ID 13.
+        AfxMessageBox("No ITE device found.", MB_OK | MB_ICONWARNING);
+        EndDialog(IDCANCEL);
+        return TRUE;
+    }
+
+    // If initialization is successful, proceed with UI updates.
+    // The original code extracts the filename from a path and sets it as a window text.
+    // It also sends a message to a progress bar control.
+
+    // Example of updating a control
+    // CString deviceInfo = pDeviceManager->GetFormattedDeviceInfo();
+    // GetDlgItem(IDC_DEVICE_INFO_STATIC)->SetWindowText(deviceInfo);
+
+    // Send a message to the progress bar (assumed ID 1004)
+    // The original sends PBM_SETRANGE32 (0x406) and PBM_SETPOS (0x402)
+    CProgressCtrl *pProgress = (CProgressCtrl *) GetDlgItem(1004);
+    if(pProgress) {
+        pProgress->SendMessage(PBM_SETRANGE32, 0, 100);
+        pProgress->SendMessage(PBM_SETPOS, 1, 0);
+    }
+
+    // Further UI updates would happen here based on the device state.
+
+    return TRUE;  // return TRUE unless you set the focus to a control
 }
 
 void CUrescueDlg::OnSysCommand(UINT nID, LPARAM lParam) {
@@ -222,8 +287,8 @@ void CUrescueDlg::OnSysCommand(UINT nID, LPARAM lParam) {
 // to draw the icon. For MFC applications using the document/view model,
 // this is automatically done for you by the framework.
 void CUrescueDlg::OnPaint() {
-    if (IsIconic()) {
-        CPaintDC dc(this); // device context for painting
+    if(IsIconic()) {
+        CPaintDC dc(this);  // device context for painting
 
         SendMessage(WM_ICONERASEBKGND, reinterpret_cast<WPARAM>(dc.GetSafeHdc()), 0);
 
@@ -248,10 +313,9 @@ HCURSOR CUrescueDlg::OnQueryDragIcon() {
     return static_cast<HCURSOR>(m_hIcon);
 }
 
-
 BEGIN_MESSAGE_MAP(CUrescueDlg, CDialog)
-    ON_WM_SYSCOMMAND()
-    ON_WM_PAINT()
-    ON_WM_QUERYDRAGICON()
-    // Other message handlers would go here
+ON_WM_SYSCOMMAND()
+ON_WM_PAINT()
+ON_WM_QUERYDRAGICON()
+// Other message handlers would go here
 END_MESSAGE_MAP()
