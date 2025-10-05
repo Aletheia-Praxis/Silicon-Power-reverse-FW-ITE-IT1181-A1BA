@@ -36,7 +36,7 @@ typedef struct _URESCUE_CONTEXT {
     URESCUE_STATE applicationState;
     DWORD lastError;
     BOOL isAdministrator;
-    DEVICE_INFO deviceInfo;
+    _DEVICE_INFO deviceInfo;
     URESCUE_SETTINGS settings;
 
     // Device
