@@ -79,7 +79,7 @@ private:
     void CloseDeviceHandle(BYTE volumeIndex);
     void PrepareFirmwareFilePath();
     void ReadBinaryFileVersion();
-    BOOL InitializeISPCode(BYTE controllerIndex, DWORD deviceId);
+    BOOL InitializeISPCode(BYTE controllerIndex, DWORD deviceId, HANDLE hDevice);
     void LoadAndVerifyFirmwareSegments(BYTE controllerIndex, DWORD deviceId);
     void UpdateFirmwareBankInfo(BYTE controllerIndex, DWORD deviceId);
     void FormatFinalDeviceString(BYTE volumeIndex);

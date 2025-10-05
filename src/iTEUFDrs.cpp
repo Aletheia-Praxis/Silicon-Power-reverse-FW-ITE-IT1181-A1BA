@@ -288,7 +288,7 @@ BOOL iTEUFDrs::GetDeviceInfoInternal() {
         if(! volume.ispCodeInitialized) {
             PrepareFirmwareFilePath();  // Placeholder for path logic
             ReadBinaryFileVersion();    // Placeholder for version reading
-            if(! InitializeISPCode(i, controller.deviceId)) {
+            if(! InitializeISPCode(i, controller.deviceId, volume.hDevice)) {
                 LogError("GetDeviceInfo: InitializeISPCode failed for controller %d", i);
                 controller.isReady = FALSE;
                 CloseDeviceHandle(volumeIndex);
@@ -312,7 +312,8 @@ BOOL iTEUFDrs::GetDeviceInfoInternal() {
             CloseDeviceHandle(volumeIndex);
             continue;
         }
-        int bcmResult = ((PFN_FLH_ReadBCM) (g_sdk_api.FLH_ReadBCM))(m_bcmBuffer);
+        // The original function takes the buffer and the handle
+        int bcmResult = ((PFN_FLH_ReadBCM_Alt) g_sdk_api.FLH_ReadBCM)(m_bcmBuffer, volume.hDevice);
         if(bcmResult != 1) {
             // Original code has a switch for different errors. We'll show a generic message.
             AfxMessageBox("Get BCM information fail", 0, 0);
@@ -1457,9 +1458,48 @@ void iTEUFDrs::ReadBinaryFileVersion() {
     LogMessage("STUB: ReadBinaryFileVersion");
 }
 
-BOOL iTEUFDrs::InitializeISPCode(BYTE controllerIndex, DWORD deviceId) {
+BOOL iTEUFDrs::InitializeISPCode(BYTE controllerIndex, DWORD deviceId, HANDLE hDevice) {
     LogMessage(
         "STUB: InitializeISPCode for controller %d, deviceId 0x%X", controllerIndex, deviceId);
+
+    // Based on Ghidra's InitializeISPCode
+    BYTE buffer[0xE40];
+    memset(buffer, 0, sizeof(buffer));
+
+    if(! g_sdk_api.STD_TestUnitReady
+       || ((PFN_VDR_CheckSYSReady) g_sdk_api.STD_TestUnitReady)(
+              0, buffer, sizeof(buffer), 0, buffer, 0)
+              != 0) {
+        LogWarning("InitializeISPCode: System not ready for controller %d", controllerIndex);
+        // Even if not ready, the original code proceeds to try and load ISP
+    }
+
+    BYTE isp_params[8] = { 0 };
+    isp_params[2] = 0xD0;  // Command
+    isp_params[3] = 0xC0;  // Sub-command
+    isp_params[5] = 0x08;  // Length
+
+    if(! g_sdk_api.FLH_InitCodeWithIspPath) {
+        LogError("InitializeISPCode: FLH_InitCodeWithIspPath function not found.");
+        return FALSE;
+    }
+
+    int result = ((PFN_FLH_InitCodeWithIspPath) g_sdk_api.FLH_InitCodeWithIspPath)(
+        1,               // Mode
+        &isp_params[2],  // param 2
+        &isp_params[3],  // param 3
+        &isp_params[4],  // param 4
+        m_basePath,      // Firmware path
+        buffer,          // BCM buffer
+        hDevice          // Device Handle
+    );
+
+    if(result != 0) {
+        LogError("InitializeISPCode: FLH_InitCodeWithIspPath failed with result %d", result);
+        return FALSE;
+    }
+
+    LogMessage("InitializeISPCode: Successfully initiated ISP code loading.");
     return TRUE;
 }
 

@@ -88,6 +88,7 @@ typedef int (*PFN_FLH_InitCTRL)(HANDLE hDevice, BYTE* pSegmentParams, LPVOID pBc
 typedef BOOL (*PFN_FLH_WriteRootTableWithIspPath)(LPVOID pBuffer);
 typedef BOOL (*PFN_FLH_ScanE2NANDBlockPerChip)(LPVOID pParams);
 typedef BOOL (*PFN_FLH_ReadBCM)(LPVOID pBuffer);
+typedef int (*PFN_FLH_ReadBCM_Alt)(LPVOID pBuffer, HANDLE hDevice);
 typedef BOOL (*PFN_FLH_InitCodeWithIspPath)(
     DWORD deviceId,
     BYTE* p1,
