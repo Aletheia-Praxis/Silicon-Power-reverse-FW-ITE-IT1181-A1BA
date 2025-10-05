@@ -74,6 +74,57 @@ iTEUFDrs::iTEUFDrs(LPCSTR basePath)
     }
 }
 
+// Default constructor
+iTEUFDrs::iTEUFDrs()
+    : m_vtable(nullptr), m_isInitialized(FALSE), m_lastError(ITEUFDRS_ERROR_NONE), m_hSDK(NULL),
+      m_pVDR_GetLunIndex(nullptr), m_pVDR_GetDeviceID(nullptr), m_pParentDlg(nullptr) {
+    LogMessage("iTEUFDrs: default constructor called");
+    InitializeMembers();
+
+    // Get the directory of the current executable to find the SDK
+    char currentModulePath[MAX_PATH];
+    char currentModuleDir[MAX_PATH];
+    GetModuleFileNameA(NULL, currentModulePath, sizeof(currentModulePath));
+    strcpy_s(currentModuleDir, sizeof(currentModuleDir), currentModulePath);
+    char* lastBackslash = strrchr(currentModuleDir, '\\');
+    if(lastBackslash) {
+        *lastBackslash = '\0';
+    }
+
+    strncpy_s(m_basePath, sizeof(m_basePath), currentModuleDir, _TRUNCATE);
+
+    // Load the SDK DLL
+    CHAR sdkPath[MAX_PATH];
+    sprintf_s(sdkPath, sizeof(sdkPath), "%s\\181FlashSDK.dll", m_basePath);
+    m_hSDK = LoadLibraryA(sdkPath);
+
+    if(m_hSDK == NULL) {
+        LogError("iTEUFDrs: Failed to load 181FlashSDK.dll from %s", sdkPath);
+        m_lastError = ITEUFDRS_ERROR_SDK_LOAD;
+        return;
+    }
+    LogMessage("iTEUFDrs: Load 181FlashSDK.dll succeed.");
+
+    // Load function pointers from the SDK
+    if(! LoadSDKFunctions(m_hSDK)) {
+        LogError("iTEUFDrs: Failed to get API addresses from SDK.");
+        m_lastError = ITEUFDRS_ERROR_API_BIND;
+        FreeLibrary(m_hSDK);
+        m_hSDK = NULL;
+        return;
+    }
+    LogMessage("iTEUFDrs: Get API address succeed in SDK.");
+
+    // Detect and initialize devices
+    if(! GetDeviceInfoInternal()) {
+        LogError("iTEUFDrs: GetDeviceInfo failed.");
+        m_lastError = ITEUFDRS_ERROR_DEVICE_INFO;
+    } else {
+        LogMessage("iTEUFDrs: GetDeviceInfo OK");
+        m_isInitialized = TRUE;
+    }
+}
+
 iTEUFDrs::~iTEUFDrs() {
     if(m_hSDK) {
         Unload181FlashSDK(m_hSDK);
