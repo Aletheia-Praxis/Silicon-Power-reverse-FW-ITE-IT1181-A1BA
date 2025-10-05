@@ -26,38 +26,48 @@ void buildVolumePath(char driveLetter, char* path, size_t pathSize) {
 
 // Constructor implementation (equivalent to the original FUN_0040d690)
 iTEUFDrs::iTEUFDrs(LPCSTR basePath)
-    : m_vtable(nullptr), m_isInitialized(FALSE), m_lastError(0), m_hSDK(NULL),
-      m_pVDR_GetLunIndex(nullptr), m_pVDR_GetDeviceID(nullptr) {
+    : m_vtable(nullptr), m_isInitialized(FALSE), m_lastError(ITEUFDRS_ERROR_NONE), m_hSDK(NULL),
+      m_pVDR_GetLunIndex(nullptr), m_pVDR_GetDeviceID(nullptr), m_pParentDlg(nullptr) {
     LogMessage("iTEUFDrs: constructor called with basePath: %s", basePath);
 
-    // Initialize device structures
+    // Initialize all member variables to a known state
     InitializeMembers();
 
-    if(basePath) {
-        strncpy_s(m_basePath, sizeof(m_basePath), basePath, _TRUNCATE);
-    } else {
-        LogError("iTEUFDrs: basePath is NULL.");
-        m_lastError = ERROR_INVALID_PARAMETER;
+    if(!basePath || *basePath == '\0') {
+        LogError("iTEUFDrs: basePath is NULL or empty.");
+        m_lastError = ITEUFDRS_ERROR_DEVICE_INFO; // A generic init error
         return;
     }
+    
+    strncpy_s(m_basePath, sizeof(m_basePath), basePath, _TRUNCATE);
 
-    if(! InitializeSDK()) {
-        LogError("iTEUFDrs: Failed to initialize SDK.");
-        m_lastError = GetLastError();  // Store the specific error
+    // Load the SDK DLL
+    CHAR sdkPath[MAX_PATH];
+    sprintf_s(sdkPath, sizeof(sdkPath), "%s\\181FlashSDK.dll", m_basePath);
+    m_hSDK = LoadLibraryA(sdkPath);
+
+    if (m_hSDK == NULL) {
+        LogError("iTEUFDrs: Failed to load 181FlashSDK.dll from %s", sdkPath);
+        m_lastError = ITEUFDRS_ERROR_SDK_LOAD;
         return;
     }
+    LogMessage("iTEUFDrs: Load 181FlashSDK.dll succeed.");
 
-    // Enhanced security initialization based on analysis
-    if(! VerifySDKIntegrity()) {
-        LogError("iTEUFDrs: SDK integrity verification failed.");
-        m_lastError = ERROR_INVALID_DATA;
+    // Load function pointers from the SDK
+    if (!LoadSDKFunctions(m_hSDK)) {
+        LogError("iTEUFDrs: Failed to get API addresses from SDK.");
+        m_lastError = ITEUFDRS_ERROR_API_BIND;
+        FreeLibrary(m_hSDK);
+        m_hSDK = NULL;
         return;
     }
+    LogMessage("iTEUFDrs: Get API address succeed in SDK.");
 
-    // Call GetDeviceInfo (equivalent to FUN_0040cf30)
-    if(! GetDeviceInfoInternal()) {
+    // Detect and initialize devices
+    if (!GetDeviceInfoInternal()) {
         LogError("iTEUFDrs: GetDeviceInfo failed.");
-        // GetDeviceInfo should set its own m_lastError
+        m_lastError = ITEUFDRS_ERROR_DEVICE_INFO;
+        // Don't return, allow partial initialization
     } else {
         LogMessage("iTEUFDrs: GetDeviceInfo OK");
         m_isInitialized = TRUE;
