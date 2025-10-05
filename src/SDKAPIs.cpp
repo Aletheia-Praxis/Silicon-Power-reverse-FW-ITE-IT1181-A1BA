@@ -363,6 +363,8 @@ void ClearSDKAPIs() {
     g_FLH_ReadBCM = nullptr;
     g_FLH_InitCodeWithIspPath = nullptr;
     g_FLH_GetChannelCeNoAndMap = nullptr;
+    g_ADDR_ReadISPData = nullptr;
+    g_ADDR_ReadCISData = nullptr;
     g_FLH_InitCodeForReady = nullptr;
 
     // All other APIs...
