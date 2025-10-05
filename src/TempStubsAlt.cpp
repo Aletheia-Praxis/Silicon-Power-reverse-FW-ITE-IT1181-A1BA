@@ -1,4 +1,3 @@
-#include "../include/WindowsHeaders.h"
 
 // Alternative stub file with correct signatures based on linker errors
 
