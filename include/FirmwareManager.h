@@ -15,3 +15,11 @@ void CleanupFirmware(LPVOID pBuffer);
 #define FIRMWARE_HEADER_SIZE  512
 #define FIRMWARE_SIGNATURE    "ITE_FW"
 #define FIRMWARE_VERSION_SIZE 32
+
+// Background thread functions from CUrescueApp
+UINT WINAPI BackgroundMonitorThread(LPVOID pParam);
+UINT WINAPI BackgroundProcessingThread(LPVOID pParam);
+
+// Helper functions for background threads
+BOOL ProcessBootCodeArchive(LPCSTR archivePath);
+BOOL ExtractResourceToFile(LPCSTR resourceType, UINT resourceID, LPCSTR outputPath);
