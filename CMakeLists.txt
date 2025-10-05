@@ -24,15 +24,15 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/$<CONFIG>)
 set(LIB_SOURCES
     src/URescueCore.cpp
     src/SystemManager.cpp
-    # src/ITEController.cpp    # Temporarily excluded - USB dependency issues
-    # src/FirmwareManager.cpp  # Temporarily excluded due to compilation issues
-    # src/USBDevice.cpp        # Temporarily excluded - working on USB header conflicts
+    src/ITEController.cpp
+    src/FirmwareManager.cpp
+    src/USBDevice.cpp
     src/Utilities.cpp
     src/ErrorHandler.cpp
     src/iTEUFDrs.cpp
     src/SDKLoader.cpp
     src/SDKAPIs.cpp
-    # src/FlashSDK.cpp         # Re-disabled - still has winsock conflicts via includes
+    src/FlashSDK.cpp
     src/MemoryManager.cpp
     src/ResourceManager.cpp
     src/FileOperations.cpp
@@ -40,6 +40,9 @@ set(LIB_SOURCES
     src/Globals.cpp
     src/CRTFunctions.cpp
     src/TempStubsAlt.cpp
+    src/DeviceDetectionHelpers.cpp
+    src/TempStubs.cpp
+    src/iTEUFDrs_Constructor.cpp
 )
 
 # Create static library
@@ -62,6 +65,9 @@ set(APP_SOURCES
     src/main.cpp
     src/URescueMain.cpp
     src/URescueGUI.cpp
+    src/Dialogs.cpp
+    src/CUrescueApp.cpp
+    src/URescueEntryPoint.cpp
 )
 
 # Create executable
