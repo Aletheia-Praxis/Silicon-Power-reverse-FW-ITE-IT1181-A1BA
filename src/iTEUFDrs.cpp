@@ -234,12 +234,13 @@ BOOL iTEUFDrs::GetDeviceInfoInternal() {
     m_volumeCount = CheckDriveExist();
     if(m_volumeCount == 0) {
         LogMessage("Open Drive Handle Again !");
-        if(! OpenDriveHandleAgain(0)) {  // The parameter seems unused in the stub
-            m_deviceInfo.driveOpened = FALSE;
+        // In the original code, a flag is set here. We'll use a member variable.
+        m_deviceInfo.driveOpened = TRUE;
+        if(! OpenDriveHandleAgain(0)) {
             LogError("GetDeviceInfo: Device Not Found after trying again.");
             return FALSE;
         }
-        m_deviceInfo.driveOpened = TRUE;
+        // After opening physical drives, we might need to re-scan or re-validate
         m_volumeCount = CheckDriveExist();
     }
 
@@ -261,14 +262,15 @@ BOOL iTEUFDrs::GetDeviceInfoInternal() {
         if(! controller.isValid)
             continue;
 
-        BYTE volumeIndex = controller.volumeIndexes[0];  // Assuming first volume for the controller
+        // The original code has complex logic to pick a volume. We'll use the first valid one.
+        BYTE volumeIndex = controller.volumeIndexes[0];
         if(volumeIndex >= MAX_VOLUMES)
             continue;
 
         DEVICE_VOLUME_INFO& volume = m_deviceInfo.volumes[volumeIndex];
 
+        // Open the correct handle type based on how drives were found
         if(m_deviceInfo.driveOpened) {
-            // If we reopened handles, we need to use the physical drive handle
             if(! OpenPhysicalDrive(volumeIndex)) {
                 controller.isReady = FALSE;
                 continue;
@@ -282,11 +284,10 @@ BOOL iTEUFDrs::GetDeviceInfoInternal() {
 
         m_deviceInfo.selectedVolume = volumeIndex;
 
-        // In the original code, there's a check for `param_1 + 0x9f9` which seems to be an ISP
-        // loaded flag. We'll simulate this with a member variable.
+        // Check if ISP code needs to be loaded
         if(! volume.ispCodeInitialized) {
-            PrepareFirmwareFilePath();  // Placeholder
-            ReadBinaryFileVersion();    // Placeholder
+            PrepareFirmwareFilePath();  // Placeholder for path logic
+            ReadBinaryFileVersion();    // Placeholder for version reading
             if(! InitializeISPCode(i, controller.deviceId)) {
                 LogError("GetDeviceInfo: InitializeISPCode failed for controller %d", i);
                 controller.isReady = FALSE;
@@ -296,6 +297,7 @@ BOOL iTEUFDrs::GetDeviceInfoInternal() {
             volume.ispCodeInitialized = TRUE;
         }
 
+        // Notify firmware about segment info (loads BankC)
         if(! NotifyFwSegmentInfo(i, controller.deviceId)) {
             AfxMessageBox("Load BankC fail (Path not exist?)", 0, 0);
             controller.isReady = FALSE;
@@ -303,19 +305,27 @@ BOOL iTEUFDrs::GetDeviceInfoInternal() {
             continue;
         }
 
-        typedef int(__stdcall * PFN_FLH_ReadBCM)(void*, HANDLE);
-        PFN_FLH_ReadBCM pFLH_ReadBCM = (PFN_FLH_ReadBCM) g_sdk_api.FLH_ReadBCM;
-        if(! pFLH_ReadBCM || pFLH_ReadBCM(m_bcmBuffer, volume.hDevice) != 1) {
+        // Read BCM (Bad Block Management) information
+        if(! g_sdk_api.FLH_ReadBCM) {
             AfxMessageBox("Get BCM information CMD fail", 0, 0);
             controller.isReady = FALSE;
             CloseDeviceHandle(volumeIndex);
             continue;
         }
+        int bcmResult = ((PFN_FLH_ReadBCM) (g_sdk_api.FLH_ReadBCM))(m_bcmBuffer);
+        if(bcmResult != 1) {
+            // Original code has a switch for different errors. We'll show a generic message.
+            AfxMessageBox("Get BCM information fail", 0, 0);
+            controller.isReady = FALSE;
+            CloseDeviceHandle(volumeIndex);
+            continue;
+        }
 
-        // Copy the BCM data from the main buffer to the specific bank's buffer
+        // Copy BCM data to the appropriate bank structure
         memcpy(volume.banks[0].bcmInfo, m_bcmBuffer, sizeof(m_bcmBuffer));
         volume.banks[0].bcmLoaded = TRUE;
 
+        // Load/update firmware segments and capacity
         if(! volume.firmwareSegmentsLoaded) {
             LoadAndVerifyFirmwareSegments(i, controller.deviceId);
         } else {
@@ -328,14 +338,17 @@ BOOL iTEUFDrs::GetDeviceInfoInternal() {
             UpdateDeviceCapacityOrCalculate(i);
         }
 
+        // Get Mass Production info and set final device string
         if(! GetMPInfo(i, controller.deviceId)) {
             strcpy_s(m_deviceInfo.deviceString, sizeof(m_deviceInfo.deviceString), " NONE");
             m_deviceInfo.systemReady = FALSE;
         } else {
-            // Format string like " %s - %s "
+            // In the success case, a formatted string is created. We'll do this in
+            // FormatFinalDeviceString.
             m_deviceInfo.systemReady = TRUE;
         }
 
+        // Set repair mode based on system readiness
         if(m_deviceInfo.systemReady) {
             LogMessage("DoRepairDevice System Yes bISPLoaded");
             m_deviceInfo.repairMode = FALSE;
