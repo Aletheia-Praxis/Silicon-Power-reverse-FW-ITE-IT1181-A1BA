@@ -171,3 +171,87 @@ void CAboutDialog::DoDataExchange(CDataExchange *pDX) {
 // Message handler for the about dialog
 BEGIN_MESSAGE_MAP(CAboutDialog, CDialog)
 END_MESSAGE_MAP()
+
+
+// --- CUrescueDlg Implementation ---
+
+// Constructor for the main dialog
+// Based on Ghidra analysis of function at 0x00415780
+CUrescueDlg::CUrescueDlg(CWnd* pParent /*=NULL*/)
+    : CDialog(CUrescueDlg::IDD, pParent) {
+    // The original constructor initializes custom controls (CPieChartCtrl, CTextProgressCtrl)
+    // and CString members here. It also loads the application icon.
+    
+    // Initialize CString members (reconstructed from offsets 0x2ec and 0x2f0)
+    m_string1 = "";
+    m_string2 = "";
+
+    // Store the unknown parameter (reconstructed from offset 0x2f8)
+    // The original takes a second parameter in the constructor. We'll set it to NULL.
+    m_unknownParam = NULL; 
+
+    // Load the application icon (IDR_MAINFRAME, which is typically 128)
+    m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
+}
+
+void CUrescueDlg::DoDataExchange(CDataExchange* pDX) {
+    CDialog::DoDataExchange(pDX);
+    // DDX mapping for controls would go here
+    // Example: DDX_Control(pDX, IDC_MY_STATIC, m_staticCtrl1);
+}
+
+BOOL CUrescueDlg::OnInitDialog() {
+    CDialog::OnInitDialog();
+
+    // Set the icon for this dialog. The framework does this automatically
+    // when the application's main window is not a dialog
+    SetIcon(m_hIcon, TRUE);  // Set big icon
+    SetIcon(m_hIcon, FALSE); // Set small icon
+
+    // TODO: Add extra initialization here
+
+    return TRUE; // return TRUE unless you set the focus to a control
+}
+
+void CUrescueDlg::OnSysCommand(UINT nID, LPARAM lParam) {
+    // Handle system commands, like the About dialog
+    CDialog::OnSysCommand(nID, lParam);
+}
+
+// If you add a minimize button to your dialog, you will need the code below
+// to draw the icon. For MFC applications using the document/view model,
+// this is automatically done for you by the framework.
+void CUrescueDlg::OnPaint() {
+    if (IsIconic()) {
+        CPaintDC dc(this); // device context for painting
+
+        SendMessage(WM_ICONERASEBKGND, reinterpret_cast<WPARAM>(dc.GetSafeHdc()), 0);
+
+        // Center icon in client rectangle
+        int cxIcon = GetSystemMetrics(SM_CXICON);
+        int cyIcon = GetSystemMetrics(SM_CYICON);
+        CRect rect;
+        GetClientRect(&rect);
+        int x = (rect.Width() - cxIcon + 1) / 2;
+        int y = (rect.Height() - cyIcon + 1) / 2;
+
+        // Draw the icon
+        dc.DrawIcon(x, y, m_hIcon);
+    } else {
+        CDialog::OnPaint();
+    }
+}
+
+// The system calls this function to obtain the cursor to display while the user drags
+// the minimized window.
+HCURSOR CUrescueDlg::OnQueryDragIcon() {
+    return static_cast<HCURSOR>(m_hIcon);
+}
+
+
+BEGIN_MESSAGE_MAP(CUrescueDlg, CDialog)
+    ON_WM_SYSCOMMAND()
+    ON_WM_PAINT()
+    ON_WM_QUERYDRAGICON()
+    // Other message handlers would go here
+END_MESSAGE_MAP()
