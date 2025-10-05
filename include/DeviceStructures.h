@@ -1,4 +1,6 @@
-#pragma once
+#ifndef DEVICE_STRUCTURES_H
+#define DEVICE_STRUCTURES_H
+
 #include "WindowsHeaders.h"
 
 // Maximum device configuration
@@ -96,8 +98,10 @@ typedef struct _DEVICE_VOLUME_INFO {
     BYTE reserved3[8];     // 0x3A-0x41: Reserved
 
     // Device handles and state
-    HANDLE hDevice;      // Device handle
-    BOOL isInitialized;  // Initialization flag
+    HANDLE hDevice;               // Device handle
+    BOOL isInitialized;           // Initialization flag
+    BOOL ispCodeInitialized;      // Flag to check if ISP code is initialized
+    BOOL firmwareSegmentsLoaded;  // Flag to check if firmware segments are loaded
 
     // Bank information
     DEVICE_BANK_INFO banks[MAX_BANKS];
@@ -193,3 +197,41 @@ typedef struct _DEVICE_INFO {
 #define DEVICE_STATUS_NOT_FOUND 0x00
 #define DEVICE_STATUS_FOUND     0x01
 #define DEVICE_STATUS_ERROR     0xFF
+
+// Controller data structure (reconstructed from Ghidra analysis)
+typedef struct _CONTROLLER_DATA {
+    BOOL isValid;
+    BOOL isReady;
+    DWORD deviceId;
+    BYTE pathId;
+    BYTE targetId;
+    BYTE lunId;
+    BYTE busId;
+    BYTE scsiId;
+    BYTE reserved1;
+    BYTE reserved2;
+    BYTE volumeIndexes[4];
+    BYTE volumeCount;
+    BYTE productId;
+    BYTE controllerType;
+
+    // MP Info
+    BOOL mpInfoLoaded;
+    BYTE mpData[0x10];
+    BYTE mpStatus;
+    WORD mpChecksums[8];
+    WORD totalMpChecksum;
+
+    // LUN Info
+    BOOL lunInfoLoaded;
+    BYTE lunData[64];
+
+    // Capacity Info
+    DWORD capacity;
+    DWORD precalculatedCapacity;
+
+    DEVICE_BANK_INFO banks[2];
+
+} CONTROLLER_DATA, *PCONTROLLER_DATA;
+
+#endif  // DEVICE_STRUCTURES_H
