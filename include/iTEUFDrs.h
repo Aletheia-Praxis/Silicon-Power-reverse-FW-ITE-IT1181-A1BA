@@ -18,7 +18,7 @@ public:
 
     BOOL IsInitialized() const { return m_isInitialized; }
     DWORD GetLastError() const { return m_lastError; }
-    const DEVICE_INFO& GetDeviceInfo() const { return m_deviceInfo; }
+    const _DEVICE_INFO& GetDeviceInfo() const { return m_deviceInfo; }
 
 private:
     // VTable (placeholder)
@@ -28,12 +28,12 @@ private:
     BOOL m_isInitialized;
     DWORD m_lastError;
     CHAR m_basePath[MAX_PATH];
-    DEVICE_INFO m_deviceInfo;
+    _DEVICE_INFO m_deviceInfo;
     CONTROLLER_DATA m_controllerData[MAX_CONTROLLERS];
-    BYTE m_controllerCount;
-    BYTE m_volumeCount;
     BYTE m_bcmBuffer[0xE40];    // Buffer for BCM (Bad Block Management) information
     BYTE m_deviceIDTable[255];  // Table to track used device IDs
+    BYTE m_controllerCount;
+    BYTE m_volumeCount;
 
     // SDK handles and functions
     HMODULE m_hSDK;
@@ -49,7 +49,6 @@ private:
     BOOL GetDeviceInfoInternal();
     BOOL InitializeParaValue();
     BYTE CheckDriveExist();
-    BOOL OpenDriveHandleAgain(BYTE volumeIndex);
     BOOL ValidatePhysicalDevice(HANDLE hDevice, BYTE driveIndex);
     BOOL SetDeviceID();
     void VolumePairController();
@@ -70,7 +69,7 @@ private:
     BOOL FormatDeviceIdentification();
 
     // New functions based on decompilation analysis
-    BOOL NotifyFwSegmentInfo(BYTE controllerIndex, DWORD deviceId);
+    BOOL NotifyFwSegmentInfo(BYTE controllerIndex, CONTROLLER_DATA& controller, HANDLE hDevice);
 
     // Device management functions based on Ghidra analysis
     UINT OpenDriveHandleAgain(int deviceIndex);
@@ -79,8 +78,11 @@ private:
     void CloseDeviceHandle(BYTE volumeIndex);
     void PrepareFirmwareFilePath();
     void ReadBinaryFileVersion();
-    BOOL InitializeISPCode(BYTE controllerIndex, DWORD deviceId, HANDLE hDevice);
-    void LoadAndVerifyFirmwareSegments(BYTE controllerIndex, DWORD deviceId);
+    BOOL InitializeISPCode(BYTE controllerIndex, CONTROLLER_DATA& controller, HANDLE hDevice);
+    BOOL LoadAndVerifyFirmwareSegments(
+        BYTE controllerIndex,
+        CONTROLLER_DATA& controller,
+        HANDLE hDevice);
     void UpdateFirmwareBankInfo(BYTE controllerIndex, DWORD deviceId);
     void FormatFinalDeviceString(BYTE volumeIndex);
     void CalculateDeviceCapacity(BYTE controllerIndex);
@@ -94,7 +96,11 @@ private:
     CryptoManager m_cryptoManager;
 
     // Internal helper functions
-    DWORD AnalyzeSpareAreaAndClassifyBlock(DWORD blockIndex, DWORD unknown, BYTE* spareBuffer);
+    DWORD AnalyzeSpareAreaAndClassifyBlock(
+        CONTROLLER_DATA& controller,
+        DWORD blockIndex,
+        DWORD unknown,
+        BYTE* spareBuffer);
     BOOL CheckDeviceTypeAndFlag(BYTE* spareBuffer, BYTE flag);
 };
 
