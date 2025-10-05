@@ -33,12 +33,12 @@ iTEUFDrs::iTEUFDrs(LPCSTR basePath)
     // Initialize all member variables to a known state
     InitializeMembers();
 
-    if(!basePath || *basePath == '\0') {
+    if(! basePath || *basePath == '\0') {
         LogError("iTEUFDrs: basePath is NULL or empty.");
-        m_lastError = ITEUFDRS_ERROR_DEVICE_INFO; // A generic init error
+        m_lastError = ITEUFDRS_ERROR_DEVICE_INFO;  // A generic init error
         return;
     }
-    
+
     strncpy_s(m_basePath, sizeof(m_basePath), basePath, _TRUNCATE);
 
     // Load the SDK DLL
@@ -46,7 +46,7 @@ iTEUFDrs::iTEUFDrs(LPCSTR basePath)
     sprintf_s(sdkPath, sizeof(sdkPath), "%s\\181FlashSDK.dll", m_basePath);
     m_hSDK = LoadLibraryA(sdkPath);
 
-    if (m_hSDK == NULL) {
+    if(m_hSDK == NULL) {
         LogError("iTEUFDrs: Failed to load 181FlashSDK.dll from %s", sdkPath);
         m_lastError = ITEUFDRS_ERROR_SDK_LOAD;
         return;
@@ -54,7 +54,7 @@ iTEUFDrs::iTEUFDrs(LPCSTR basePath)
     LogMessage("iTEUFDrs: Load 181FlashSDK.dll succeed.");
 
     // Load function pointers from the SDK
-    if (!LoadSDKFunctions(m_hSDK)) {
+    if(! LoadSDKFunctions(m_hSDK)) {
         LogError("iTEUFDrs: Failed to get API addresses from SDK.");
         m_lastError = ITEUFDRS_ERROR_API_BIND;
         FreeLibrary(m_hSDK);
@@ -64,7 +64,7 @@ iTEUFDrs::iTEUFDrs(LPCSTR basePath)
     LogMessage("iTEUFDrs: Get API address succeed in SDK.");
 
     // Detect and initialize devices
-    if (!GetDeviceInfoInternal()) {
+    if(! GetDeviceInfoInternal()) {
         LogError("iTEUFDrs: GetDeviceInfo failed.");
         m_lastError = ITEUFDRS_ERROR_DEVICE_INFO;
         // Don't return, allow partial initialization
