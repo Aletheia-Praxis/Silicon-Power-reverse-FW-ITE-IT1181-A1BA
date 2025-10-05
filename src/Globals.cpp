@@ -1,3 +1,11 @@
+#include "../include/Globals.h"
+
+// Define global variables
+char g_cmdLineArgs[128] = { 0 };
+BOOL g_calledFromURescueM = FALSE;
+BOOL g_systemReadyFlag = FALSE;
+char g_tempDirectory[MAX_PATH] = { 0 };
+
 // clang-format off
 #ifndef _WIN32_WINNT
     #define _WIN32_WINNT 0x0601  // Windows 7+
