@@ -20,6 +20,7 @@ public:
     BOOL IsInitialized() const { return m_isInitialized; }
     DWORD GetLastError() const { return m_lastError; }
     const _DEVICE_INFO& GetDeviceInfo() const { return m_deviceInfo; }
+    char GetDeviceInfo();  // Returns success/failure status (from constructor)
 
 private:
     // VTable (placeholder)
@@ -49,9 +50,8 @@ private:
     BOOL InitializeDeviceStructures();
 
     // Device information functions (decompiled from various FUN_* functions)
-    BOOL GetDeviceInfoInternal();
-    BOOL InitializeParaValue();
-    BYTE CheckDriveExist();
+    BOOL InitializeParaValue(void*);
+    BYTE CheckDriveExist(void*);
     BOOL ValidatePhysicalDevice(HANDLE hDevice, BYTE driveIndex);
     BOOL SetDeviceID();
     void VolumePairController();
@@ -64,6 +64,37 @@ private:
     BOOL GetMPInfo(BYTE controllerIndex, DWORD deviceId);
     BOOL GetLunArrayData(BYTE controllerIndex, DWORD deviceId);
 
+    // Device processing (internal)
+    void ProcessDetectedDevices();
+
+    // Helper functions for device processing
+    BYTE InitializeDeviceParameters();
+    BYTE ScanForITEUSBDevices();
+    BYTE OpenDriveHandleAgain();
+    BYTE OpenLogicalDriveHandle(BYTE driveIndex);
+    BYTE OpenPhysicalDriveHandle(BYTE driveIndex);
+    BYTE GetFlashMethod(INT deviceIndex, DWORD deviceParam);
+    BYTE InitializeISPCode(INT deviceIndex, DWORD deviceParam);
+    BYTE NotifyFwSegmentInfo(INT deviceIndex, DWORD deviceParam);
+    INT CallSDKGetBCMInfo(BYTE* bufferPtr, DWORD deviceParam);
+    void HandleBCMError(INT errorCode);
+    void CopyDeviceStructures(INT deviceOffset);
+    void LoadAndVerifyFirmwareSegments(INT deviceIndex, DWORD deviceParam);
+    void UpdateFirmwareBankInfo(INT deviceIndex, DWORD deviceParam);
+    void GetMPInfoAndUpdateBuffers(INT deviceIndex, DWORD deviceParam);
+    void CalculateDeviceCapacity(INT deviceIndex);
+    void UpdateDeviceCapacityOrCalculate(INT deviceIndex);
+    BYTE GetLunArrayData(INT deviceIndex, DWORD deviceParam);
+    BYTE GetMPInfo(INT deviceIndex, DWORD deviceParam);
+    void FormatDeviceDisplayString(CHAR mpResult, INT deviceIndex);
+    void SetDeviceFlags(INT deviceIndex);
+    void FindActiveDeviceAndBuildStrings();
+    void BuildMultiControllerString(UINT activeDevice);
+    void AssignDeviceSizeString(CHAR* sizeString);
+    void PrepareFirmwareFilePath();
+    void ReadBinaryVersionInfo();
+    void CloseITEDeviceHandle(UINT deviceSlot);
+
     // Helper functions
     BOOL GetBinFilePath(BYTE volumeIndex, LPCSTR fileName, LPSTR filePath, DWORD pathSize);
     BOOL FormatDeviceString(LPSTR buffer, DWORD size, LPCSTR format, ...);
@@ -74,22 +105,7 @@ private:
     // New functions based on decompilation analysis
     BOOL NotifyFwSegmentInfo(BYTE controllerIndex, CONTROLLER_DATA& controller, HANDLE hDevice);
 
-    // Device management functions based on Ghidra analysis
-    UINT OpenDriveHandleAgain(int deviceIndex);
-    BOOL OpenPhysicalDrive(int driveIndex);
-    BOOL OpenLogicalDriveHandle(BYTE volumeIndex);
-    void CloseDeviceHandle(BYTE volumeIndex);
-    void PrepareFirmwareFilePath();
-    void ReadBinaryFileVersion();
-    BOOL InitializeISPCode(BYTE controllerIndex, CONTROLLER_DATA& controller, HANDLE hDevice);
-    BOOL LoadAndVerifyFirmwareSegments(
-        BYTE controllerIndex,
-        CONTROLLER_DATA& controller,
-        HANDLE hDevice);
-    void UpdateFirmwareBankInfo(BYTE controllerIndex, DWORD deviceId);
-    void FormatFinalDeviceString(BYTE volumeIndex);
-    void CalculateDeviceCapacity(BYTE controllerIndex);
-    void UpdateDeviceCapacityOrCalculate(BYTE controllerIndex);
+    // Legacy device management functions (deprecated - use new ones above)
 
     // SDK function pointers for device management
     PFN_VDR_ReadLUNIndex m_pVDR_GetLunIndex;
@@ -105,6 +121,42 @@ private:
         DWORD unknown,
         BYTE* spareBuffer);
     BOOL CheckDeviceTypeAndFlag(BYTE* spareBuffer, BYTE flag);
+
+    // Additional state members from Ghidra analysis
+    char m_sdkPath[260];      // SDK DLL path
+    BOOL m_sdkLoadError;      // SDK load failure flag
+    BOOL m_deviceReady;       // Device ready status
+    BOOL m_initError1;        // Initialization error flag 1
+    BOOL m_initError2;        // Initialization error flag 2
+    BOOL m_statusFlag1;       // General status flag
+    BOOL m_deviceConnected;   // Device connection status
+    BOOL m_connectionStatus;  // Connection state
+    BYTE m_deviceCount;       // Number of detected devices
+    BOOL m_scanComplete;      // Device scan completion flag
+    BOOL m_processingFlag;    // Processing operation flag
+    BYTE m_activeDevice;      // Currently active device index
+
+    // Device handles for multiple devices
+    HANDLE m_deviceHandle1;
+    HANDLE m_deviceHandle2;
+    HANDLE m_deviceHandle3;
+    HANDLE m_deviceHandle4;
+
+    // Large data buffers for operations
+    BYTE m_deviceBuffer[0x200000];  // Main device buffer (2 MB) - matches original layout
+    BYTE m_commandBuffer[0x200];    // Command buffer (512 bytes)
+    BYTE m_responseBuffer[0x40];    // Response buffer (64 bytes)
+    BYTE m_statusBuffer[0x40];      // Status buffer (64 bytes)
+
+    // Operation status tracking
+    DWORD m_operationStatus;
+    DWORD m_progressStatus;
+    DWORD m_transferStatus;
+    DWORD m_completionStatus;
+
+    // Additional buffers
+    BYTE m_firmwareBuffer[0x800];  // Firmware buffer (2 KB)
+    HMODULE m_sdkModule;           // Handle to loaded SDK DLL
 };
 
 // Error codes for iTEUFDrs
@@ -112,3 +164,8 @@ private:
 #define ITEUFDRS_ERROR_SDK_LOAD    1  // Failed to load 181FlashSDK.dll
 #define ITEUFDRS_ERROR_API_BIND    2  // Failed to bind API functions
 #define ITEUFDRS_ERROR_DEVICE_INFO 3  // Failed to get device information
+
+// Global function declarations - reconstructed from Ghidra analysis
+extern "C" {
+char __fastcall iTEUFDrs_DetectAndInitializeDevices(void* param_1);
+}
