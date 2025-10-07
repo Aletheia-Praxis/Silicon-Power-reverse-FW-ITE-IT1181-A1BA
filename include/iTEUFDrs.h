@@ -22,6 +22,13 @@ public:
     const _DEVICE_INFO& GetDeviceInfo() const { return m_deviceInfo; }
     char GetDeviceInfo();  // Returns success/failure status (from constructor)
 
+    // Friend functions for global function access
+    friend char InitializeDeviceParameters();
+    friend char ScanForITEUSBDevices();
+    friend BYTE OpenDriveHandleAgain();
+    friend void SetDeviceID();
+    friend void VolumePairController();
+
 private:
     // VTable (placeholder)
     void* m_vtable;
@@ -173,4 +180,9 @@ extern "C" {
 // Global function that performs complete device detection and initialization - EXACT Ghidra
 // signature: returns char, no parameters (uses global instance access)
 char iTEUFDrs_DetectAndInitializeDevices();
+
+// C wrapper functions for backward compatibility with Ghidra-reconstructed code
+void PrepareFirmwareFilePath();
+char NotifyFwSegmentInfo(int deviceIndex, DWORD param);
+char GetMPInfo(int deviceIndex, DWORD param);
 }
