@@ -165,7 +165,12 @@ private:
 #define ITEUFDRS_ERROR_API_BIND    2  // Failed to bind API functions
 #define ITEUFDRS_ERROR_DEVICE_INFO 3  // Failed to get device information
 
+// Function declarations for helper functions
+int GetBCMInfo(int deviceStructBase, DWORD deviceHandle);
+
 // Global function declarations - reconstructed from Ghidra analysis
 extern "C" {
-char __fastcall iTEUFDrs_DetectAndInitializeDevices(void* param_1);
+// Global function that performs complete device detection and initialization - EXACT Ghidra
+// signature: returns char, no parameters (uses global instance access)
+char iTEUFDrs_DetectAndInitializeDevices();
 }
