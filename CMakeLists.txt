@@ -20,6 +20,10 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/$<CONFIG>)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/$<CONFIG>)
 
+# Precompiled header
+set(PCH_HEADER include/stdafx.h)
+set(PCH_SOURCE src/stdafx.cpp)
+
 # Source files for the library
 set(LIB_SOURCES
     src/URescueCore.cpp
@@ -29,7 +33,6 @@ set(LIB_SOURCES
     src/USBDevice.cpp
     src/Utilities.cpp
     src/ErrorHandler.cpp
-    src/iTEUFDrs.cpp
     src/SDKLoader.cpp
     src/SDKAPIs.cpp
     src/FlashSDK.cpp
@@ -39,14 +42,13 @@ set(LIB_SOURCES
     src/CryptoManager.cpp
     src/Globals.cpp
     src/CRTFunctions.cpp
-    src/TempStubsAlt.cpp
-    src/DeviceDetectionHelpers.cpp
     src/TempStubs.cpp
-    src/iTEUFDrs_Constructor.cpp
+    src/iTEUFDrs.cpp
 )
 
 # Create static library
-add_library(URescueLib STATIC ${LIB_SOURCES})
+add_library(URescueLib STATIC ${LIB_SOURCES} ${PCH_SOURCE})
+target_precompile_headers(URescueLib PUBLIC ${PCH_HEADER})
 
 # Set compiler options for the library
 target_compile_options(URescueLib PRIVATE
@@ -72,6 +74,7 @@ set(APP_SOURCES
 
 # Create executable
 add_executable(URescue ${APP_SOURCES})
+target_precompile_headers(URescue PRIVATE ${PCH_HEADER})
 
 # Set compiler options for the executable
 target_compile_options(URescue PRIVATE
@@ -104,6 +107,10 @@ target_link_libraries(URescue PRIVATE
     odbccp32
     setupapi
     winmm
+    winusb
+    # MFC libraries
+    $<$<CONFIG:Debug>:mfc140d>
+    $<$<CONFIG:Release>:mfc140>
 )
 
 # Set properties
