@@ -1075,72 +1075,104 @@ BOOL iTEUFDrs::LoadSDKFunctions(HMODULE hSDK) {
         "loaded successfully");
     return TRUE;
 }
+/*
+ * InitializeParaValue - EXACT reconstruction from Ghidra analysis at 0x00408370
+ *
+ * CRITICAL: This function initializes device parameters and data structures exactly as in original
+ * code
+ *
+ * Original function signature: undefined4 __fastcall InitializeDeviceParameters(int param_1)
+ *
+ * Process:
+ * 1. Clear device status flags at offsets 0x8a1, 0x8a2
+ * 2. Clear device string (0xff bytes) at offset 0x8a3
+ * 3. Clear volumes array (0x828 bytes) at offset 0x62a2
+ * 4. Initialize 3 controller structures with loop: iVar3 = 3; do...while(iVar3 != 0)
+ * 5. Each controller structure is 0x1daa bytes, cleared then initialized
+ * 6. Set default values (0xffffffff) for hardware parameters
+ * 7. Inner loop for 2 additional structures (iVar2 = 2; do...while(iVar2 != 0))
+ */
 BOOL iTEUFDrs::InitializeParaValue(void*) {
-    // This function is the equivalent of FUN_00408370 (InitializeDeviceParameters)
-    // It clears and initializes the main device and controller data structures.
+    LogMessage(
+        "InitializeParaValue: Starting SYSTEMATIC FUNCTION RECONSTRUCTION based on Ghidra "
+        "0x00408370");
 
-    LogMessage("InitializeParaValue: Initializing device parameters.");
+    // PHASE 1: Clear device status flags - EXACT Ghidra mapping
+    // *(undefined1 *)(param_1 + 0x8a1) = 0; -> offset 0x8a1 = device found flag
+    // *(undefined1 *)(param_1 + 0x8a2) = 0; -> offset 0x8a2 = drive opened flag
+    m_deviceInfo.deviceFound = FALSE;  // Offset 0x8a1
+    m_deviceInfo.driveOpened = FALSE;  // Offset 0x8a2
+    LogMessage("Phase 1: Device status flags cleared");
 
-    // Corresponds to:
-    // *(undefined1 *)(param_1 + 0x8a1) = 0; -> m_deviceInfo.deviceFound = FALSE;
-    // *(undefined1 *)(param_1 + 0x8a2) = 0; -> m_deviceInfo.driveOpened = FALSE;
-    m_deviceInfo.deviceFound = FALSE;
-    m_deviceInfo.driveOpened = FALSE;
+    // PHASE 2: Clear device string - EXACT Ghidra mapping
+    // _memset((void *)(param_1 + 0x8a3),0,0xff); -> 255 bytes at offset 0x8a3
+    memset(m_deviceInfo.deviceString, 0, 0xff);  // Exact 0xff bytes as in Ghidra
+    LogMessage("Phase 2: Device string cleared (0xff bytes)");
 
-    // Corresponds to: _memset((void *)(param_1 + 0x8a3),0,0xff);
-    // This clears the deviceString.
-    memset(m_deviceInfo.deviceString, 0, sizeof(m_deviceInfo.deviceString));
+    // PHASE 3: Clear volumes array - EXACT Ghidra mapping
+    // _memset((void *)(param_1 + 0x62a2),0,0x828); -> 0x828 bytes at offset 0x62a2
+    memset(m_deviceInfo.volumes, 0, 0x828);  // Exact 0x828 bytes as in Ghidra
+    LogMessage("Phase 3: Volumes array cleared (0x828 bytes)");
 
-    // Corresponds to: _memset((void *)(param_1 + 0x62a2),0,0x828);
-    // This clears the entire volumes array within m_deviceInfo.
-    memset(m_deviceInfo.volumes, 0, sizeof(m_deviceInfo.volumes));
+    // PHASE 4: Initialize controller structures - EXACT Ghidra reconstruction
+    // puVar4 = (undefined1 *)(param_1 + 0x9a5); -> start of controller data
+    // iVar3 = 3; do { ... puVar4 = puVar4 + 0x1daa; iVar3 = iVar3 + -1; } while (iVar3 != 0);
+    BYTE* puVar4 =
+        reinterpret_cast<BYTE*>(&m_controllerData[0]) + 1;  // +1 for puVar4 offset in Ghidra
+    int iVar3 = 3;                                          // Exact loop counter from Ghidra
 
-    // This section corresponds to the loop that initializes the 3 controller structures.
-    // puVar4 = (undefined1 *)(param_1 + 0x9a5); -> start of m_controllerData array
-    for(int i = 0; i < MAX_CONTROLLERS; ++i) {
-        CONTROLLER_DATA& controller = m_controllerData[i];
+    do {
+        // _memset(puVar4 + -1,0,0x1daa); -> Clear 0x1daa bytes starting at puVar4-1
+        memset(puVar4 - 1, 0, 0x1daa);
+        LogMessage("Phase 4: Controller structure cleared (0x1daa bytes)");
 
-        // Corresponds to: _memset(puVar4 + -1,0,0x1daa);
-        // We clear the entire controller structure.
-        memset(&controller, 0, sizeof(CONTROLLER_DATA));
+        // *puVar4 = 1; -> Set validity flag
+        *puVar4 = 1;
 
-        // Corresponds to setting various fields to 0xFFFFFFFF
-        controller.isValid = TRUE;  // *puVar4 = 1;
-        controller.deviceId = 0xFFFFFFFF;
-        // The following fields are mapped from the Ghidra decompilation offsets
-        // puVar4 + 0x5c -> lunId
-        // puVar4 + 0x60 -> targetId
-        // puVar4 + 0x64 -> pathId
-        // puVar4 + 0x68 -> busId
-        // puVar4 + 0x6c -> scsiId
-        // puVar4 + 0x70 -> reserved1
-        // puVar4 + 0x74 -> reserved2
-        // puVar4 + 0x78 -> productId (based on pattern)
-        controller.lunId = 0xFFFFFFFF;
-        controller.targetId = 0xFFFFFFFF;
-        controller.pathId = 0xFFFFFFFF;
-        controller.busId = 0xFFFFFFFF;
-        controller.scsiId = 0xFFFFFFFF;
-        controller.reserved1 = 0xFFFFFFFF;
-        controller.reserved2 = 0xFFFFFFFF;
-        // controller.productId = 0xFFFFFFFF; // This was incorrect, productId is a char array
-        memset(controller.productId, 0, sizeof(controller.productId));
+        // Initialize hardware parameters with 0xffffffff - EXACT offsets from Ghidra
+        *(DWORD*) (puVar4 + 1) = 0xffffffff;     // deviceId
+        *(DWORD*) (puVar4 + 0x5c) = 0xffffffff;  // lunId
+        *(DWORD*) (puVar4 + 0x60) = 0xffffffff;  // targetId
+        *(DWORD*) (puVar4 + 100) = 0xffffffff;   // pathId - note: 100 decimal = 0x64
+        *(DWORD*) (puVar4 + 0x68) = 0xffffffff;  // busId
+        *(DWORD*) (puVar4 + 0x6c) = 0xffffffff;  // scsiId
+        *(DWORD*) (puVar4 + 0x70) = 0xffffffff;  // reserved1
+        *(DWORD*) (puVar4 + 0x74) = 0xffffffff;  // reserved2
 
-        // This part of the original struct is not yet fully defined in our C++ version.
-        // Commenting out for now to allow compilation.
-        // for(int j = 0; j < 2; ++j) {
-        //     controller.lunInfo[j].field_0x0 = 0xFFFFFFFF;
-        //     controller.lunInfo[j].field_0x4 = 0xFFFFFFFF;
-        //     controller.lunInfo[j].field_0x8 = 0xFFFFFFFF;
-        // }
-        // controller.field_0x1d3a = 0xFFFFFFFF;
-    }
+        // Inner loop: iVar2 = 2; do { ... puVar1 = puVar1 + 1; iVar2 = iVar2 + -1; } while (iVar2
+        // != 0)
+        DWORD* puVar1 = reinterpret_cast<DWORD*>(puVar4 + 0x1d1b);  // Starting position
+        int iVar2 = 2;  // Exact inner loop counter from Ghidra
 
+        do {
+            // Initialize LUN info structures with 0xffffffff
+            *(DWORD*) ((BYTE*) puVar1 - 10) = 0xffffffff;  // field_0x0
+            *puVar1 = 0xffffffff;                          // field_0x4
+            *(DWORD*) ((BYTE*) puVar1 + 10) = 0xffffffff;  // field_0x8
+            puVar1 = puVar1 + 1;                           // Move to next structure
+            iVar2 = iVar2 - 1;                             // Decrement counter
+        } while(iVar2 != 0);
+
+        // *(undefined4 *)(puVar4 + 0x1d3a) = 0xffffffff; -> Final field
+        *(DWORD*) (puVar4 + 0x1d3a) = 0xffffffff;
+
+        // Move to next controller: puVar4 = puVar4 + 0x1daa;
+        puVar4 = puVar4 + 0x1daa;  // Exact structure size from Ghidra
+        iVar3 = iVar3 - 1;         // Decrement outer loop counter
+
+        LogMessage("Phase 4: Controller %d initialized", 4 - iVar3);
+    } while(iVar3 != 0);  // Exact condition from Ghidra
+
+    // Clear additional counters (not in original Ghidra but needed for our implementation)
     m_controllerCount = 0;
     m_volumeCount = 0;
 
-    LogMessage("InitializeParaValue: Device parameters initialized successfully.");
-    return TRUE;  // Return TRUE as the operation is successful.
+    LogMessage(
+        "InitializeParaValue: SYSTEMATIC RECONSTRUCTION COMPLETED - Device parameters initialized "
+        "successfully");
+
+    // Return value: CONCAT31((int3)((uint)puVar1 >> 8),1) -> essentially returns 1
+    return TRUE;
 }
 BYTE iTEUFDrs::CheckDriveExist(void*) {
     // This function is a reimplementation of FUN_0040b940 (ScanForITEUSBDevices)
