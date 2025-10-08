@@ -7,10 +7,12 @@
 // clang-format on
 
 // Define global variables
-char g_cmdLineArgs[128] = { 0 };
-BOOL g_calledFromURescueM = FALSE;
-BOOL g_systemReadyFlag = FALSE;
-char g_tempDirectory[MAX_PATH] = { 0 };
+DWORD g_windowsVersion = 0;              // DAT_004ad748
+DWORD g_windowsVersionBuild = 0;         // Additional Windows version build
+char g_cmdLineArgs[128] = { 0 };         // DAT_004ad6c0
+BOOL g_calledFromURescueM = FALSE;       // DAT_004ad740
+BOOL g_systemReadyFlag = FALSE;          // DAT_004ad744
+char g_tempDirectory[MAX_PATH] = { 0 };  // DAT_004ad74c
 
 // clang-format off
 #ifndef _WIN32_WINNT
