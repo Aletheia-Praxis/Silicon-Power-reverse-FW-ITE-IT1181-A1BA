@@ -68,8 +68,8 @@ set(APP_SOURCES
     src/URescueMain.cpp
     src/URescueGUI.cpp
     src/Dialogs.cpp
+    src/DeviceConnection.cpp
     src/CUrescueApp.cpp
-    src/URescueEntryPoint.cpp
 )
 
 # Create executable
