@@ -343,75 +343,8 @@ BOOL iTEUFDrs::InitializeDeviceStructures() {
 
 // Removed duplicate iTEUFDrs::InitializeISPCode - using global function approach as per Ghidra
 // analysis
-
-void iTEUFDrs::LoadAndVerifyFirmwareSegments(INT deviceIndex, DWORD deviceParam) {
-    if(! g_sdk_api.FLH_FindRootTable || ! g_sdk_api.VDR_RootFunc) {
-        LogError("LoadAndVerifyFirmwareSegments: Required SDK functions not available");
-        return;
-    }
-
-    if(deviceIndex >= MAX_CONTROLLERS) {
-        LogError("LoadAndVerifyFirmwareSegments: Invalid device index %d", deviceIndex);
-        return;
-    }
-
-    CONTROLLER_DATA& controller = m_controllerData[deviceIndex];
-    if(! controller.isValid) {
-        LogError("LoadAndVerifyFirmwareSegments: Controller %d is not valid", deviceIndex);
-        return;
-    }
-
-    BYTE findRootTableResult = ((PFN_FLH_FindRootTable_Alt) g_sdk_api.FLH_FindRootTable)(
-        controller.hDevice,
-        controller.segmentIds,
-        controller.bcm,
-        1  // Mode
-    );
-
-    if(findRootTableResult != 1) {
-        LogError("LoadAndVerifyFirmwareSegments: FLH_FindRootTable failed");
-        return;
-    }
-
-    for(int i = 0; i < 4; ++i) {
-        if(controller.segmentIds[i] != 0 && controller.segmentIds[i] != 0xFFFFFFFF) {
-            controller.segmentPresent[i] = TRUE;
-
-            int rootFuncResult = ((PFN_VDR_RootFunc_Alt) g_sdk_api.VDR_RootFunc)(
-                controller.segmentIds[i],
-                0,
-                0,
-                0,
-                0,  // Placeholder params
-                controller.firmwareSegments[i],
-                controller.bcm,
-                controller.hDevice);
-
-            if(rootFuncResult != 0) {
-                LogError("LoadAndVerifyFirmwareSegments: VDR_RootFunc failed for segment %d", i);
-                return;
-            }
-        }
-    }
-
-    // Now, perform verification logic similar to the original binary
-    // This involves iterating through blocks and analyzing their spare area.
-    int numBlocks = controller.numBlocks;
-    if(numBlocks > 0) {
-        BYTE spareBuffer[16];
-        for(int blockIndex = 0; blockIndex < numBlocks; ++blockIndex) {
-            DWORD blockType =
-                AnalyzeSpareAreaAndClassifyBlock(controller, blockIndex, 0, spareBuffer);
-
-            // TODO: Add logic to handle the classified block type.
-            if(blockType == 0x19 || blockType == 0x00) {
-                // Handle bad block
-            }
-        }
-    }
-
-    LogMessage("LoadAndVerifyFirmwareSegments: Completed for device %d", deviceIndex);
-}
+// Removed duplicate iTEUFDrs::LoadAndVerifyFirmwareSegments - using global function as per Ghidra
+// analysis
 
 DWORD iTEUFDrs::AnalyzeSpareAreaAndClassifyBlock(
     CONTROLLER_DATA& controller,
@@ -2433,9 +2366,264 @@ char GetFlashMethod(int deviceIndex, DWORD deviceHandle) {
     return 1;  // Success
 }
 
+// Main LoadAndVerifyFirmwareSegments function (address 0x0040b200)
+// SYSTEMATIC RECONSTRUCTION: Removing duplicate helper functions, using proper approach
+DWORD SwapEndianness32(DWORD value) {
+    // Address: 0x00409320 - 32-bit endianness conversion
+    // Algorithm: [0x12][0x34][0x56][0x78] → [0x78][0x56][0x34][0x12]
+    return (value * 0x1000000) + (value >> 0x18) + ((value >> 8) & 0xff00)
+           + ((value & 0xff00) * 0x100);
+}
+
+WORD SwapEndianness16(WORD value) {
+    // Address: 0x00409350 - 16-bit endianness conversion
+    // Algorithm: [0x12][0x34] → [0x34][0x12]
+    return (value >> 8) + (value * 0x100);
+}
+
+// Helper function for device type checking (address 0x004087d0)
+BYTE CheckDeviceTypeAndFlag(DWORD* spareData, BYTE checkType) {
+    // Address: 0x004087d0 - Check device type based on spare area markers
+    BYTE byteAt4 = *((BYTE*) spareData + 4);
+    BYTE byteAt5 = *((BYTE*) spareData + 5);
+
+    BYTE expectedByte4 = 0;
+    switch(checkType) {
+    case 0x11: expectedByte4 = 0x10; break;
+    case 0x12: expectedByte4 = 0x20; break;
+    case 0x13: expectedByte4 = 0x30; break;
+    case 0x14: expectedByte4 = 0x40; break;
+    case 0x15: expectedByte4 = 0x50; break;
+    case 0x16: expectedByte4 = 0x60; break;
+    case 0x1B: expectedByte4 = 0x80; break;
+    default: return 0;
+    }
+
+    return (byteAt4 == expectedByte4 && byteAt5 == 0x68) ? 1 : 0;
+}
+
+// Main classification function (address 0x00409b20)
+BYTE AnalyzeSpareAreaAndClassifyBlock(
+    DWORD blockData,
+    DWORD deviceParam,
+    DWORD* outputBuffer,
+    DWORD deviceStructBase) {
+    // Address: 0x00409b20 - Analyze spare area and classify block type
+    // Initialize 16-byte buffer to 0xFF
+    memset(outputBuffer, 0xFF, 16);
+
+    // Save current device index and set temporary
+    BYTE originalDeviceIndex = *((BYTE*) (deviceStructBase + 0x29f));
+    BYTE currentDeviceIndex = *((BYTE*) (deviceStructBase + 0x9a2));
+    *((BYTE*) (deviceStructBase + 0x29f)) = currentDeviceIndex;
+
+    DWORD addressBuffer[2] = { 0, 0 };
+
+    // Call SDK functions to read spare area (16 bytes)
+    if(g_pRawAddress2CCBAddress) {
+        DWORD ccbAddr = ((PFN_RawAddress2CCBAddress) g_pRawAddress2CCBAddress)(blockData);
+        addressBuffer[0] = ccbAddr;
+    }
+
+    BYTE readResult = 0;
+    if(g_sdk_api.FLH_ReadSpare) {
+        readResult = ((PFN_FLH_ReadSpare_Alt) g_sdk_api.FLH_ReadSpare)(
+            addressBuffer, 1, (LPVOID) deviceStructBase, outputBuffer, 0x10, deviceParam);
+    }
+
+    BYTE blockType = 1;  // Default classification
+
+    if(readResult != 0) {
+        // Count 0xFF bytes in first 6 bytes for bad block detection
+        BYTE ffCount = 0;
+        BYTE* byteBuffer = (BYTE*) outputBuffer;
+        for(int i = 0; i < 6; i++) {
+            if(byteBuffer[i] == 0xFF)
+                ffCount++;
+        }
+
+        if(ffCount > 2) {
+            blockType = 4;  // Potential bad block
+        }
+    }
+
+    // Progressive block type analysis with multiple checks
+    if(CheckDeviceTypeAndFlag(outputBuffer, 0x11)) {
+        blockType = 0x11;
+    } else if(CheckDeviceTypeAndFlag(outputBuffer, 0x12)) {
+        blockType = 0x12;
+    } else if(CheckDeviceTypeAndFlag(outputBuffer, 0x13)) {
+        blockType = 0x13;
+    } else if(CheckDeviceTypeAndFlag(outputBuffer, 0x14)) {
+        blockType = 0x14;
+    } else if(CheckDeviceTypeAndFlag(outputBuffer, 0x16)) {
+        blockType = 0x16;
+    } else if(CheckDeviceTypeAndFlag(outputBuffer, 0x1B)) {
+        blockType = 0x1B;
+    } else {
+        // Special block type analysis
+        if(*outputBuffer == 0x42415442) {  // "BATB" signature
+            blockType = 6;
+        } else if(((BYTE*) outputBuffer)[5] == 'U') {
+            blockType = 0;  // User/Used block
+        } else {
+            // Check for special markers
+            BYTE* byteBuffer = (BYTE*) outputBuffer;
+            switch(byteBuffer[5]) {
+            case 0x11: blockType = 0x48; break;
+            case 0x22: blockType = 0x49; break;
+            case 0x33: blockType = 0x4A; break;
+            case 0x00: blockType = 1; break;   // Available block
+            default: blockType = 0x19; break;  // General bad block
+            }
+        }
+    }
+
+    // Restore original device index
+    *((BYTE*) (deviceStructBase + 0x29f)) = originalDeviceIndex;
+
+    return blockType;
+}
+
+// LoadAndVerifyFirmwareSegments function (address 0x0040b200) - EXACT GHIDRA RECONSTRUCTION
+// Original signature: void __thiscall LoadAndVerifyFirmwareSegments(int param_1, byte param_2,
+// undefined4 param_3)
 void LoadAndVerifyFirmwareSegments(int deviceIndex, DWORD deviceHandle) {
-    LogMessage(
-        "LoadAndVerifyFirmwareSegments: Loading firmware segments for device %d", deviceIndex);
+    if(! g_iTEUFDrs_instance) {
+        LogError("LoadAndVerifyFirmwareSegments: No iTEUFDrs instance available");
+        return;
+    }
+
+    // EXACT GHIDRA VARIABLE MAPPING (corrected types):
+    UINT_PTR param_1 = (UINT_PTR) g_iTEUFDrs_instance;  // Base device structure address
+    BYTE param_2 = (BYTE) deviceIndex;                  // Device index
+    DWORD param_3 = deviceHandle;                       // Device handle
+
+    // Stack cookie protection (Ghidra: local_4 = DAT_004abe40 ^ (uint)auStack_248)
+    BYTE auStack_248[3];
+    UINT local_4 = 0x004abe40 ^ (UINT) (UINT_PTR) auStack_248;
+
+    // Core device structure calculation (Ghidra: local_234 = (uint)param_2 * 0x1daa + param_1)
+    UINT_PTR local_234 = (UINT) param_2 * 0x1daa + param_1;  // Device structure base
+    UINT_PTR iVar7 = local_234 + 0xa26;                      // BCM offset
+
+    // Segment discovery variables (exact Ghidra names)
+    DWORD local_230 = 0, local_22c = 0, local_228 = 0;
+    DWORD local_224[3] = { 0, 0, 0 };  // Segment IDs
+    WORD local_218 = 0;
+
+    // PHASE 1: Segment discovery using DAT_004ad5c0 (g_FLH_FindRootTable)
+    BYTE bStack_245 = 0;  // Discovery result (exact Ghidra variable)
+    if(g_pFLH_FindRootTable) {
+        typedef BYTE(__cdecl * PFN_FLH_FindRootTable)(DWORD, DWORD*, UINT_PTR, int);
+        bStack_245 = ((PFN_FLH_FindRootTable) g_pFLH_FindRootTable)(param_3, &local_230, iVar7, 0);
+    }
+
+    // Parse number of segments (Ghidra: puStack_244 = (undefined2 *)(uint)bStack_245)
+    WORD* puStack_244 = (WORD*) (UINT) bStack_245;
+
+    // Mark segments and store IDs (exact Ghidra loop structure)
+    int iVar6 = 0;
+    if(puStack_244 != (WORD*) 0x0) {
+        DWORD* puVar3 = (DWORD*) (local_234 + 0x26b6);  // Segment IDs storage
+        DWORD* puStack_240 =
+            (DWORD*) ((UINT) param_2 * 0x1daa + 0x26be + param_1);  // Availability flags
+
+        do {
+            *((BYTE*) puStack_240 + iVar6) = 1;  // Mark as available
+            *puVar3 = local_224[iVar6];          // Store segment ID
+            iVar6++;
+            puVar3++;
+        } while(iVar6 < (int) puStack_244);
+    }
+
+    // PHASE 2: Segment loading and verification (exact Ghidra condition)
+    if((bStack_245 != 0) && (iVar6 = 0, puStack_244 != (WORD*) 0x0)) {
+        BYTE auStack_204[0x200];  // 512-byte segment buffer (exact Ghidra name)
+
+        do {  // Exact Ghidra do-while loop structure
+            memset(auStack_204, 0, 0x200);
+
+            // Load segment using DAT_004ad620 (g_VDR_RootFunc) - exact Ghidra call
+            int iVar4 = 0;  // loadResult (exact Ghidra variable name)
+            if(g_pVDR_RootFunc) {
+                typedef int(__cdecl * PFN_VDR_RootFunc)(
+                    DWORD, int, int, int, int, LPVOID, UINT_PTR, DWORD);
+                iVar4 = ((PFN_VDR_RootFunc) g_pVDR_RootFunc)(
+                    local_224[iVar6],  // Segment ID from local array
+                    1,
+                    0x40,
+                    1,
+                    0x200,  // Block, Page, Size, Count (exact Ghidra values)
+                    auStack_204,
+                    iVar7,
+                    param_3);  // Buffer, BCM offset, device handle
+            }
+
+            if(iVar4 == 1) {
+                // PHASE 3: 3-stage verification process
+                WORD* wordBuffer = (WORD*) auStack_204;
+                DWORD* dwordBuffer = (DWORD*) auStack_204;
+                DWORD* verificationResults = (DWORD*) (local_234 + 0x26ca);
+
+                for(int elemIndex = 0; elemIndex < 2; elemIndex++) {
+                    DWORD verificationBuffer[4] = { 0 };
+
+                    // STAGE 1: SwapEndianness32 + AnalyzeSpareAreaAndClassifyBlock
+                    DWORD swappedDword = SwapEndianness32(dwordBuffer[elemIndex]);
+                    BYTE classResult1 = AnalyzeSpareAreaAndClassifyBlock(
+                        swappedDword, param_3, (DWORD*) verificationBuffer, iVar7);
+
+                    if(classResult1 == 0x12) {
+                        verificationResults[elemIndex] = swappedDword;
+                        *((BYTE*) (local_234 + 0x26c8 + elemIndex)) = 1;
+                    }
+
+                    // STAGE 2: SwapEndianness16 + g_BlkAddr2RawAddr +
+                    // AnalyzeSpareAreaAndClassifyBlock
+                    WORD swappedWord1 = SwapEndianness16(wordBuffer[elemIndex + 2]);
+                    DWORD sdkResult1 = 0;
+                    if(g_pBlkAddr2RawAddr) {
+                        typedef DWORD(__cdecl * PFN_BlkAddr2RawAddr)(UINT_PTR, WORD);
+                        sdkResult1 =
+                            ((PFN_BlkAddr2RawAddr) g_pBlkAddr2RawAddr)(iVar7, swappedWord1);
+                    }
+
+                    BYTE classResult2 = AnalyzeSpareAreaAndClassifyBlock(
+                        sdkResult1, param_3, (DWORD*) verificationBuffer, iVar7);
+
+                    if(classResult2 == 0x13) {
+                        verificationResults[elemIndex + 1] = sdkResult1;
+                        *((BYTE*) (local_234 + 0x26da + elemIndex)) = 1;
+                    }
+
+                    // STAGE 3: Second SwapEndianness16 + g_BlkAddr2RawAddr +
+                    // AnalyzeSpareAreaAndClassifyBlock
+                    WORD swappedWord2 = SwapEndianness16(wordBuffer[elemIndex + 4]);
+                    DWORD sdkResult2 = 0;
+                    if(g_pBlkAddr2RawAddr) {
+                        typedef DWORD(__cdecl * PFN_BlkAddr2RawAddr)(UINT_PTR, WORD);
+                        sdkResult2 =
+                            ((PFN_BlkAddr2RawAddr) g_pBlkAddr2RawAddr)(iVar7, swappedWord2);
+                    }
+
+                    BYTE classResult3 = AnalyzeSpareAreaAndClassifyBlock(
+                        sdkResult2, param_3, (DWORD*) verificationBuffer, iVar7);
+
+                    if(classResult3 == 0x13) {
+                        verificationResults[elemIndex + 2] = sdkResult2;
+                        *((BYTE*) (local_234 + 0x26dc + elemIndex)) = 1;
+                    }
+                }
+                break;  // Exit after first successful segment
+            }
+            iVar6++;  // Next segment (exact Ghidra increment)
+        } while(iVar6 < (int) (UINT_PTR) puStack_244);  // Exact Ghidra loop condition
+    }
+
+    // Stack cookie validation (exact Ghidra pattern: __security_check_cookie)
+    // __security_check_cookie(local_4 ^ (uint)auStack_248);
+    LogMessage("LoadAndVerifyFirmwareSegments: Completed verification for device %d", deviceIndex);
 }
 
 void UpdateFirmwareBankInfo(int deviceIndex, DWORD deviceHandle) {
