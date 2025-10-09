@@ -87,7 +87,6 @@ private:
     INT CallSDKGetBCMInfo(BYTE* bufferPtr, DWORD deviceParam);
     void HandleBCMError(INT errorCode);
     void CopyDeviceStructures(INT deviceOffset);
-    void LoadAndVerifyFirmwareSegments(INT deviceIndex, DWORD deviceParam);
     void UpdateFirmwareBankInfo(INT deviceIndex, DWORD deviceParam);
     void GetMPInfoAndUpdateBuffers(INT deviceIndex, DWORD deviceParam);
     void CalculateDeviceCapacity(INT deviceIndex);
