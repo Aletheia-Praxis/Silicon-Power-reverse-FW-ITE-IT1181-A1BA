@@ -184,5 +184,5 @@ char iTEUFDrs_DetectAndInitializeDevices();
 // C wrapper functions for backward compatibility with Ghidra-reconstructed code
 void PrepareFirmwareFilePath();
 char NotifyFwSegmentInfo(int deviceIndex, DWORD param);
-char GetMPInfo(int deviceIndex, DWORD param);
+char GetMPInfo(int deviceIndex, DWORD deviceHandle);
 }
