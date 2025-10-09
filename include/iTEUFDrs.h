@@ -80,7 +80,7 @@ private:
     BYTE OpenDriveHandleAgain();
     BYTE OpenLogicalDriveHandle(BYTE driveIndex);
     BYTE OpenPhysicalDriveHandle(BYTE driveIndex);
-    BYTE GetFlashMethod(INT deviceIndex, DWORD deviceParam);
+    // GetFlashMethod removed - using global function as per Ghidra analysis
     // InitializeISPCode removed - using global function as per Ghidra analysis
     BYTE NotifyFwSegmentInfo(INT deviceIndex, DWORD deviceParam);
     INT CallSDKGetBCMInfo(BYTE* bufferPtr, DWORD deviceParam);
