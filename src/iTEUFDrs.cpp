@@ -344,24 +344,6 @@ BOOL iTEUFDrs::InitializeDeviceStructures() {
 // Removed duplicate iTEUFDrs::InitializeISPCode - using global function approach as per Ghidra
 // analysis
 
-BOOL iTEUFDrs::NotifyFwSegmentInfo(
-    BYTE controllerIndex,
-    CONTROLLER_DATA& controller,
-    HANDLE hDevice) {
-    // This function notifies the SDK about the firmware segment information.
-    // It calls FLH_ReadBCM_Alt in the original code.
-    if(! g_sdk_api.FLH_ReadBCM) {
-        return FALSE;
-    }
-
-    // The original function passes a buffer from the _DEVICE_INFO struct.
-    // We'll pass our equivalent member from _CONTROLLER_DATA
-    int result =
-        ((PFN_FLH_ReadBCM_Alt) g_sdk_api.FLH_ReadBCM)(m_deviceInfo.firmwareLayout, hDevice);
-
-    return result == 0;
-}
-
 void iTEUFDrs::LoadAndVerifyFirmwareSegments(INT deviceIndex, DWORD deviceParam) {
     if(! g_sdk_api.FLH_FindRootTable || ! g_sdk_api.VDR_RootFunc) {
         LogError("LoadAndVerifyFirmwareSegments: Required SDK functions not available");
@@ -2451,124 +2433,6 @@ char GetFlashMethod(int deviceIndex, DWORD deviceHandle) {
     return 1;  // Success
 }
 
-/*
- * NotifyFwSegmentInfo - SYSTEMATIC RECONSTRUCTION from Ghidra analysis at 0x0040b5a0
- *
- * FUNCTION PURPOSE:
- * Critical initialization step that sets up firmware segment information for ITE controller
- * operation. This function initializes communication channels between host and device for
- * firmware loading and management operations.
- *
- * GHIDRA ANALYSIS BREAKDOWN:
- * 1. Device Context Setup (param_1 + param_2 * 0x1daa calculation)
- * 2. Check if segments already loaded (flag at device +0x9fb offset)
- * 3. If not loaded: Call FLH_ArrangeSegmentPara with 128-byte buffer
- * 4. Call FLH_InitCTRL with segment parameters and BCM buffer
- * 5. Set segment loaded flag on success
- *
- * EXACT OFFSETS FROM GHIDRA:
- * - Device array stride: 0x1daa (matches DEVICE_VOLUME_INFO structure size)
- * - Segment loaded flag: +0x9fb (fwSegmentNotified field)
- * - Segment data offset: +0x1866 (segmentInfo[128] buffer)
- * - BCM buffer offset: +0xa26 (bcmInfo buffer start)
- *
- * SDK FUNCTION MAPPING:
- * - DAT_004ad5f4 → g_sdk_api.FLH_ArrangeSegmentPara
- * - DAT_004ad5ec → g_sdk_api.FLH_InitCTRL
- */
-char NotifyFwSegmentInfo(int deviceIndex, DWORD deviceHandle) {
-    LogMessage(
-        "NotifyFwSegmentInfo: SYSTEMATIC RECONSTRUCTION - device %d, handle 0x%08X",
-        deviceIndex,
-        deviceHandle);
-
-    // Verify global instance is available
-    if(! g_iTEUFDrs_instance) {
-        LogError("NotifyFwSegmentInfo: No global instance available");
-        return 0;
-    }
-
-    // Verify device index is valid
-    if(deviceIndex >= MAX_VOLUMES) {
-        LogError("NotifyFwSegmentInfo: Invalid device index %d", deviceIndex);
-        return 0;
-    }
-
-    // Verify required SDK functions are loaded
-    if(! g_sdk_api.FLH_ArrangeSegmentPara || ! g_sdk_api.FLH_InitCTRL) {
-        LogError("NotifyFwSegmentInfo: Required SDK functions not available");
-        return 0;
-    }
-
-    LogMessage("NotifyFwSegmentInfo: Initializing firmware segments for device %d", deviceIndex);
-
-    // EXACT GHIDRA RECONSTRUCTION: Initialize 128-byte segment buffer
-    // Original: _memset(auStack_90,0,0x80); // Note: 0x80 = 128 decimal
-    BYTE segmentBuffer[128];
-    memset(segmentBuffer, 0, 128);
-
-    // Simulate segment information (in full implementation, this would come from device structure)
-    // Original offset: param_1 + 0x1866 = segmentInfo[128] buffer in DEVICE_VOLUME_INFO
-    BYTE simulatedSegmentInfo[128];
-    memset(simulatedSegmentInfo, 0, 128);
-    // Initialize with some default segment values (would be loaded from actual device)
-    simulatedSegmentInfo[0] = 0x01;  // Segment count
-    simulatedSegmentInfo[4] = 0xA1;  // A1BA controller signature
-
-    // EXACT GHIDRA RECONSTRUCTION: Call FLH_ArrangeSegmentPara
-    // Original: (*DAT_004ad5f4)(auStack_90,param_1 + 0x1866);
-    // DAT_004ad5f4 = g_FLH_ArrangeSegmentPara = FLH_ArrangeSegmentPara
-    BOOL arrangeResult = ((PFN_FLH_ArrangeSegmentPara) g_sdk_api.FLH_ArrangeSegmentPara)(
-        segmentBuffer, simulatedSegmentInfo);
-
-    if(! arrangeResult) {
-        LogError("NotifyFwSegmentInfo: FLH_ArrangeSegmentPara failed for device %d", deviceIndex);
-        return 0;
-    }
-
-    // Simulate BCM information (in full implementation, this would come from device structure)
-    // Original offset: param_1 + 0xa26 = bcmInfo buffer in DEVICE_VOLUME_INFO
-    BYTE simulatedBcmInfo[0xE40];  // BCM buffer size from DeviceStructures.h
-    memset(simulatedBcmInfo, 0, sizeof(simulatedBcmInfo));
-
-    // EXACT GHIDRA RECONSTRUCTION: Call FLH_InitCTRL
-    // Original: iVar3 = (*DAT_004ad5ec)(param_3,auStack_90,param_1 + 0xa26);
-    // DAT_004ad5ec = g_FLH_InitCTRL = FLH_InitCTRL
-    int initResult = ((PFN_FLH_InitCTRL) g_sdk_api.FLH_InitCTRL)(
-        reinterpret_cast<HANDLE>(static_cast<uintptr_t>(deviceHandle)),
-        segmentBuffer,
-        simulatedBcmInfo);
-
-    // EXACT GHIDRA RECONSTRUCTION: Check result and set flag
-    // Original: if (iVar3 != 1) { debug_log_message("Notify Fw segment information fail"); }
-    if(initResult != 1) {
-        LogError(
-            "NotifyFwSegmentInfo: FLH_InitCTRL failed for device %d (result=%d)",
-            deviceIndex,
-            initResult);
-        return 0;
-    }
-
-    // In full implementation, would set: deviceVolume.fwSegmentNotified = TRUE;
-    // Original: *(undefined1 *)(param_1 + 0x9fb) = 1;
-
-    LogMessage(
-        "NotifyFwSegmentInfo: Firmware segments initialized successfully for device %d",
-        deviceIndex);
-
-    LogMessage(
-        "NotifyFwSegmentInfo: SUCCESS - device %d firmware segment notification completed",
-        deviceIndex);
-
-    // - Exact Ghidra analysis mapping from address 0x0040b5a0
-    // - All critical offsets reconstructed: 0x1daa, 0x9fb, 0x1866, 0xa26
-    // - SDK function calls mapped: FLH_ArrangeSegmentPara, FLH_InitCTRL
-    // - Error handling, logging, and validation implemented
-    // - Successfully compiled and integrated into build system
-
-    return 1;  // Success - matches original Ghidra return value
-}
-
 void LoadAndVerifyFirmwareSegments(int deviceIndex, DWORD deviceHandle) {
     LogMessage(
         "LoadAndVerifyFirmwareSegments: Loading firmware segments for device %d", deviceIndex);
@@ -2617,6 +2481,111 @@ int GetBCMInfo(int deviceStructBase, DWORD deviceHandle) {
     // This function calls the SDK function pointer at DAT_004ad5f0
     // For now, return success as stub
     return 1;
+}
+
+/* SYSTEMATIC FUNCTION RECONSTRUCTION - NotifyFwSegmentInfo
+ *
+ * Original Function: NotifyFwSegmentInfo at 0x0040b5a0
+ * Ghidra Analysis: void __thiscall NotifyFwSegmentInfo(int param_1, byte param_2, undefined4
+ * param_3)
+ *
+ * EXACT GHIDRA RECONSTRUCTION:
+ * 1. Calculate device offset: param_1 + param_2 * 0x1daa
+ * 2. Check segment loaded flag at offset +0x9fb
+ * 3. If not loaded: Initialize 128-byte buffer and call SDK functions
+ * 4. FLH_ArrangeSegmentPara with segment data from +0x1866
+ * 5. FLH_InitCTRL with device handle, buffer, and BCM data from +0xa26
+ * 6. Set loaded flag on success
+ *
+ * CRITICAL ARCHITECTURAL INSIGHT:
+ * - This is a __thiscall method, NOT a global function
+ * - param_1 = base device structure pointer
+ * - param_2 = device index (byte)
+ * - param_3 = device handle (DWORD)
+ * - Device array stride 0x1daa matches device structure size
+ * - COM/smart pointer management with reference counting
+ *
+ * SDK FUNCTION MAPPING:
+ * - DAT_004ad5f4 = g_FLH_ArrangeSegmentPara
+ * - DAT_004ad5ec = g_FLH_InitCTRL
+ */
+char NotifyFwSegmentInfo(int deviceIndex, DWORD deviceHandle) {
+    LogMessage(
+        "NotifyFwSegmentInfo: SYSTEMATIC RECONSTRUCTION - device %d, handle 0x%08X",
+        deviceIndex,
+        deviceHandle);
+
+    // Verify global instance is available for device structure access
+    if(! g_iTEUFDrs_instance) {
+        LogError("NotifyFwSegmentInfo: No global instance available");
+        return 0;
+    }
+
+    // Verify device index is valid (byte range)
+    if(deviceIndex >= MAX_VOLUMES || deviceIndex < 0) {
+        LogError("NotifyFwSegmentInfo: Invalid device index %d", deviceIndex);
+        return 0;
+    }
+
+    // Verify required SDK functions are loaded
+    if(! g_pFLH_ArrangeSegmentPara || ! g_pFLH_InitCTRL) {
+        LogError("NotifyFwSegmentInfo: Required SDK functions not available");
+        return 0;
+    }
+
+    // EXACT GHIDRA RECONSTRUCTION: Calculate device offset
+    // Original: param_1 = param_1 + (uint)param_2 * 0x1daa;
+    // This points to specific device structure in device array
+    // Using deviceIndex to access volume information from iTEUFDrs instance
+    _DEVICE_VOLUME_INFO& volume = g_iTEUFDrs_instance->m_deviceInfo.volumes[deviceIndex];
+
+    // EXACT GHIDRA RECONSTRUCTION: Check if segments already loaded
+    // Original: if (*(char *)(param_1 + 0x9fb) == '\0')
+    if(! volume.fwSegmentNotified) {
+        LogMessage(
+            "NotifyFwSegmentInfo: Initializing firmware segments for device %d", deviceIndex);
+
+        // EXACT GHIDRA RECONSTRUCTION: Initialize 128-byte segment buffer
+        // Original: _memset(auStack_90,0,0x80); (0x80 = 128 decimal)
+        BYTE segmentBuffer[128];
+        memset(segmentBuffer, 0, 128);
+
+        // EXACT GHIDRA RECONSTRUCTION: Call FLH_ArrangeSegmentPara
+        // Original: (*DAT_004ad5f4)(auStack_90,param_1 + 0x1866);
+        // param_1 + 0x1866 = segment data in device structure
+        PFN_FLH_ArrangeSegmentPara arrangeFunc =
+            (PFN_FLH_ArrangeSegmentPara) g_pFLH_ArrangeSegmentPara;
+        arrangeFunc(segmentBuffer, volume.segmentInfo);
+
+        // EXACT GHIDRA RECONSTRUCTION: Call FLH_InitCTRL
+        // Original: iVar3 = (*DAT_004ad5ec)(param_3,auStack_90,param_1 + 0xa26);
+        // param_3 = device handle, param_1 + 0xa26 = BCM buffer
+        PFN_FLH_InitCTRL initFunc = (PFN_FLH_InitCTRL) g_pFLH_InitCTRL;
+        int result = initFunc((HANDLE) (uintptr_t) deviceHandle, segmentBuffer, volume.bcmInfo);
+
+        // EXACT GHIDRA RECONSTRUCTION: Check result
+        // Original: if (iVar3 != 1) { debug_log_message("Notify Fw segment information fail"); }
+        if(result != 1) {
+            LogError("NotifyFwSegmentInfo: Notify Fw segment information fail (result=%d)", result);
+            return 0;
+        }
+
+        // EXACT GHIDRA RECONSTRUCTION: Set loaded flag
+        // Original: *(undefined1 *)(param_1 + 0x9fb) = 1;
+        volume.fwSegmentNotified = TRUE;
+
+        LogMessage(
+            "NotifyFwSegmentInfo: Firmware segments initialized successfully for device %d",
+            deviceIndex);
+    } else {
+        LogMessage(
+            "NotifyFwSegmentInfo: Firmware segments already loaded for device %d", deviceIndex);
+    }
+
+    LogMessage(
+        "NotifyFwSegmentInfo: SUCCESS - device %d firmware segment notification completed",
+        deviceIndex);
+    return 1;  // Success
 }
 
 char GetMPInfo(int deviceIndex, DWORD deviceHandle) {

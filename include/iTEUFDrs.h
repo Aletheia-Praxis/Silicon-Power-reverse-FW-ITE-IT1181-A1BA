@@ -28,6 +28,7 @@ public:
     friend BYTE OpenDriveHandleAgain();
     friend void SetDeviceID();
     friend void VolumePairController();
+    friend char NotifyFwSegmentInfo(int deviceIndex, DWORD deviceHandle);
 
 private:
     // VTable (placeholder)
@@ -82,7 +83,7 @@ private:
     BYTE OpenPhysicalDriveHandle(BYTE driveIndex);
     // GetFlashMethod removed - using global function as per Ghidra analysis
     // InitializeISPCode removed - using global function as per Ghidra analysis
-    BYTE NotifyFwSegmentInfo(INT deviceIndex, DWORD deviceParam);
+    // NotifyFwSegmentInfo removed - using global function as per Ghidra analysis
     INT CallSDKGetBCMInfo(BYTE* bufferPtr, DWORD deviceParam);
     void HandleBCMError(INT errorCode);
     void CopyDeviceStructures(INT deviceOffset);
@@ -110,7 +111,7 @@ private:
     BOOL FormatDeviceIdentification();
 
     // New functions based on decompilation analysis
-    BOOL NotifyFwSegmentInfo(BYTE controllerIndex, CONTROLLER_DATA& controller, HANDLE hDevice);
+    // NotifyFwSegmentInfo removed - using global function as per Ghidra analysis
 
     // Legacy device management functions (deprecated - use new ones above)
 
@@ -183,6 +184,5 @@ char iTEUFDrs_DetectAndInitializeDevices();
 
 // C wrapper functions for backward compatibility with Ghidra-reconstructed code
 void PrepareFirmwareFilePath();
-char NotifyFwSegmentInfo(int deviceIndex, DWORD param);
 char GetMPInfo(int deviceIndex, DWORD deviceHandle);
 }
