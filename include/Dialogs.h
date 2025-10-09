@@ -83,6 +83,29 @@ protected:
     afx_msg void OnSysCommand(UINT nID, LPARAM lParam);
     afx_msg void OnPaint();
     afx_msg HCURSOR OnQueryDragIcon();
+    
+    // Button click handlers reconstructed from Ghidra analysis
+    afx_msg void OnBnClickedFormat();      // Format button (ID 0x3ea)
+    afx_msg void OnBnClickedRepair();      // Repair button (ID 0x3eb)  
+    afx_msg void OnBnClickedDiagnose();    // Diagnose button (ID 0x3ec)
+    afx_msg void OnBnClickedAdvanced();    // Advanced button (ID 0x3ed)
+    
+    // Advanced menu handlers
+    afx_msg void OnAdvancedFirmwareUpdate();
+    afx_msg void OnAdvancedLowLevelFormat();
+    afx_msg void OnAdvancedSecurityUnlock();
+    afx_msg void OnAdvancedRawCommands();
+    
+public:
+    // Helper functions - made public for external access
+    void EnableUI(BOOL bEnable);
+    void UpdateDeviceInfo();
+    void SetProgress(int percentage);
+    void SetStatusText(const CString& status);
+    void ShowProgressBar(BOOL bShow);
+
+protected:
+    
     DECLARE_MESSAGE_MAP()
 
 private:
