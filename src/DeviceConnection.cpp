@@ -1,23 +1,18 @@
-/**
- * DeviceConnection.cpp - Реалізація підключення до пристрію
- *
- * Інтегрує функціональність iTEUFDrs для підключення до USB пристроїв ITE IT1181-A1BA
- * згідно з аналізом Ghidra та реконструйованою логікою.
- */
+// /c:/Users/oleksandr/Documents/GitHub/Silicon-Power-reverse-FW-ITE-IT1181-A1BA/src/DeviceConnection.cpp
+
+// DeviceConnection.cpp - Device connection implementation
+// Integrates iTEUFDrs functionality for connecting to ITE IT1181-A1BA USB devices
+// according to Ghidra analysis and reconstructed logic.
 
 #include "../include/Dialogs.h"
 #include "../include/Utilities.h"
 #include "../include/iTEUFDrs.h"
 
-/**
- * DeviceConnectionManager - управління підключенням до пристрою
- */
+// DeviceConnectionManager - device connection management
 namespace DeviceConnectionManager {
 
-/**
- * Підключитися до пристрою
- * Використовує iTEUFDrs для виявлення та ініціалізації пристроїв
- */
+// Connect to device
+// Uses iTEUFDrs to detect and initialize devices
 BOOL ConnectToDevice(CUrescueDlg* pDialog, iTEUFDrs* pDeviceManager) {
     if(! pDialog || ! pDeviceManager) {
         LogError("ConnectToDevice: Invalid parameters");
@@ -26,61 +21,61 @@ BOOL ConnectToDevice(CUrescueDlg* pDialog, iTEUFDrs* pDeviceManager) {
 
     LogMessage("ConnectToDevice: Starting device connection process");
 
-    // Встановити діалог як батьківський для зворотних викликів
+    // Set dialog as parent for callbacks
     pDeviceManager->SetParentDialog(pDialog);
 
-    // Перевірити ініціалізацію SDK
+    // Check SDK initialization
     if(! pDeviceManager->IsInitialized()) {
         LogError("ConnectToDevice: Device manager not initialized");
-        pDialog->SetStatusText("Помилка: SDK не ініціалізовано");
+        pDialog->SetStatusText("Error: SDK not initialized");
         pDialog->ShowProgressBar(FALSE);
         return FALSE;
     }
 
-    // Показати прогрес підключення
-    pDialog->SetStatusText("Пошук пристроїв ITE...");
+    // Show connection progress
+    pDialog->SetStatusText("Searching for ITE devices...");
     pDialog->ShowProgressBar(TRUE);
     pDialog->SetProgress(10);
 
-    // Спочатку запустити процес виявлення пристроїв
+    // Start device detection process
     char deviceDetectionResult = pDeviceManager->GetDeviceInfo();
     pDialog->SetProgress(50);
 
     if(deviceDetectionResult == 0) {
         LogError("ConnectToDevice: No compatible devices found");
-        pDialog->SetStatusText("Пристрій не знайдено. Перевірте підключення USB.");
+        pDialog->SetStatusText("Device not found. Check USB connection.");
         pDialog->ShowProgressBar(FALSE);
         return FALSE;
     }
 
-    // Отримати детальну інформацію про пристрій (const версія)
+    // Get detailed device info (const version)
     const _DEVICE_INFO& deviceInfo = static_cast<const iTEUFDrs*>(pDeviceManager)->GetDeviceInfo();
     pDialog->SetProgress(80);
 
-    // Перевірити, чи знайдено пристрій
+    // Check if device is found
     if(! deviceInfo.deviceFound) {
         LogError("ConnectToDevice: Device found but not accessible");
-        pDialog->SetStatusText("Пристрій знайдено, але недоступний");
+        pDialog->SetStatusText("Device found but not accessible");
         pDialog->ShowProgressBar(FALSE);
         return FALSE;
     }
 
-    // Сформувати повідомлення про успішне підключення
+    // Compose success connection message
     CString connectionMessage;
     if(deviceInfo.volumes[0].deviceFound && deviceInfo.volumes[0].volumeLetter != 0) {
         connectionMessage.Format(
-            "Підключено: ITE IT1181 (Диск %c:)\nКонтролер: %04X\nТип: %02X",
+            "Connected: ITE IT1181 (Disk %c:)\nController: %04X\nType: %02X",
             deviceInfo.volumes[0].volumeLetter,
             deviceInfo.volumes[0].controllerType,
             deviceInfo.volumes[0].familyType);
     } else {
-        connectionMessage = "Підключено: ITE IT1181 пристрій";
+        connectionMessage = "Connected: ITE IT1181 device";
     }
 
     pDialog->SetStatusText(connectionMessage);
     pDialog->SetProgress(100);
 
-    // Коротка затримка для відображення прогресу
+    // Short delay for progress display
     Sleep(500);
     pDialog->ShowProgressBar(FALSE);
 
@@ -88,9 +83,7 @@ BOOL ConnectToDevice(CUrescueDlg* pDialog, iTEUFDrs* pDeviceManager) {
     return TRUE;
 }
 
-/**
- * Відключитися від пристрою
- */
+// Disconnect from device
 BOOL DisconnectFromDevice(CUrescueDlg* pDialog, iTEUFDrs* pDeviceManager) {
     if(! pDialog) {
         LogError("DisconnectFromDevice: Invalid dialog parameter");
@@ -99,22 +92,20 @@ BOOL DisconnectFromDevice(CUrescueDlg* pDialog, iTEUFDrs* pDeviceManager) {
 
     LogMessage("DisconnectFromDevice: Disconnecting from device");
 
-    pDialog->SetStatusText("Відключення від пристрою...");
+    pDialog->SetStatusText("Disconnecting from device...");
 
-    // Якщо менеджер пристроїв доступний, очистити зв'язок
+    // If device manager is available, clear association
     if(pDeviceManager) {
         pDeviceManager->SetParentDialog(nullptr);
     }
 
-    pDialog->SetStatusText("Пристрій відключено");
+    pDialog->SetStatusText("Device disconnected");
 
     LogMessage("DisconnectFromDevice: Device disconnected successfully");
     return TRUE;
 }
 
-/**
- * Перевірити стан підключення
- */
+// Check connection status
 BOOL IsDeviceConnected(iTEUFDrs* pDeviceManager) {
     if(! pDeviceManager) {
         return FALSE;
@@ -128,12 +119,10 @@ BOOL IsDeviceConnected(iTEUFDrs* pDeviceManager) {
     return deviceInfo.deviceFound && deviceInfo.isInitialized;
 }
 
-/**
- * Отримати інформацію про підключений пристрій
- */
+// Get information about connected device
 CString GetDeviceConnectionInfo(iTEUFDrs* pDeviceManager) {
     if(! pDeviceManager || ! IsDeviceConnected(pDeviceManager)) {
-        return "Пристрій не підключено";
+        return "Device not connected";
     }
 
     const _DEVICE_INFO& deviceInfo = static_cast<const iTEUFDrs*>(pDeviceManager)->GetDeviceInfo();
@@ -141,22 +130,20 @@ CString GetDeviceConnectionInfo(iTEUFDrs* pDeviceManager) {
     CString info;
     info.Format(
         "ITE IT1181 Flash Drive\n"
-        "Статус: Підключено\n"
-        "Диск: %c:\n"
-        "Контролер: %04X\n"
-        "Тип: %02X\n"
-        "Готовність: %s",
+        "Status: Connected\n"
+        "Disk: %c:\n"
+        "Controller: %04X\n"
+        "Type: %02X\n"
+        "Ready: %s",
         deviceInfo.volumes[0].volumeLetter,
         deviceInfo.volumes[0].controllerType,
         deviceInfo.volumes[0].familyType,
-        deviceInfo.systemReady ? "Готовий" : "Не готовий");
+        deviceInfo.systemReady ? "Ready" : "Not ready");
 
     return info;
 }
 
-/**
- * Автоматичне підключення при старті
- */
+// Automatic connection on startup
 BOOL AutoConnectDevice(CUrescueDlg* pDialog, iTEUFDrs* pDeviceManager) {
     LogMessage("AutoConnectDevice: Attempting automatic device connection");
 
@@ -165,20 +152,20 @@ BOOL AutoConnectDevice(CUrescueDlg* pDialog, iTEUFDrs* pDeviceManager) {
         return FALSE;
     }
 
-    // Спробувати підключитися автоматично
-    pDialog->SetStatusText("Автоматичний пошук пристроїв...");
+    // Try to connect automatically
+    pDialog->SetStatusText("Automatic device search...");
 
     BOOL result = ConnectToDevice(pDialog, pDeviceManager);
 
     if(result) {
         LogMessage("AutoConnectDevice: Automatic connection successful");
-        // Додати повідомлення про успішне автопідключення
+        // Add message about successful auto connection
         CString statusMsg = GetDeviceConnectionInfo(pDeviceManager);
-        statusMsg += "\n(Автоматично підключено)";
+        statusMsg += "\n(Automatically connected)";
         pDialog->SetStatusText(statusMsg);
     } else {
         LogMessage("AutoConnectDevice: Automatic connection failed");
-        pDialog->SetStatusText("Готовий до підключення пристрою");
+        pDialog->SetStatusText("Ready to connect device");
     }
 
     return result;

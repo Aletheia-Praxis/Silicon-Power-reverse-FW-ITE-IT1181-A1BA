@@ -1,61 +1,67 @@
-/**
- * DeviceConnection.h - Заголовок системи підключення до пристрою
- *
- * Визначає функції для управління підключенням до USB пристроїв ITE IT1181-A1BA
- */
-
 #pragma once
 
 #include <afx.h>
 
 #include "WindowsHeaders.h"
 
-
 // Forward declarations
 class CUrescueDlg;
 class iTEUFDrs;
 
-/**
- * DeviceConnectionManager - управління підключенням до пристрою
- */
+// DeviceConnectionManager: device connection management
 namespace DeviceConnectionManager {
 
-/**
- * Підключитися до пристрою
- * @param pDialog Вказівник на головний діалог для оновлення UI
- * @param pDeviceManager Вказівник на менеджер пристроїв iTEUFDrs
- * @return TRUE якщо підключення успішне, FALSE інакше
- */
+//
+// ConnectToDevice
+// Connects to the device.
+// Parameters:
+//   pDialog - pointer to main dialog for UI updates
+//   pDeviceManager - pointer to iTEUFDrs device manager
+// Returns:
+//   TRUE if connection is successful, FALSE otherwise
+//
 BOOL ConnectToDevice(CUrescueDlg* pDialog, iTEUFDrs* pDeviceManager);
 
-/**
- * Відключитися від пристрою
- * @param pDialog Вказівник на головний діалог для оновлення UI
- * @param pDeviceManager Вказівник на менеджер пристроїв iTEUFDrs
- * @return TRUE якщо відключення успішне, FALSE інакше
- */
+//
+// DisconnectFromDevice
+// Disconnects from the device.
+// Parameters:
+//   pDialog - pointer to main dialog for UI updates
+//   pDeviceManager - pointer to iTEUFDrs device manager
+// Returns:
+//   TRUE if disconnection is successful, FALSE otherwise
+//
 BOOL DisconnectFromDevice(CUrescueDlg* pDialog, iTEUFDrs* pDeviceManager);
 
-/**
- * Перевірити стан підключення
- * @param pDeviceManager Вказівник на менеджер пристроїв iTEUFDrs
- * @return TRUE якщо пристрій підключено, FALSE інакше
- */
+//
+// IsDeviceConnected
+// Checks connection status.
+// Parameters:
+//   pDeviceManager - pointer to iTEUFDrs device manager
+// Returns:
+//   TRUE if device is connected, FALSE otherwise
+//
 BOOL IsDeviceConnected(iTEUFDrs* pDeviceManager);
 
-/**
- * Отримати інформацію про підключений пристрій
- * @param pDeviceManager Вказівник на менеджер пристроїв iTEUFDrs
- * @return Рядок з інформацією про пристрій
- */
+//
+// GetDeviceConnectionInfo
+// Gets information about the connected device.
+// Parameters:
+//   pDeviceManager - pointer to iTEUFDrs device manager
+// Returns:
+//   CString with device information
+//
 CString GetDeviceConnectionInfo(iTEUFDrs* pDeviceManager);
 
-/**
- * Автоматичне підключення при старті
- * @param pDialog Вказівник на головний діалог для оновлення UI
- * @param pDeviceManager Вказівник на менеджер пристроїв iTEUFDrs
- * @return TRUE якщо автопідключення успішне, FALSE інакше
- */
+//
+// AutoConnectDevice
+// Attempts automatic connection on startup.
+// Parameters:
+//   pDialog - pointer to main dialog for UI updates
+//   pDeviceManager - pointer to iTEUFDrs device manager
+// Returns:
+//   TRUE if auto-connect is successful, FALSE otherwise
+//
 BOOL AutoConnectDevice(CUrescueDlg* pDialog, iTEUFDrs* pDeviceManager);
 
 }  // namespace DeviceConnectionManager
