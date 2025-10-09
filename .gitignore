@@ -164,7 +164,7 @@
 .lo
 .loa
 .lof
-.log
+*.log
 .lod
 .loe
 .lol
