@@ -34,8 +34,8 @@ BOOL CUrescueApp_InitInstance();
 /**
  * Background thread functions
  */
-UINT WINAPI BackgroundMonitorThread(LPVOID pParam);
-UINT WINAPI BackgroundProcessingThread(LPVOID pParam);
+UINT AFX_CDECL BackgroundMonitorThread(LPVOID pParam);
+UINT AFX_CDECL BackgroundProcessingThread(LPVOID pParam);
 
 /**
  * Utility functions for Windows version checking and system setup
