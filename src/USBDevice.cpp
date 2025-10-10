@@ -1,8 +1,5 @@
 #include "../include/USBDevice.h"
 
-#include <setupapi.h>
-#include <winusb.h>
-
 // Function to read data from the USB device
 BOOL Read(
     HANDLE hDevice,
