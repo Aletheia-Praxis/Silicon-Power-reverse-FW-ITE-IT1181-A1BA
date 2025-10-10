@@ -1,6 +1,5 @@
 #include "../include/Utilities.h"
 
-#include <afxwin.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -61,20 +60,16 @@ void LogWarning(const char* format, ...) {
 }
 
 // Function to convert bytes to a readable format
-CString FormatBytes(DWORD bytes) {
-    CString result;
-
+void FormatBytes(DWORD bytes, char* buffer, size_t bufferSize) {
     if(bytes < 1024) {
-        result.Format(_T("%d B"), bytes);
+        snprintf(buffer, bufferSize, "%lu B", bytes);
     } else if(bytes < 1024 * 1024) {
-        result.Format(_T("%.2f KB"), (double) bytes / 1024.0);
+        snprintf(buffer, bufferSize, "%.2f KB", (double) bytes / 1024.0);
     } else if(bytes < 1024 * 1024 * 1024) {
-        result.Format(_T("%.2f MB"), (double) bytes / (1024.0 * 1024.0));
+        snprintf(buffer, bufferSize, "%.2f MB", (double) bytes / (1024.0 * 1024.0));
     } else {
-        result.Format(_T("%.2f GB"), (double) bytes / (1024.0 * 1024.0 * 1024.0));
+        snprintf(buffer, bufferSize, "%.2f GB", (double) bytes / (1024.0 * 1024.0 * 1024.0));
     }
-
-    return result;
 }
 
 // Function to convert a hex string to bytes
@@ -99,20 +94,23 @@ BOOL HexStringToBytes(LPCSTR hexString, BYTE* pBytes, DWORD* pByteCount) {
 }
 
 // Function to convert bytes to a hex string
-CString BytesToHexString(const BYTE* pBytes, DWORD byteCount) {
-    CString result;
+void BytesToHexString(const BYTE* pBytes, DWORD byteCount, char* buffer, size_t bufferSize) {
+    size_t offset = 0;
 
-    for(DWORD i = 0; i < byteCount; i++) {
-        CString hexByte;
-        hexByte.Format(_T("%02X"), pBytes[i]);
-        result += hexByte;
+    for(DWORD i = 0; i < byteCount && offset + 3 < bufferSize; i++) {
+        int written = snprintf(buffer + offset, bufferSize - offset, "%02X", pBytes[i]);
+        if(written > 0) {
+            offset += written;
+        }
 
-        if(i < byteCount - 1) {
-            result += _T(" ");
+        if(i < byteCount - 1 && offset + 1 < bufferSize) {
+            buffer[offset++] = ' ';
         }
     }
 
-    return result;
+    if(offset < bufferSize) {
+        buffer[offset] = '\0';
+    }
 }
 
 // CRC32 calculation function

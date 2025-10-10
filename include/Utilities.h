@@ -4,15 +4,14 @@
 
 #include "WindowsHeaders.h"
 
-
 // Logging functions
 void LogMessage(LPCSTR format, ...);
 void LogError(const char* format, ...);
 void LogWarning(const char* format, ...);
 
 // Formatting functions
-CString FormatBytes(DWORD bytes);
-CString BytesToHexString(const BYTE* pBytes, DWORD byteCount);
+void FormatBytes(DWORD bytes, char* buffer, size_t bufferSize);
+void BytesToHexString(const BYTE* pBytes, DWORD byteCount, char* buffer, size_t bufferSize);
 BOOL HexStringToBytes(LPCSTR hexString, BYTE* pBytes, DWORD* pByteCount);
 
 // Calculation functions
@@ -42,11 +41,22 @@ void BuildBinPathA(
     char* outBinPath,
     size_t outBinPathSize);
 
-// Logging macros
-#define LOG_INFO(format, ...)    LogMessage("[INFO] " format, ##__VA_ARGS__)
-#define LOG_WARNING(format, ...) LogMessage("[WARNING] " format, ##__VA_ARGS__)
-#define LOG_ERROR(format, ...)   LogMessage("[ERROR] " format, ##__VA_ARGS__)
-#define LOG_DEBUG(format, ...)   LogMessage("[DEBUG] " format, ##__VA_ARGS__)
+// Logging macros (if not already defined in stdafx.h)
+#ifndef LOG_INFO
+    #define LOG_INFO(format, ...) LogMessage("[INFO] " format, ##__VA_ARGS__)
+#endif
+
+#ifndef LOG_WARNING
+    #define LOG_WARNING(format, ...) LogMessage("[WARNING] " format, ##__VA_ARGS__)
+#endif
+
+#ifndef LOG_ERROR
+    #define LOG_ERROR(format, ...) LogMessage("[ERROR] " format, ##__VA_ARGS__)
+#endif
+
+#ifndef LOG_DEBUG
+    #define LOG_DEBUG(format, ...) LogMessage("[DEBUG] " format, ##__VA_ARGS__)
+#endif
 
 // Helpers decompiled and re-implemented
 void SafeCloseHandle(HANDLE& handle);
