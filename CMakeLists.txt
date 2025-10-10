@@ -59,7 +59,9 @@ set(CORE_LIB_SOURCES
 add_library(URescueCore STATIC ${CORE_LIB_SOURCES} ${PCH_SOURCE})
 
 # Enable precompiled headers
-target_precompile_headers(URescueCore PUBLIC ${PCH_HEADER})target_compile_options(URescueCore PRIVATE
+target_precompile_headers(URescueCore PUBLIC ${PCH_HEADER})
+
+target_compile_options(URescueCore PRIVATE
     /W4
     /WX-
     $<$<CONFIG:Debug>:/MDd /Zi /Ob0 /Od /RTC1>
