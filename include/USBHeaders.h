@@ -35,3 +35,10 @@ typedef unsigned char UCHAR;
 
 // Minimal Windows API for file operations
 #include <windows.h>
+
+// USB-specific headers (include carefully to avoid conflicts)
+#include <setupapi.h>
+
+// Declare WinUSB function pointers instead of including winusb.h directly
+// This avoids conflicts with system headers
+typedef PVOID WINUSB_INTERFACE_HANDLE, *PWINUSB_INTERFACE_HANDLE;
