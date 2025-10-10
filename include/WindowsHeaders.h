@@ -1,79 +1,11 @@
 #pragma once
 
-// Define _WIN32_WINNT before any includes
-#ifndef _WIN32_WINNT
-    #define _WIN32_WINNT 0x0601  // Windows 7+
-#endif
+// Use stdafx.h for all Windows includes to avoid conflicts
+// This file is kept for backward compatibility but defers to stdafx.h
 
-#ifndef WINVER
-    #define WINVER 0x0601
-#endif
+#include "stdafx.h"
 
-// Lean and mean to reduce conflicts
-#ifndef WIN32_LEAN_AND_MEAN
-    #define WIN32_LEAN_AND_MEAN
-#endif
-
-#ifndef NOMINMAX
-    #define NOMINMAX
-#endif
-
-// Fix USB spec struct conflicts by defining types before any Windows includes
-#ifndef ULONG
-typedef unsigned long ULONG;
-#endif
-
-#ifndef USHORT
-typedef unsigned short USHORT;
-#endif
-
-#ifndef UCHAR
-typedef unsigned char UCHAR;
-#endif
-
-// For projects that don't need networking, exclude winsock entirely
-#ifndef NO_WINSOCK
-    // Prevent old winsock.h inclusion
-    #ifndef _WINSOCKAPI_
-        #define _WINSOCKAPI_
-    #endif
-    // Include winsock2 first to prevent redefinition errors
-    #include <winsock2.h>
-    #include <ws2tcpip.h>
-#endif
-
-// Standard Windows API
-#include <windows.h>
-
-// Skip MFC for now to avoid networking conflicts
-#ifndef NO_MFC
-    // MFC headers - only if needed
-    #include <afxdisp.h>
-    #include <afxext.h>
-    #include <afxwin.h>
-
-#endif
-
-// Additional Windows APIs
-#include <cfgmgr32.h>
-#include <devguid.h>
-#include <setupapi.h>
-#include <winioctl.h>
-
-// COM interfaces
-#include <objbase.h>
-#include <oleauto.h>
-
-// USB and device I/O - exclude problematic usbioctl.h for now
-// #include <usbioctl.h>
-
-// Standard C++ includes
-#include <algorithm>
-#include <exception>
-#include <iostream>
-#include <memory>
-#include <string>
-#include <vector>
+// Additional types and definitions not in stdafx.h
 
 // Ensure basic types are defined
 #ifndef BYTE
@@ -124,6 +56,21 @@ typedef void *HANDLE;
 #ifndef ARRAYSIZE
     #define ARRAYSIZE(a) (sizeof(a) / sizeof(a[0]))
 #endif
+
+// COM interfaces - include after winsock2 to avoid conflicts
+#ifndef _WINSOCKAPI_
+    #define _WINSOCKAPI_  // Prevent winsock.h inclusion from COM headers
+#endif
+#include <objbase.h>
+#include <oleauto.h>
+
+// Standard C++ includes
+#include <algorithm>
+#include <exception>
+#include <iostream>
+#include <memory>
+#include <string>
+#include <vector>
 
 // Forward declarations for global GUIDs defined in Globals.cpp
 extern const GUID GUID_DEVCLASS_USB;
