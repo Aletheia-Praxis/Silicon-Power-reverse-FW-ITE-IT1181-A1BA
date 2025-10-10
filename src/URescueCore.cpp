@@ -12,10 +12,16 @@
 #include "../include/ErrorHandler.h"
 #include "../include/FirmwareManager.h"
 #include "../include/MemoryManager.h"
-#include "../include/ResourceManager.h"
 #include "../include/SystemManager.h"
 #include "../include/USBDevice.h"
 #include "../include/Utilities.h"
+
+// Forward declarations for functions defined later in file
+int LoadFirmwareFromFile(const char* filename, void** buffer, unsigned long* size);
+int LoadBootCodeFromResource(void** buffer, unsigned long* size);
+int LoadSDKFromResource(void** buffer, unsigned long* size);
+int WriteFirmwareToDevice(void* device, const void* firmware, unsigned long size);
+int VerifyFirmwareOnDevice(void* device, const void* firmware, unsigned long size);
 
 // Global program variables
 static URESCUE_CONTEXT g_urescueContext;
@@ -447,4 +453,32 @@ void BuildBinPathA(
             variant,
             isDebug ? "_debug" : "");
     }
+}
+
+int LoadBootCodeFromResource(void** buffer, unsigned long* size) {
+    LogMessage("LoadBootCodeFromResource");
+
+    if(! buffer || ! size) {
+        LogError("Invalid parameters");
+        return 0;
+    }
+
+    // Stub implementation - return success for now
+    *buffer = nullptr;
+    *size = 0;
+    return 1;
+}
+
+int LoadSDKFromResource(void** buffer, unsigned long* size) {
+    LogMessage("LoadSDKFromResource");
+
+    if(! buffer || ! size) {
+        LogError("Invalid parameters");
+        return 0;
+    }
+
+    // Stub implementation - return success for now
+    *buffer = nullptr;
+    *size = 0;
+    return 1;
 }
