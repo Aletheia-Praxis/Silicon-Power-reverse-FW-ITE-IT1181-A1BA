@@ -190,6 +190,38 @@ iTEUFDrs::~iTEUFDrs() {
     LogMessage("iTEUFDrs: destructor called.");
 }
 
+/**
+ * char GetDeviceInfo() - Device detection method
+ * Returns: 1 if devices found and initialized, 0 if no devices found
+ * This method triggers the device detection process and populates m_deviceInfo
+ */
+char iTEUFDrs::GetDeviceInfo() {
+    LogMessage("iTEUFDrs::GetDeviceInfo: Starting device detection process");
+
+    if(! m_isInitialized) {
+        LogError("iTEUFDrs::GetDeviceInfo: SDK not initialized");
+        return 0;
+    }
+
+    // Clear device info structure
+    memset(&m_deviceInfo, 0, sizeof(_DEVICE_INFO));
+
+    // Initialize device detection process
+    char result = iTEUFDrs_DetectAndInitializeDevices();
+
+    if(result) {
+        LogMessage("iTEUFDrs::GetDeviceInfo: Device detection successful");
+        m_deviceInfo.isInitialized = TRUE;
+        m_deviceInfo.deviceFound = TRUE;
+        return 1;
+    } else {
+        LogMessage("iTEUFDrs::GetDeviceInfo: No devices found");
+        m_deviceInfo.isInitialized = FALSE;
+        m_deviceInfo.deviceFound = FALSE;
+        return 0;
+    }
+}
+
 BOOL iTEUFDrs::InitializeSDK() {
     CHAR sdkPath[MAX_PATH];
     if(! JoinPathA(sdkPath, sizeof(sdkPath), m_basePath, "181FlashSDK.dll")) {

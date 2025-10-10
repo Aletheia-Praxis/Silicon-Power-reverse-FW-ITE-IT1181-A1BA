@@ -20,6 +20,7 @@ public:
     BOOL IsInitialized() const { return m_isInitialized; }
     DWORD GetLastError() const { return m_lastError; }
     const _DEVICE_INFO& GetDeviceInfo() const { return m_deviceInfo; }
+    _DEVICE_INFO& GetDeviceInfoMutable() { return m_deviceInfo; }  // Non-const version
     char GetDeviceInfo();  // Returns success/failure status (from constructor)
 
     // Friend functions for global function access
