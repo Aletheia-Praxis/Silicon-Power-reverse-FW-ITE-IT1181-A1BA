@@ -29,10 +29,45 @@ static constexpr size_t ITEUFDRS_OFFSET_DEVICE_FW_SEGMENT_NOTIFIED = 0x9FB;
 static constexpr size_t ITEUFDRS_OFFSET_DEVICE_SEGMENT_INFO = 0x1866;
 static constexpr size_t ITEUFDRS_SEGMENT_PARAMS_SIZE_BYTES = 0x80;
 static constexpr int ITEUFDRS_SDK_RESULT_SUCCESS = 1;
+static constexpr int ITEUFDRS_BCM_MAX_ERROR_CODE = 0x74;
+static constexpr int ITEUFDRS_BCM_ERROR_CODE_DEVICE_NOT_FOUND = 0x00;
+static constexpr int ITEUFDRS_BCM_ERROR_CODE_UNSUPPORTED_CONTROLLER = 0x3F;
+static constexpr int ITEUFDRS_BCM_ERROR_CODE_READ_FAIL_A = 0x72;
+static constexpr int ITEUFDRS_BCM_ERROR_CODE_READ_FAIL_B = 0x74;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_BCM_CODE_00 = 0x0048D024;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_BCM_CODE_3F = 0x0048D044;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_BCM_CODE_72 = 0x0048D094;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_BCM_CODE_74 = 0x0048D060;
 static constexpr size_t ITEUFDRS_MAX_SCANNED_DRIVES = 24;
 static constexpr char ITEUFDRS_DRIVE_LETTERS[ITEUFDRS_MAX_SCANNED_DRIVES + 1] =
     "CDEFGHIJKLMNOPQRSTUVWXYZ";
 // clang-format on
+
+static void LogBcmReadErrorFromOriginalTable(int bcmResult) {
+    if(bcmResult < 0 || bcmResult > ITEUFDRS_BCM_MAX_ERROR_CODE) {
+        return;
+    }
+
+    switch(bcmResult) {
+    case ITEUFDRS_BCM_ERROR_CODE_DEVICE_NOT_FOUND:
+        LogError(
+            "BCM read failed: msg=%p (orig 0x004212ca)", (void*) ITEUFDRS_ORIG_MSG_PTR_BCM_CODE_00);
+        break;
+    case ITEUFDRS_BCM_ERROR_CODE_UNSUPPORTED_CONTROLLER:
+        LogError(
+            "BCM read failed: msg=%p (orig 0x004212ca)", (void*) ITEUFDRS_ORIG_MSG_PTR_BCM_CODE_3F);
+        break;
+    case ITEUFDRS_BCM_ERROR_CODE_READ_FAIL_A:
+        LogError(
+            "BCM read failed: msg=%p (orig 0x004212ca)", (void*) ITEUFDRS_ORIG_MSG_PTR_BCM_CODE_72);
+        break;
+    case ITEUFDRS_BCM_ERROR_CODE_READ_FAIL_B:
+        LogError(
+            "BCM read failed: msg=%p (orig 0x004212ca)", (void*) ITEUFDRS_ORIG_MSG_PTR_BCM_CODE_74);
+        break;
+    default: break;
+    }
+}
 
 // Forward declarations for iTEUFDrs_DetectAndInitializeDevices function stubs
 char InitializeDeviceParameters();
@@ -2029,7 +2064,6 @@ char iTEUFDrs_DetectAndInitializeDevices() {
 
         const int bcmResult = GetBCMInfo(deviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle));
         if(bcmResult != ITEUFDRS_SDK_RESULT_SUCCESS) {
-            LogError("GetBCMInfo: Failed (result=%d)", bcmResult);
             continue;
         }
     }
@@ -2993,7 +3027,12 @@ int GetBCMInfo(int deviceStructBase, DWORD deviceHandle) {
                        + ITEUFDRS_OFFSET_DEVICE_CTRL_BUFFER;
 
     PFN_FLH_ReadBCM_Alt readBcm = reinterpret_cast<PFN_FLH_ReadBCM_Alt>(g_pFLH_ReadBCM);
-    return readBcm(ctrlBuffer, (HANDLE) (UINT_PTR) deviceHandle);
+    const int result = readBcm(ctrlBuffer, (HANDLE) (UINT_PTR) deviceHandle);
+    if(result != ITEUFDRS_SDK_RESULT_SUCCESS) {
+        LogBcmReadErrorFromOriginalTable(result);
+    }
+
+    return result;
 }
 
 /* SYSTEMATIC FUNCTION RECONSTRUCTION - NotifyFwSegmentInfo
