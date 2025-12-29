@@ -1858,48 +1858,67 @@ void UpdateDeviceCapacityOrCalculate(BYTE controllerIndex) {
  * - Handles error conditions and recovery paths
  */
 char iTEUFDrs_DetectAndInitializeDevices() {
-    LogMessage("iTEUFDrs_DetectAndInitializeDevices: Starting SYSTEMATIC FUNCTION RECONSTRUCTION");
+    LogMessage("GetDeviceInfo: Start");
 
-    // Verify global instance is available
     if(! g_iTEUFDrs_instance) {
-        LogError("iTEUFDrs_DetectAndInitializeDevices: No global instance available");
+        LogError("GetDeviceInfo: No global instance available");
         return 0;
     }
 
-    // PHASE 1: Initialize device parameters - using friend function architecture
-    LogMessage("Phase 1: Initializing device parameters");
-    char initResult = InitializeDeviceParameters();
-    if(initResult == 0) {
-        LogError("iTEUFDrs_DetectAndInitializeDevices: InitializeDeviceParameters failed");
+    _DEVICE_INFO& deviceInfo = g_iTEUFDrs_instance->GetDeviceInfoMutable();
+    deviceInfo.deviceFound = FALSE;
+    deviceInfo.isInitialized = FALSE;
+    deviceInfo.volumeCount = 0;
+    deviceInfo.currentVolume = 0xFF;
+    deviceInfo.selectedVolume = 0xFF;
+
+    // Ghidra: *(undefined1 *)(param_1 + 0x8a0) = 0; (mode flag: logical/physical)
+    bool usePhysicalDriveHandle = false;
+
+    // Ghidra: cVar3 = _core_init_device_parameters();
+    if(InitializeDeviceParameters() == 0) {
+        LogMessage("GetDeviceInfo: InitializeParaValue fails.");
         return 0;
     }
-    LogMessage("Phase 1: Device parameters initialized successfully");
+    LogMessage("GetDeviceInfo: InitializeParaValue OK.");
 
-    // PHASE 2: Scan for ITE USB devices - using friend function architecture
-    LogMessage("Phase 2: Scanning for ITE USB devices");
-    char scanResult = ScanForITEUSBDevices();
-    if(scanResult == 0) {
-        LogMessage("Phase 2: No devices found, attempting drive handle recovery");
-        // Try alternative detection method as per original Ghidra logic
-        BYTE recoveryResult = OpenDriveHandleAgain();
-        if(recoveryResult == 0) {
-            LogError("iTEUFDrs_DetectAndInitializeDevices: Device detection failed completely");
-            return 0;
-        }
+    // Ghidra: cVar3 = ScanForITEUSBDevices(); *(char *)(param_1 + 0x8a1) = cVar3;
+    char detectedCount = ScanForITEUSBDevices();
+
+    // Ghidra: if (cVar3 == '\0') { OpenDriveHandleAgain(); *(param_1 + 0x8a0) = 1; }
+    if(detectedCount == 0) {
+        LogMessage("Open Drive Handle Again !");
+        BYTE recoveryCount = OpenDriveHandleAgain();
+        usePhysicalDriveHandle = true;
+        detectedCount = static_cast<char>(recoveryCount);
     }
-    LogMessage("Phase 2: ITE USB device scanning completed");
 
-    // PHASE 3: Device identification and configuration - using friend functions
-    LogMessage("Phase 3: Setting device ID and configuring volume pairing");
+    // Ghidra: if (*(char *)(param_1 + 0x8a1) == '\0') return; (Device Not Found)
+    if(detectedCount == 0) {
+        LogMessage("GetDeviceInfo: Device Not Found.");
+        return 0;
+    }
+
+    // Ghidra: if (*(char *)(param_1 + 0x8a1) == -1) return; (CheckDriveExist Error)
+    if(detectedCount < 0) {
+        LogMessage("GetDeviceInfo CheckDriveExist Error.");
+        return 0;
+    }
+
+    LogMessage("GetDeviceInfo CheckDriveExist OK.");
+
+    // Ghidra: SetDeviceID(); VolumePairController();
     SetDeviceID();
+    LogMessage("GetDeviceInfo SetDeviceID OK.");
     VolumePairController();
-    LogMessage("Phase 3: Device configuration completed");
+    LogMessage("GetDeviceInfo VolumePairController OK.");
 
-    // PHASE 4: Device information processing
-    LogMessage("Phase 4: Device detection and initialization sequence completed successfully");
+    // Persist minimal state for CLI use.
+    deviceInfo.volumeCount = static_cast<BYTE>(detectedCount);
+    deviceInfo.deviceFound = TRUE;
+    deviceInfo.isInitialized = TRUE;
 
-    // Success - follows exact Ghidra analysis pattern:
-    // Function performs device detection phases and returns 1 on success, 0 on failure
+    (void) usePhysicalDriveHandle;
     return 1;
 }
 
@@ -1928,7 +1947,13 @@ char ScanForITEUSBDevices() {
 
     // Delegate to class method - uses exact Ghidra implementation in CheckDriveExist
     BYTE result = g_iTEUFDrs_instance->CheckDriveExist(nullptr);
-    return result > 0 ? 1 : 0;
+
+    // Preserve Ghidra semantics: 0 = not found, -1 = error, >0 = number of devices.
+    if(result == 0xFF) {
+        return static_cast<char>(-1);
+    }
+
+    return static_cast<char>(result);
 }
 
 BYTE OpenDriveHandleAgain() {
