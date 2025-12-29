@@ -120,9 +120,7 @@ target_include_directories(URescue PRIVATE
 target_link_libraries(URescue PRIVATE
     URescueCore
     kernel32
-    user32
     advapi32
-    shell32
     setupapi
     winusb
 )
