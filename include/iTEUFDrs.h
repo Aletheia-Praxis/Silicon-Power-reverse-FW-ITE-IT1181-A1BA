@@ -5,17 +5,12 @@
 #include "Utilities.h"
 #include "WindowsHeaders.h"
 
-// Forward declaration
-class CUrescueDlg;
-
 // iTEUFDrs class (represents the main application logic)
 class iTEUFDrs {
 public:
     iTEUFDrs();  // Default constructor
     iTEUFDrs(LPCSTR basePath);
     ~iTEUFDrs();
-
-    void SetParentDialog(CUrescueDlg* pDlg) { m_pParentDlg = pDlg; }
 
     BOOL IsInitialized() const { return m_isInitialized; }
     DWORD GetLastError() const { return m_lastError; }
@@ -45,8 +40,6 @@ private:
     BYTE m_deviceIDTable[255];  // Table to track used device IDs
     BYTE m_controllerCount;
     BYTE m_volumeCount;
-
-    CUrescueDlg* m_pParentDlg;  // Pointer to the main dialog
 
     // SDK handles and functions
     HMODULE m_hSDK;
