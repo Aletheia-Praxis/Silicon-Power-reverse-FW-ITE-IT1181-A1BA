@@ -1,5 +1,5 @@
 // stdafx.h - Precompiled Header
-// Pure WinAPI, no MFC dependencies
+// Pure WinAPI, no GUI framework dependencies
 
 #pragma once
 
