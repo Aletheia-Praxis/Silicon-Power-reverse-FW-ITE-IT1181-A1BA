@@ -25,6 +25,23 @@ static constexpr size_t ITEUFDRS_OFFSET_VOLUME_DEVICE_HANDLE_BASE = 0x62A3;
 static constexpr size_t ITEUFDRS_VOLUME_STRIDE_BYTES = 0x57;
 static constexpr size_t ITEUFDRS_DEVICE_STRIDE_BYTES = 0x1DAA;
 static constexpr size_t ITEUFDRS_OFFSET_DEVICE_CTRL_BUFFER = 0xA26;
+static constexpr size_t ITEUFDRS_OFFSET_DEVICE_BANK_MODE_FLAG = 0xA1D;
+static constexpr size_t ITEUFDRS_OFFSET_DEVICE_BYTE_A4B = 0xA4B;
+static constexpr size_t ITEUFDRS_OFFSET_DEVICE_BYTE_A4C = 0xA4C;
+static constexpr size_t ITEUFDRS_OFFSET_DEVICE_BYTE_A4D = 0xA4D;
+static constexpr size_t ITEUFDRS_OFFSET_DEVICE_BYTE_188B = 0x188B;
+static constexpr size_t ITEUFDRS_OFFSET_DEVICE_BYTE_188C = 0x188C;
+static constexpr size_t ITEUFDRS_OFFSET_DEVICE_BYTE_188D = 0x188D;
+static constexpr size_t ITEUFDRS_OFFSET_DEVICE_FLASH_PARAMS_TABLE1_SRC = 0xF32;
+static constexpr size_t ITEUFDRS_OFFSET_DEVICE_FLASH_PARAMS_TABLE1_DST = 0x1D72;
+static constexpr size_t ITEUFDRS_OFFSET_DEVICE_FLASH_PARAMS_TABLE2_SRC = 0x1332;
+static constexpr size_t ITEUFDRS_OFFSET_DEVICE_FLASH_PARAMS_TABLE2_DST = 0x2172;
+static constexpr size_t ITEUFDRS_DEVICE_FLASH_PARAMS_TABLE_DWORD_COUNT = 0x100;
+static constexpr size_t ITEUFDRS_OFFSET_DEVICE_LUN_DATA = 0x9AE;
+static constexpr size_t ITEUFDRS_DEVICE_LUN_DATA_SIZE_BYTES = 0x40;
+static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_DEVICE_CONNECTED = 0x881;
+static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_CONNECTION_STATUS = 0x882;
+static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_FLAG_106B71 = 0x106B71;
 static constexpr size_t ITEUFDRS_OFFSET_DEVICE_FW_SEGMENT_NOTIFIED = 0x9FB;
 static constexpr size_t ITEUFDRS_OFFSET_DEVICE_SEGMENT_INFO = 0x1866;
 static constexpr size_t ITEUFDRS_SEGMENT_PARAMS_SIZE_BYTES = 0x80;
@@ -67,6 +84,35 @@ static void LogBcmReadErrorFromOriginalTable(int bcmResult) {
         break;
     default: break;
     }
+}
+
+static void ApplyPostBcmSuccessCopies(BYTE* deviceStructBase) {
+    if(! deviceStructBase) {
+        return;
+    }
+
+    static constexpr size_t tableByteSize =
+        ITEUFDRS_DEVICE_FLASH_PARAMS_TABLE_DWORD_COUNT * sizeof(DWORD);
+
+    // 0x0040d268: rep movsd (ECX=0x100) from +0xF32 to +0x1D72
+    memcpy(
+        deviceStructBase + ITEUFDRS_OFFSET_DEVICE_FLASH_PARAMS_TABLE1_DST,
+        deviceStructBase + ITEUFDRS_OFFSET_DEVICE_FLASH_PARAMS_TABLE1_SRC,
+        tableByteSize);
+
+    // 0x0040d27f: rep movsd (ECX=0x100) from +0x1332 to +0x2172
+    memcpy(
+        deviceStructBase + ITEUFDRS_OFFSET_DEVICE_FLASH_PARAMS_TABLE2_DST,
+        deviceStructBase + ITEUFDRS_OFFSET_DEVICE_FLASH_PARAMS_TABLE2_SRC,
+        tableByteSize);
+
+    // 0x0040d292..0x0040d2b2: copy bytes A4B/A4C/A4D -> 188B/188C/188D
+    deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BYTE_188C] =
+        deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BYTE_A4C];
+    deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BYTE_188D] =
+        deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BYTE_A4D];
+    deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BYTE_188B] =
+        deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BYTE_A4B];
 }
 
 // Forward declarations for iTEUFDrs_DetectAndInitializeDevices function stubs
@@ -2066,6 +2112,40 @@ char iTEUFDrs_DetectAndInitializeDevices() {
         if(bcmResult != ITEUFDRS_SDK_RESULT_SUCCESS) {
             continue;
         }
+
+        // 0x0040d268..0x0040d2e3 (GetDeviceInfoAndUpdate success path after FLH_ReadBCM==1)
+        ApplyPostBcmSuccessCopies(deviceStructBase);
+
+        if(deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BANK_MODE_FLAG] != 0) {
+            UpdateFirmwareBankInfo(deviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle));
+        } else {
+            LoadAndVerifyFirmwareSegments(deviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle));
+        }
+
+        GetMPInfoAndUpdateBuffers(deviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle));
+
+        // 0x0040d2e8..0x0040d2f8
+        if constexpr(
+            ITEUFDRS_OFFSET_INSTANCE_FLAG_106B71 < sizeof(iTEUFDrs)
+            && ITEUFDRS_OFFSET_INSTANCE_CONNECTION_STATUS < sizeof(iTEUFDrs)) {
+            const BYTE* instanceBytes = reinterpret_cast<const BYTE*>(g_iTEUFDrs_instance);
+            if(instanceBytes[ITEUFDRS_OFFSET_INSTANCE_CONNECTION_STATUS] != 0
+               && instanceBytes[ITEUFDRS_OFFSET_INSTANCE_FLAG_106B71] == 1) {
+                return 0;
+            }
+        }
+
+        // 0x0040d2fe..0x0040d31a
+        const char lunResult =
+            GetLunArrayData(deviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle));
+        if(lunResult != 0) {
+            UpdateDeviceCapacityOrCalculate(deviceIndex);
+        } else {
+            CalculateDeviceCapacity(deviceIndex);
+        }
+
+        // 0x0040d31a..0x0040d323
+        (void) GetMPInfo(deviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle));
     }
 
     (void) usePhysicalDriveHandle;
@@ -2957,7 +3037,47 @@ void GetMPInfoAndUpdateBuffers(int deviceIndex, DWORD deviceHandle) {
 
 char GetLunArrayData(int deviceIndex, DWORD deviceHandle) {
     LogMessage("GetLunArrayData: Getting LUN array data for device %d", deviceIndex);
-    return 0;  // Success stub
+
+    if(! g_iTEUFDrs_instance) {
+        LogError("GetLunArrayData: No global instance available");
+        return 0;
+    }
+
+    if(deviceIndex < 0 || deviceIndex >= MAX_VOLUMES) {
+        LogError("GetLunArrayData: Invalid device index %d", deviceIndex);
+        return 0;
+    }
+
+    if(! g_sdk_api.VDR_ReadLUNData) {
+        LogError("GetLunArrayData: VDR_ReadLUNData function not available");
+        return 0;
+    }
+
+    BYTE lunBuffer[ITEUFDRS_DEVICE_LUN_DATA_SIZE_BYTES];
+    memset(lunBuffer, 0, sizeof(lunBuffer));
+
+    const BOOL ok =
+        ((PFN_VDR_ReadLUNData) g_sdk_api.VDR_ReadLUNData)(0, lunBuffer, sizeof(lunBuffer));
+    if(! ok) {
+        LogError(" (GetLunArrayData) Get Lun information fail");
+        if constexpr(ITEUFDRS_OFFSET_INSTANCE_DEVICE_CONNECTED < sizeof(iTEUFDrs)) {
+            reinterpret_cast<BYTE*>(
+                g_iTEUFDrs_instance)[ITEUFDRS_OFFSET_INSTANCE_DEVICE_CONNECTED] = 0;
+        }
+        (void) deviceHandle;
+        return 0;
+    }
+
+    BYTE* deviceStructBase = reinterpret_cast<BYTE*>(g_iTEUFDrs_instance)
+                             + static_cast<size_t>(deviceIndex) * ITEUFDRS_DEVICE_STRIDE_BYTES;
+
+    memcpy(deviceStructBase + ITEUFDRS_OFFSET_DEVICE_LUN_DATA, lunBuffer, sizeof(lunBuffer));
+
+    if constexpr(ITEUFDRS_OFFSET_INSTANCE_DEVICE_CONNECTED < sizeof(iTEUFDrs)) {
+        reinterpret_cast<BYTE*>(g_iTEUFDrs_instance)[ITEUFDRS_OFFSET_INSTANCE_DEVICE_CONNECTED] = 1;
+    }
+
+    return 1;
 }
 
 void CalculateDeviceCapacity(int deviceIndex) {
