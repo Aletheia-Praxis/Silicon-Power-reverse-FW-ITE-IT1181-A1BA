@@ -18,6 +18,14 @@
 
 // Global instance pointer for iTEUFDrs_DetectAndInitializeDevices access
 static iTEUFDrs* g_iTEUFDrs_instance = nullptr;
+
+static constexpr size_t ITEUFDRS_OFFSET_USE_PHYSICAL_DRIVE_HANDLE = 0x8A0;
+static constexpr size_t ITEUFDRS_OFFSET_VOLUME_DRIVE_LETTER_BASE = 0x62A2;
+static constexpr size_t ITEUFDRS_OFFSET_VOLUME_DEVICE_HANDLE_BASE = 0x62A3;
+static constexpr size_t ITEUFDRS_VOLUME_STRIDE_BYTES = 0x57;
+static constexpr size_t ITEUFDRS_MAX_SCANNED_DRIVES = 24;
+static constexpr char ITEUFDRS_DRIVE_LETTERS[ITEUFDRS_MAX_SCANNED_DRIVES + 1] =
+    "CDEFGHIJKLMNOPQRSTUVWXYZ";
 // clang-format on
 
 // Forward declarations for iTEUFDrs_DetectAndInitializeDevices function stubs
@@ -1636,8 +1644,48 @@ BYTE iTEUFDrs::OpenPhysicalDriveHandle(BYTE driveIndex) {
 }
 
 BYTE iTEUFDrs::OpenLogicalDriveHandle(BYTE param_1) {
-    //... existing code...
-    return 0;
+    if(param_1 >= ITEUFDRS_MAX_SCANNED_DRIVES) {
+        return 0;
+    }
+
+    const BYTE* thisBytes = reinterpret_cast<const BYTE*>(this);
+    if(thisBytes[ITEUFDRS_OFFSET_USE_PHYSICAL_DRIVE_HANDLE] != 0) {
+        return this->OpenPhysicalDriveHandle(param_1);
+    }
+
+    const size_t volumeOffset = static_cast<size_t>(param_1) * ITEUFDRS_VOLUME_STRIDE_BYTES;
+    char* driveLetterPtr = reinterpret_cast<char*>(
+        reinterpret_cast<BYTE*>(this) + ITEUFDRS_OFFSET_VOLUME_DRIVE_LETTER_BASE + volumeOffset);
+
+    char driveLetter = *driveLetterPtr;
+    if(driveLetter == '\0') {
+        driveLetter = ITEUFDRS_DRIVE_LETTERS[param_1];
+        *driveLetterPtr = driveLetter;
+    }
+
+    char volumePath[8];
+    sprintf_s(volumePath, sizeof(volumePath), "\\\\.\\%c:", driveLetter);
+
+    HANDLE hDevice = CreateFileA(
+        volumePath,
+        GENERIC_READ | GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        NULL,
+        OPEN_EXISTING,
+        0,
+        NULL);
+
+    if(hDevice == INVALID_HANDLE_VALUE) {
+        DWORD errorCode = GetLastError();
+        LogMessage("Vol=%C, ERROR=%d, can't get device handle", driveLetter, errorCode);
+        return 0;
+    }
+
+    HANDLE* handleStorage = reinterpret_cast<HANDLE*>(
+        reinterpret_cast<BYTE*>(this) + ITEUFDRS_OFFSET_VOLUME_DEVICE_HANDLE_BASE + volumeOffset);
+    *handleStorage = hDevice;
+
+    return 1;
 }
 /**
  * CRITICAL HELPER FUNCTIONS - EXACT RECONSTRUCTION FROM GHIDRA
@@ -1874,6 +1922,7 @@ char iTEUFDrs_DetectAndInitializeDevices() {
 
     // Ghidra: *(undefined1 *)(param_1 + 0x8a0) = 0; (mode flag: logical/physical)
     bool usePhysicalDriveHandle = false;
+    reinterpret_cast<BYTE*>(g_iTEUFDrs_instance)[ITEUFDRS_OFFSET_USE_PHYSICAL_DRIVE_HANDLE] = 0;
 
     // Ghidra: cVar3 = _core_init_device_parameters();
     if(InitializeDeviceParameters() == 0) {
@@ -1891,6 +1940,7 @@ char iTEUFDrs_DetectAndInitializeDevices() {
         BYTE recoveryCount = OpenDriveHandleAgain();
         usePhysicalDriveHandle = true;
         detectedCount = static_cast<char>(recoveryCount);
+        reinterpret_cast<BYTE*>(g_iTEUFDrs_instance)[ITEUFDRS_OFFSET_USE_PHYSICAL_DRIVE_HANDLE] = 1;
     }
 
     // Ghidra: if (*(char *)(param_1 + 0x8a1) == '\0') return; (Device Not Found)
@@ -2006,62 +2056,19 @@ char OpenLogicalDriveHandle(BYTE volumeIndex) {
         return 0;
     }
 
-    // Check physical drive flag through global instance
-    // For now, assume logical drive opening is preferred (physical flag = 0)
-
-    // Use drive letter mapping - simplified approach for initial implementation
-    char driveLetters[] = { 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N',
-                            'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z' };
-
-    if(volumeIndex >= 24) {
-        LogError("OpenLogicalDriveHandle: Invalid volume index %d", volumeIndex);
-        return 0;
-    }
-
-    char driveLetter = driveLetters[volumeIndex];
-
-    // Build drive path - exact Ghidra template: "\\.\X:"
-    char volumePath[8];
-    sprintf_s(volumePath, sizeof(volumePath), "\\\\.\\%c:", driveLetter);
-
-    // Create file handle - exact Ghidra parameters
-    HANDLE hDevice = CreateFileA(
-        volumePath,                          // Device path
-        GENERIC_READ | GENERIC_WRITE,        // 0xc0000000 access
-        FILE_SHARE_READ | FILE_SHARE_WRITE,  // 3 = shared access
-        NULL,                                // No security attributes
-        OPEN_EXISTING,                       // 3 = open existing
-        0,                                   // No attributes
-        NULL);                               // No template
-
-    // Check for failure
-    if(hDevice == INVALID_HANDLE_VALUE) {
-        DWORD errorCode = GetLastError();
-        LogMessage(
-            "OpenLogicalDriveHandle: Vol=%c, ERROR=%d, can't get device handle",
-            driveLetter,
-            errorCode);
-        return 0;  // This is normal for non-existent drives
-    }
-
-    // Store handle for later use - simplified implementation
-    if(volumeIndex < MAX_VOLUMES) {
-        LogMessage(
-            "OpenLogicalDriveHandle: Successfully opened drive %c: (handle: 0x%p)",
-            driveLetter,
-            hDevice);
-
-        // For now, close immediately since we don't have exact memory layout ready
-        // TODO: Store in exact Ghidra memory layout when device structures are finalized
-        CloseHandle(hDevice);
-    }
-
-    return 1;  // Success
+    BYTE result = g_iTEUFDrs_instance->OpenLogicalDriveHandle(volumeIndex);
+    return result != 0 ? 1 : 0;
 }
 
 char OpenPhysicalDriveHandle(BYTE volumeIndex) {
     LogMessage("OpenPhysicalDriveHandle: Opening physical drive %d", volumeIndex);
-    return 1;  // Success stub
+    if(! g_iTEUFDrs_instance) {
+        LogError("OpenPhysicalDriveHandle: No global instance available");
+        return 0;
+    }
+
+    BYTE result = g_iTEUFDrs_instance->OpenPhysicalDriveHandle(volumeIndex);
+    return result != 0 ? 1 : 0;
 }
 
 // Removed duplicate functions - using stubs from above
