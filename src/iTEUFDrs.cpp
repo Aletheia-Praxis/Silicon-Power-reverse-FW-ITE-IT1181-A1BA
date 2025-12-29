@@ -18,7 +18,7 @@
 #include <cmath>
 
 // Global instance pointer for iTEUFDrs_DetectAndInitializeDevices access
-static iTEUFDrs* g_iTEUFDrs_instance = nullptr;
+iTEUFDrs* g_iTEUFDrs_instance = nullptr;
 
 static constexpr size_t ITEUFDRS_OFFSET_USE_PHYSICAL_DRIVE_HANDLE = 0x8A0;
 static constexpr size_t ITEUFDRS_OFFSET_VOLUME_DRIVE_LETTER_BASE = 0x62A2;

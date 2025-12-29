@@ -162,6 +162,8 @@ private:
     HMODULE m_sdkModule;           // Handle to loaded SDK DLL
 };
 
+extern iTEUFDrs* g_iTEUFDrs_instance;
+
 // Error codes for iTEUFDrs
 #define ITEUFDRS_ERROR_NONE        0
 #define ITEUFDRS_ERROR_SDK_LOAD    1  // Failed to load 181FlashSDK.dll
