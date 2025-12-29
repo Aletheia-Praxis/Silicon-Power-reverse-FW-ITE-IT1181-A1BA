@@ -41,6 +41,18 @@ static constexpr size_t ITEUFDRS_OFFSET_DEVICE_LUN_DATA = 0x9AE;
 static constexpr size_t ITEUFDRS_DEVICE_LUN_DATA_SIZE_BYTES = 0x40;
 static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_DEVICE_CONNECTED = 0x881;
 static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_CONNECTION_STATUS = 0x882;
+static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_MPINFO_READY_FLAG = 0x880;
+static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_MPINFO_MESSAGE_FLAG = 0x883;
+static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_MPINFO_TEXT = 0x208;
+static constexpr size_t ITEUFDRS_INSTANCE_MPINFO_TEXT_SIZE_BYTES = 0x40;
+static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_MPINFO_BYTE1 = 0x887;
+static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_MPINFO_BYTE2 = 0x888;
+static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_MPINFO_BYTE3 = 0x889;
+static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_MPINFO_PARAM = 0x88A;
+static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_MPINFO_PARAM_FLAG = 0x88E;
+static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_MPINFO_EXTRA = 0x88F;
+static constexpr size_t ITEUFDRS_INSTANCE_MPINFO_EXTRA_SIZE_BYTES = 0x0C;
+static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_MPINFO_EXTRA_FLAG = 0x89B;
 static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_FLAG_106B71 = 0x106B71;
 static constexpr size_t ITEUFDRS_OFFSET_DEVICE_FW_SEGMENT_NOTIFIED = 0x9FB;
 static constexpr size_t ITEUFDRS_OFFSET_DEVICE_SEGMENT_INFO = 0x1866;
@@ -55,10 +67,107 @@ static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_BCM_CODE_00 = 0x0048D024;
 static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_BCM_CODE_3F = 0x0048D044;
 static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_BCM_CODE_72 = 0x0048D094;
 static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_BCM_CODE_74 = 0x0048D060;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_GETMPINFO_FAIL_LUN0 = 0x0048CBB4;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_GETMPINFO_FAIL_LUN1 = 0x0048CB9C;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_POSTMPINFO_FMT = 0x0048D018;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_POSTMPINFO_DEFAULT = 0x0048CFE0;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_POSTMPINFO_MSG0 = 0x0048CFE8;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_POSTMPINFO_MSG1 = 0x0048CFBC;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_POSTMPINFO_MSG2 = 0x0048CF94;
 static constexpr size_t ITEUFDRS_MAX_SCANNED_DRIVES = 24;
 static constexpr char ITEUFDRS_DRIVE_LETTERS[ITEUFDRS_MAX_SCANNED_DRIVES + 1] =
     "CDEFGHIJKLMNOPQRSTUVWXYZ";
 // clang-format on
+
+int FormatStringToBuffer(void* buffer, int size, const char* format, ...);
+
+static void CopyNullTerminatedStringFixed(char* dst, const char* src, size_t dstSize) {
+    if(! dst || dstSize == 0) {
+        return;
+    }
+
+    dst[0] = '\0';
+    if(! src) {
+        return;
+    }
+
+    size_t i = 0;
+    for(; i + 1 < dstSize && src[i] != '\0'; ++i) {
+        dst[i] = src[i];
+    }
+    dst[i] = '\0';
+}
+
+static void UpdatePostMpInfoState(char mpInfoResult) {
+    if(! g_iTEUFDrs_instance) {
+        return;
+    }
+
+    if constexpr(
+        ITEUFDRS_OFFSET_INSTANCE_MPINFO_READY_FLAG < sizeof(iTEUFDrs)
+        && ITEUFDRS_OFFSET_INSTANCE_MPINFO_MESSAGE_FLAG < sizeof(iTEUFDrs)
+        && ITEUFDRS_OFFSET_INSTANCE_MPINFO_TEXT + ITEUFDRS_INSTANCE_MPINFO_TEXT_SIZE_BYTES
+               <= sizeof(iTEUFDrs)
+        && ITEUFDRS_OFFSET_INSTANCE_MPINFO_PARAM + sizeof(DWORD) <= sizeof(iTEUFDrs)
+        && ITEUFDRS_OFFSET_INSTANCE_MPINFO_EXTRA + ITEUFDRS_INSTANCE_MPINFO_EXTRA_SIZE_BYTES
+               <= sizeof(iTEUFDrs)
+        && ITEUFDRS_OFFSET_INSTANCE_CONNECTION_STATUS < sizeof(iTEUFDrs)) {
+        BYTE* instanceBytes = reinterpret_cast<BYTE*>(g_iTEUFDrs_instance);
+        char* mpText =
+            reinterpret_cast<char*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_MPINFO_TEXT);
+
+        if(mpInfoResult != 0) {
+            const DWORD mpParam = *reinterpret_cast<const DWORD*>(
+                instanceBytes + ITEUFDRS_OFFSET_INSTANCE_MPINFO_PARAM);
+            const BYTE* mpExtra = instanceBytes + ITEUFDRS_OFFSET_INSTANCE_MPINFO_EXTRA;
+
+            // Ghidra calls 0x004094a0 with format pointer 0x0048D018.
+            const int formatResult = FormatStringToBuffer(
+                mpText,
+                static_cast<int>(ITEUFDRS_INSTANCE_MPINFO_TEXT_SIZE_BYTES),
+                "MP:%08X %02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
+                mpParam,
+                mpExtra[0],
+                mpExtra[1],
+                mpExtra[2],
+                mpExtra[3],
+                mpExtra[4],
+                mpExtra[5],
+                mpExtra[6],
+                mpExtra[7],
+                mpExtra[8],
+                mpExtra[9],
+                mpExtra[10],
+                mpExtra[11]);
+
+            if(formatResult != 0) {
+                LogMessage(
+                    "PostMPInfo format failed: msg=%p (orig 0x0040d34f)",
+                    (void*) ITEUFDRS_ORIG_MSG_PTR_POSTMPINFO_MSG0);
+            }
+
+            instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_READY_FLAG] = 1;
+        } else {
+            // Ghidra copies from 0x0048CFE0 to instance+0x208 (size 0x40)
+            CopyNullTerminatedStringFixed(mpText, "", ITEUFDRS_INSTANCE_MPINFO_TEXT_SIZE_BYTES);
+            instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_READY_FLAG] = 0;
+        }
+
+        // 0x0040d3aa..0x0040d3dc
+        const BYTE dl = instanceBytes[ITEUFDRS_OFFSET_INSTANCE_CONNECTION_STATUS];
+        if((instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_READY_FLAG] & dl) != 0) {
+            LogMessage(
+                "PostMPInfo: msg=%p (orig 0x0040d3cb)",
+                (void*) ITEUFDRS_ORIG_MSG_PTR_POSTMPINFO_MSG2);
+            instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_MESSAGE_FLAG] = 0;
+        } else {
+            LogMessage(
+                "PostMPInfo: msg=%p (orig 0x0040d3b8)",
+                (void*) ITEUFDRS_ORIG_MSG_PTR_POSTMPINFO_MSG1);
+            instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_MESSAGE_FLAG] = 1;
+        }
+    }
+}
 
 static void LogBcmReadErrorFromOriginalTable(int bcmResult) {
     if(bcmResult < 0 || bcmResult > ITEUFDRS_BCM_MAX_ERROR_CODE) {
@@ -2145,7 +2254,13 @@ char iTEUFDrs_DetectAndInitializeDevices() {
         }
 
         // 0x0040d31a..0x0040d323
-        (void) GetMPInfo(deviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle));
+        const char mpInfoResult =
+            GetMPInfo(deviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle));
+
+        // 0x0040d323..0x0040d3dc
+        (void) ITEUFDRS_ORIG_MSG_PTR_POSTMPINFO_FMT;
+        (void) ITEUFDRS_ORIG_MSG_PTR_POSTMPINFO_DEFAULT;
+        UpdatePostMpInfoState(mpInfoResult);
     }
 
     (void) usePhysicalDriveHandle;
@@ -3228,94 +3343,86 @@ char NotifyFwSegmentInfo(int deviceIndex, DWORD deviceHandle) {
 }
 
 char GetMPInfo(int deviceIndex, DWORD deviceHandle) {
-    LogMessage("GetMPInfo: Getting mass production info for device %d", deviceIndex);
-
-    // Allocate 0x10000 bytes for MP information buffer
-    void* mpBuffer = malloc(0x10000);
-    if(! mpBuffer) {
-        LogMessage("GetMPInfo: Failed to allocate MP buffer");
+    if(! g_iTEUFDrs_instance) {
         return 0;
     }
 
-    LogMessage("GetMPInfo: Allocated MP buffer at address %p", mpBuffer);
+    const BYTE deviceIndexByte = static_cast<BYTE>(deviceIndex);
+    const size_t deviceOffset = static_cast<size_t>(deviceIndexByte) * ITEUFDRS_DEVICE_STRIDE_BYTES;
+    BYTE* deviceStructBase = reinterpret_cast<BYTE*>(g_iTEUFDrs_instance) + deviceOffset;
+    if(deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BANK_MODE_FLAG] == 0) {
+        return 0;
+    }
 
-    // Clear the buffer
+    void* mpBuffer = malloc(0x10000);
+    if(! mpBuffer) {
+        return 0;
+    }
     memset(mpBuffer, 0, 0x10000);
 
-    // Use SDK function g_pFLH_ReadISPData to read mass production data
-    if(g_pFLH_ReadISPData) {
-        LogMessage("GetMPInfo: Calling g_pFLH_ReadISPData SDK function");
+    // Ghidra 0x0040b720 reads 0x10000 bytes then extracts from offsets 0xF1F0..0xF1FF.
+    // The exported signature for FLH_ReadISPData in our reconstruction is BOOL (LPVOID).
+    PFN_FLH_ReadISPData readIspData = nullptr;
+    if(g_sdk_api.FLH_ReadISPData) {
+        readIspData = reinterpret_cast<PFN_FLH_ReadISPData>(g_sdk_api.FLH_ReadISPData);
+    } else if(g_pFLH_ReadISPData) {
+        readIspData = reinterpret_cast<PFN_FLH_ReadISPData>(g_pFLH_ReadISPData);
+    }
 
-        // Call SDK function with device handle and buffer - primary attempt
-        typedef int (*FLH_ReadISPData_t)(DWORD, void*, DWORD);
-        FLH_ReadISPData_t func = (FLH_ReadISPData_t) g_pFLH_ReadISPData;
-        int result = func(deviceHandle, mpBuffer, 0x10000);
+    if(! readIspData) {
+        free(mpBuffer);
+        return 0;
+    }
 
-        if(result == 0) {
-            LogMessage("GetMPInfo: g_pFLH_ReadISPData returned success");
+    (void) deviceHandle;
+    const BOOL ok = readIspData(mpBuffer);
+    if(! ok) {
+        LogMessage(
+            "GetMPInfo failed: msg=%p (orig 0x0040b7f8)",
+            (void*) ITEUFDRS_ORIG_MSG_PTR_GETMPINFO_FAIL_LUN0);
+        free(mpBuffer);
+        return 0;
+    }
 
-            // Extract MP information from specific buffer offsets
-            // Based on Ghidra analysis at 0x0040b720
-            unsigned char* buffer = (unsigned char*) mpBuffer;
+    const BYTE* buffer = reinterpret_cast<const BYTE*>(mpBuffer);
 
-            // Extract MP info byte 1 from buffer offset 0xf1fc
-            unsigned char mpInfo1 = buffer[0xf1fc];
-            LogMessage("GetMPInfo: MP info byte 1: 0x%02X", mpInfo1);
+    if constexpr(
+        ITEUFDRS_OFFSET_INSTANCE_MPINFO_BYTE1 < sizeof(iTEUFDrs)
+        && ITEUFDRS_OFFSET_INSTANCE_MPINFO_BYTE2 < sizeof(iTEUFDrs)
+        && ITEUFDRS_OFFSET_INSTANCE_MPINFO_BYTE3 < sizeof(iTEUFDrs)
+        && ITEUFDRS_OFFSET_INSTANCE_MPINFO_PARAM + sizeof(DWORD) <= sizeof(iTEUFDrs)
+        && ITEUFDRS_OFFSET_INSTANCE_MPINFO_PARAM_FLAG < sizeof(iTEUFDrs)
+        && ITEUFDRS_OFFSET_INSTANCE_MPINFO_EXTRA + ITEUFDRS_INSTANCE_MPINFO_EXTRA_SIZE_BYTES
+               <= sizeof(iTEUFDrs)
+        && ITEUFDRS_OFFSET_INSTANCE_MPINFO_EXTRA_FLAG < sizeof(iTEUFDrs)) {
+        BYTE* instanceBytes = reinterpret_cast<BYTE*>(g_iTEUFDrs_instance);
 
-            // Extract MP info byte 2 from buffer offset 0xf1fd
-            unsigned char mpInfo2 = buffer[0xf1fd];
-            LogMessage("GetMPInfo: MP info byte 2: 0x%02X", mpInfo2);
+        *reinterpret_cast<WORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_MPINFO_BYTE1) = 0;
+        instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_BYTE3] = 0;
 
-            // Extract 4-byte MP parameter from offset 0xf1f0-0xf1f3
-            DWORD mpParam1 = *(DWORD*) (buffer + 0xf1f0);
-            LogMessage("GetMPInfo: MP parameter 1: 0x%08X", mpParam1);
+        instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_BYTE1] = buffer[0xF1FC];
+        instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_BYTE2] = buffer[0xF1FD];
 
-            // Extract additional MP data from offset 0xf1f4-0xf1ff (12 bytes)
-            LogMessage("GetMPInfo: Additional MP data:");
-            for(int i = 0; i < 12; i++) {
-                LogMessage("  Offset 0xf1f%X: 0x%02X", (4 + i), buffer[0xf1f4 + i]);
-            }
+        *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_MPINFO_PARAM) = 0;
+        instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_PARAM_FLAG] = 0;
 
-            // Store MP information in global variables or device structure
-            // This follows the exact pattern from Ghidra decompilation
+        instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_PARAM + 0] = buffer[0xF1F0];
+        instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_PARAM + 1] = buffer[0xF1F1];
+        instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_PARAM + 2] = buffer[0xF1F2];
+        instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_PARAM + 3] = buffer[0xF1F3];
 
-            free(mpBuffer);
-            LogMessage("GetMPInfo: MP info extraction completed successfully");
-            return 1;  // Success
-        } else {
-            LogMessage(
-                "GetMPInfo: g_pFLH_ReadISPData failed with result %d, trying fallback", result);
+        memset(
+            instanceBytes + ITEUFDRS_OFFSET_INSTANCE_MPINFO_EXTRA,
+            0,
+            ITEUFDRS_INSTANCE_MPINFO_EXTRA_SIZE_BYTES);
+        instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_EXTRA_FLAG] = 0;
 
-            // Ghidra shows fallback mechanism - try alternative approach
-            // This matches the conditional logic in the original function
-            int fallbackResult = func(deviceHandle, mpBuffer, 0x8000);
-
-            if(fallbackResult == 0) {
-                LogMessage("GetMPInfo: Fallback g_pFLH_ReadISPData succeeded");
-
-                // Extract MP info with adjusted offsets for smaller buffer
-                unsigned char* buffer = (unsigned char*) mpBuffer;
-
-                unsigned char mpInfo1 = buffer[0x71fc];  // Adjusted offset
-                unsigned char mpInfo2 = buffer[0x71fd];  // Adjusted offset
-
-                LogMessage("GetMPInfo: Fallback MP info byte 1: 0x%02X", mpInfo1);
-                LogMessage("GetMPInfo: Fallback MP info byte 2: 0x%02X", mpInfo2);
-
-                free(mpBuffer);
-                LogMessage("GetMPInfo: Fallback MP info extraction completed");
-                return 1;  // Success
-            } else {
-                LogMessage(
-                    "GetMPInfo: Fallback g_pFLH_ReadISPData also failed with result %d",
-                    fallbackResult);
-            }
-        }
-    } else {
-        LogMessage("GetMPInfo: g_pFLH_ReadISPData SDK function not available");
+        memcpy(
+            instanceBytes + ITEUFDRS_OFFSET_INSTANCE_MPINFO_EXTRA,
+            buffer + 0xF1F4,
+            ITEUFDRS_INSTANCE_MPINFO_EXTRA_SIZE_BYTES);
     }
 
     free(mpBuffer);
-    LogMessage("GetMPInfo: MP info extraction failed");
-    return 0;  // Failure
+    return 1;
 }
