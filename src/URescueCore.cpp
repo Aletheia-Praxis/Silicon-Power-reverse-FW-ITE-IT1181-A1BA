@@ -9,6 +9,8 @@
 #include <string.h>
 #include <windows.h>
 
+#include <limits>
+
 #include "../include/ErrorHandler.h"
 #include "../include/FirmwareManager.h"
 #include "../include/MemoryManager.h"
@@ -383,9 +385,29 @@ int LoadFirmwareFromFile(const char* filename, void** buffer, unsigned long* siz
         return 0;
     }
 
-    // Stub implementation - return success for now
     *buffer = nullptr;
     *size = 0;
+
+    if(! ValidateFirmwareFile(filename)) {
+        LogError("Invalid firmware file: %s", filename);
+        return 0;
+    }
+
+    LPVOID loadedBuffer = nullptr;
+    DWORD loadedSize = 0;
+    if(! FirmwareOperations::LoadFirmwareFile(filename, &loadedBuffer, &loadedSize)) {
+        LogError("Failed to read firmware file: %s", filename);
+        return 0;
+    }
+
+    if(loadedSize > std::numeric_limits<unsigned long>::max()) {
+        LogError("Firmware file too large for current API: %s", filename);
+        FreeMemory(loadedBuffer);
+        return 0;
+    }
+
+    *buffer = loadedBuffer;
+    *size = static_cast<unsigned long>(loadedSize);
     return 1;
 }
 
