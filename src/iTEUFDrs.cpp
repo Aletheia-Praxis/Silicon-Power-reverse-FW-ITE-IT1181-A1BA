@@ -23,6 +23,12 @@ static constexpr size_t ITEUFDRS_OFFSET_USE_PHYSICAL_DRIVE_HANDLE = 0x8A0;
 static constexpr size_t ITEUFDRS_OFFSET_VOLUME_DRIVE_LETTER_BASE = 0x62A2;
 static constexpr size_t ITEUFDRS_OFFSET_VOLUME_DEVICE_HANDLE_BASE = 0x62A3;
 static constexpr size_t ITEUFDRS_VOLUME_STRIDE_BYTES = 0x57;
+static constexpr size_t ITEUFDRS_DEVICE_STRIDE_BYTES = 0x1DAA;
+static constexpr size_t ITEUFDRS_OFFSET_DEVICE_CTRL_BUFFER = 0xA26;
+static constexpr size_t ITEUFDRS_OFFSET_DEVICE_FW_SEGMENT_NOTIFIED = 0x9FB;
+static constexpr size_t ITEUFDRS_OFFSET_DEVICE_SEGMENT_INFO = 0x1866;
+static constexpr size_t ITEUFDRS_SEGMENT_PARAMS_SIZE_BYTES = 0x80;
+static constexpr int ITEUFDRS_SDK_RESULT_SUCCESS = 1;
 static constexpr size_t ITEUFDRS_MAX_SCANNED_DRIVES = 24;
 static constexpr char ITEUFDRS_DRIVE_LETTERS[ITEUFDRS_MAX_SCANNED_DRIVES + 1] =
     "CDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -55,6 +61,7 @@ char GetMPInfo(int deviceIndex, DWORD deviceHandle);
 int FormatStringToBuffer(void* buffer, int size, const char* format, ...);
 void CloseDeviceHandle(UINT volumeKey);
 void AssignDeviceSizeString(BYTE* buffer);
+int GetBCMInfo(int deviceIndex, DWORD deviceHandle);
 
 /*
  * iTEUFDrs Constructor - EXACT reconstruction from Ghidra analysis at 0x0040d690
@@ -1648,14 +1655,44 @@ BYTE iTEUFDrs::OpenLogicalDriveHandle(BYTE param_1) {
         return 0;
     }
 
-    const BYTE* thisBytes = reinterpret_cast<const BYTE*>(this);
-    if(thisBytes[ITEUFDRS_OFFSET_USE_PHYSICAL_DRIVE_HANDLE] != 0) {
-        return this->OpenPhysicalDriveHandle(param_1);
-    }
-
     const size_t volumeOffset = static_cast<size_t>(param_1) * ITEUFDRS_VOLUME_STRIDE_BYTES;
     char* driveLetterPtr = reinterpret_cast<char*>(
         reinterpret_cast<BYTE*>(this) + ITEUFDRS_OFFSET_VOLUME_DRIVE_LETTER_BASE + volumeOffset);
+
+    const BYTE* thisBytes = reinterpret_cast<const BYTE*>(this);
+    if(thisBytes[ITEUFDRS_OFFSET_USE_PHYSICAL_DRIVE_HANDLE] != 0) {
+        const BYTE physicalDriveIndex = static_cast<BYTE>(*driveLetterPtr);
+        if(physicalDriveIndex >= 8) {
+            return 0;
+        }
+
+        static constexpr const char* physicalDrivePaths[8] = {
+            "\\\\.\\PhysicalDrive1", "\\\\.\\PhysicalDrive2", "\\\\.\\PhysicalDrive3",
+            "\\\\.\\PhysicalDrive4", "\\\\.\\PhysicalDrive5", "\\\\.\\PhysicalDrive6",
+            "\\\\.\\PhysicalDrive7", "\\\\.\\PhysicalDrive8",
+        };
+
+        HANDLE hDevice = CreateFileA(
+            physicalDrivePaths[physicalDriveIndex],
+            GENERIC_READ | GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            NULL,
+            OPEN_EXISTING,
+            0,
+            NULL);
+
+        if(hDevice == INVALID_HANDLE_VALUE) {
+            DWORD errorCode = GetLastError();
+            LogMessage("Vol=%X, ERROR=%d, can't get device handle", physicalDriveIndex, errorCode);
+            return 0;
+        }
+
+        HANDLE* handleStorage = reinterpret_cast<HANDLE*>(
+            reinterpret_cast<BYTE*>(this) + ITEUFDRS_OFFSET_VOLUME_DEVICE_HANDLE_BASE
+            + volumeOffset);
+        *handleStorage = hDevice;
+        return 1;
+    }
 
     char driveLetter = *driveLetterPtr;
     if(driveLetter == '\0') {
@@ -1967,6 +2004,35 @@ char iTEUFDrs_DetectAndInitializeDevices() {
     deviceInfo.volumeCount = static_cast<BYTE>(detectedCount);
     deviceInfo.deviceFound = TRUE;
     deviceInfo.isInitialized = TRUE;
+
+    for(BYTE deviceIndex = 0; deviceIndex < deviceInfo.volumeCount; ++deviceIndex) {
+        if(OpenLogicalDriveHandle(deviceIndex) == 0) {
+            continue;
+        }
+
+        const size_t volumeOffset = static_cast<size_t>(deviceIndex) * ITEUFDRS_VOLUME_STRIDE_BYTES;
+        HANDLE deviceHandle = *reinterpret_cast<HANDLE*>(
+            reinterpret_cast<BYTE*>(g_iTEUFDrs_instance) + ITEUFDRS_OFFSET_VOLUME_DEVICE_HANDLE_BASE
+            + volumeOffset);
+
+        if(deviceHandle == NULL || deviceHandle == INVALID_HANDLE_VALUE) {
+            continue;
+        }
+
+        BYTE* deviceStructBase = reinterpret_cast<BYTE*>(g_iTEUFDrs_instance)
+                                 + static_cast<size_t>(deviceIndex) * ITEUFDRS_DEVICE_STRIDE_BYTES;
+        deviceStructBase[ITEUFDRS_OFFSET_DEVICE_FW_SEGMENT_NOTIFIED] = 0;
+
+        if(NotifyFwSegmentInfo(deviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle)) == 0) {
+            continue;
+        }
+
+        const int bcmResult = GetBCMInfo(deviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle));
+        if(bcmResult != ITEUFDRS_SDK_RESULT_SUCCESS) {
+            LogError("GetBCMInfo: Failed (result=%d)", bcmResult);
+            continue;
+        }
+    }
 
     (void) usePhysicalDriveHandle;
     return 1;
@@ -2877,7 +2943,28 @@ int FormatStringToBuffer(void* buffer, int size, const char* format, ...) {
 }
 
 void CloseDeviceHandle(UINT volumeKey) {
-    LogMessage("CloseDeviceHandle: Closing handle for volume %d", volumeKey);
+    LogMessage("CloseDeviceHandle: Closing handle for volume %u", volumeKey);
+
+    if(! g_iTEUFDrs_instance) {
+        return;
+    }
+
+    if(volumeKey >= ITEUFDRS_MAX_SCANNED_DRIVES) {
+        return;
+    }
+
+    const size_t volumeOffset = static_cast<size_t>(volumeKey) * ITEUFDRS_VOLUME_STRIDE_BYTES;
+    HANDLE* handleStorage = reinterpret_cast<HANDLE*>(
+        reinterpret_cast<BYTE*>(g_iTEUFDrs_instance) + ITEUFDRS_OFFSET_VOLUME_DEVICE_HANDLE_BASE
+        + volumeOffset);
+
+    HANDLE hDevice = *handleStorage;
+    if(hDevice == NULL || hDevice == INVALID_HANDLE_VALUE) {
+        return;
+    }
+
+    CloseHandle(hDevice);
+    *handleStorage = INVALID_HANDLE_VALUE;
 }
 
 void AssignDeviceSizeString(BYTE* buffer) {
@@ -2886,10 +2973,27 @@ void AssignDeviceSizeString(BYTE* buffer) {
 }
 
 int GetBCMInfo(int deviceStructBase, DWORD deviceHandle) {
-    LogMessage("GetBCMInfo: Reading BCM information from device");
-    // This function calls the SDK function pointer at DAT_004ad5f0
-    // For now, return success as stub
-    return 1;
+    if(! g_iTEUFDrs_instance) {
+        LogError("GetBCMInfo: No global instance available");
+        return 0;
+    }
+
+    if(deviceStructBase < 0 || deviceStructBase >= MAX_VOLUMES) {
+        LogError("GetBCMInfo: Invalid device index %d", deviceStructBase);
+        return 0;
+    }
+
+    if(! g_pFLH_ReadBCM) {
+        LogError("GetBCMInfo: Required SDK function FLH_ReadBCM not available");
+        return 0;
+    }
+
+    BYTE* ctrlBuffer = reinterpret_cast<BYTE*>(g_iTEUFDrs_instance)
+                       + static_cast<size_t>(deviceStructBase) * ITEUFDRS_DEVICE_STRIDE_BYTES
+                       + ITEUFDRS_OFFSET_DEVICE_CTRL_BUFFER;
+
+    PFN_FLH_ReadBCM_Alt readBcm = reinterpret_cast<PFN_FLH_ReadBCM_Alt>(g_pFLH_ReadBCM);
+    return readBcm(ctrlBuffer, (HANDLE) (UINT_PTR) deviceHandle);
 }
 
 /* SYSTEMATIC FUNCTION RECONSTRUCTION - NotifyFwSegmentInfo
@@ -2919,82 +3023,49 @@ int GetBCMInfo(int deviceStructBase, DWORD deviceHandle) {
  * - DAT_004ad5ec = g_FLH_InitCTRL
  */
 char NotifyFwSegmentInfo(int deviceIndex, DWORD deviceHandle) {
-    LogMessage(
-        "NotifyFwSegmentInfo: SYSTEMATIC RECONSTRUCTION - device %d, handle 0x%08X",
-        deviceIndex,
-        deviceHandle);
-
-    // Verify global instance is available for device structure access
     if(! g_iTEUFDrs_instance) {
         LogError("NotifyFwSegmentInfo: No global instance available");
         return 0;
     }
 
-    // Verify device index is valid (byte range)
-    if(deviceIndex >= MAX_VOLUMES || deviceIndex < 0) {
+    if(deviceIndex < 0 || deviceIndex >= MAX_VOLUMES) {
         LogError("NotifyFwSegmentInfo: Invalid device index %d", deviceIndex);
         return 0;
     }
 
-    // Verify required SDK functions are loaded
     if(! g_pFLH_ArrangeSegmentPara || ! g_pFLH_InitCTRL) {
         LogError("NotifyFwSegmentInfo: Required SDK functions not available");
         return 0;
     }
 
-    // EXACT GHIDRA RECONSTRUCTION: Calculate device offset
-    // Original: param_1 = param_1 + (uint)param_2 * 0x1daa;
-    // This points to specific device structure in device array
-    // Using deviceIndex to access volume information from iTEUFDrs instance
-    _DEVICE_VOLUME_INFO& volume = g_iTEUFDrs_instance->m_deviceInfo.volumes[deviceIndex];
+    BYTE* deviceStructBase =
+        reinterpret_cast<BYTE*>(g_iTEUFDrs_instance)
+        + static_cast<size_t>(static_cast<BYTE>(deviceIndex)) * ITEUFDRS_DEVICE_STRIDE_BYTES;
 
-    // EXACT GHIDRA RECONSTRUCTION: Check if segments already loaded
-    // Original: if (*(char *)(param_1 + 0x9fb) == '\0')
-    if(! volume.fwSegmentNotified) {
-        LogMessage(
-            "NotifyFwSegmentInfo: Initializing firmware segments for device %d", deviceIndex);
-
-        // EXACT GHIDRA RECONSTRUCTION: Initialize 128-byte segment buffer
-        // Original: _memset(auStack_90,0,0x80); (0x80 = 128 decimal)
-        BYTE segmentBuffer[128];
-        memset(segmentBuffer, 0, 128);
-
-        // EXACT GHIDRA RECONSTRUCTION: Call FLH_ArrangeSegmentPara
-        // Original: (*DAT_004ad5f4)(auStack_90,param_1 + 0x1866);
-        // param_1 + 0x1866 = segment data in device structure
-        PFN_FLH_ArrangeSegmentPara arrangeFunc =
-            (PFN_FLH_ArrangeSegmentPara) g_pFLH_ArrangeSegmentPara;
-        arrangeFunc(segmentBuffer, volume.segmentInfo);
-
-        // EXACT GHIDRA RECONSTRUCTION: Call FLH_InitCTRL
-        // Original: iVar3 = (*DAT_004ad5ec)(param_3,auStack_90,param_1 + 0xa26);
-        // param_3 = device handle, param_1 + 0xa26 = BCM buffer
-        PFN_FLH_InitCTRL initFunc = (PFN_FLH_InitCTRL) g_pFLH_InitCTRL;
-        int result = initFunc((HANDLE) (uintptr_t) deviceHandle, segmentBuffer, volume.bcmInfo);
-
-        // EXACT GHIDRA RECONSTRUCTION: Check result
-        // Original: if (iVar3 != 1) { debug_log_message("Notify Fw segment information fail"); }
-        if(result != 1) {
-            LogError("NotifyFwSegmentInfo: Notify Fw segment information fail (result=%d)", result);
-            return 0;
-        }
-
-        // EXACT GHIDRA RECONSTRUCTION: Set loaded flag
-        // Original: *(undefined1 *)(param_1 + 0x9fb) = 1;
-        volume.fwSegmentNotified = TRUE;
-
-        LogMessage(
-            "NotifyFwSegmentInfo: Firmware segments initialized successfully for device %d",
-            deviceIndex);
-    } else {
-        LogMessage(
-            "NotifyFwSegmentInfo: Firmware segments already loaded for device %d", deviceIndex);
+    if(deviceStructBase[ITEUFDRS_OFFSET_DEVICE_FW_SEGMENT_NOTIFIED] != 0) {
+        return 1;
     }
 
-    LogMessage(
-        "NotifyFwSegmentInfo: SUCCESS - device %d firmware segment notification completed",
-        deviceIndex);
-    return 1;  // Success
+    BYTE segmentParams[ITEUFDRS_SEGMENT_PARAMS_SIZE_BYTES];
+    memset(segmentParams, 0, sizeof(segmentParams));
+
+    PFN_FLH_ArrangeSegmentPara arrangeFunc =
+        reinterpret_cast<PFN_FLH_ArrangeSegmentPara>(g_pFLH_ArrangeSegmentPara);
+    arrangeFunc(segmentParams, deviceStructBase + ITEUFDRS_OFFSET_DEVICE_SEGMENT_INFO);
+
+    PFN_FLH_InitCTRL initCtrl = reinterpret_cast<PFN_FLH_InitCTRL>(g_pFLH_InitCTRL);
+    const int initResult = initCtrl(
+        (HANDLE) (UINT_PTR) deviceHandle,
+        segmentParams,
+        deviceStructBase + ITEUFDRS_OFFSET_DEVICE_CTRL_BUFFER);
+
+    if(initResult != ITEUFDRS_SDK_RESULT_SUCCESS) {
+        LogError("NotifyFwSegmentInfo: Notify Fw segment information fail (result=%d)", initResult);
+        return 0;
+    }
+
+    deviceStructBase[ITEUFDRS_OFFSET_DEVICE_FW_SEGMENT_NOTIFIED] = 1;
+    return 1;
 }
 
 char GetMPInfo(int deviceIndex, DWORD deviceHandle) {

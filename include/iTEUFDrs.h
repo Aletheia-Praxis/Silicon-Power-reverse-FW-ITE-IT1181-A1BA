@@ -24,6 +24,8 @@ public:
     friend BYTE OpenDriveHandleAgain();
     friend void SetDeviceID();
     friend void VolumePairController();
+    friend char OpenLogicalDriveHandle(BYTE volumeIndex);
+    friend char OpenPhysicalDriveHandle(BYTE volumeIndex);
     friend char NotifyFwSegmentInfo(int deviceIndex, DWORD deviceHandle);
 
 private:
