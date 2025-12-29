@@ -24,7 +24,7 @@ extern SDK_FUNCTION_PTR g_pBlkAddr2RawAddr;
 extern SDK_FUNCTION_PTR g_pFLH_GetBCMInfo;
 
 // External function declarations from iTEUFDrs.cpp
-extern char CheckNeedLoadBank(UINT deviceIndex, DWORD deviceHandle);
+extern char CheckNeedLoadBank(BYTE deviceIndex, DWORD deviceHandle);
 extern void SetDatabasePathAndOpen();
 extern void UpdateBankStatusFlags(BYTE deviceIndex);
 extern void AssignDeviceFlagFromBank(BYTE deviceIndex, DWORD deviceHandle);
@@ -35,7 +35,7 @@ extern BYTE AnalyzeSpareAreaAndClassifyBlock(
     DWORD blockAddr,
     DWORD deviceHandle,
     DWORD* pVerificationBuffer,
-    UINT_PTR bcmOffset);
+    DWORD deviceStructBase);
 
 // Global iTEUFDrs instance pointer (used by all functions)
 extern iTEUFDrs* g_iTEUFDrs_instance;
