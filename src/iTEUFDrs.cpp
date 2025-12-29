@@ -89,6 +89,19 @@ static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_POSTMPINFO_MSG2 = 0x0048CF94;
 static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_DEVICE_DISPLAY_FMT_MAIN = 0x0048CF80;
 static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_DEVICE_DISPLAY_FMT_EXTRA = 0x0048CF78;
 static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_DEVICE_DISPLAY_APPEND_FAIL = 0x0048CF50;
+static constexpr const char* ITEUFDRS_ORIG_STR_POSTMPINFO_FMT = " %s - %s ";
+static constexpr const char* ITEUFDRS_ORIG_STR_POSTMPINFO_DEFAULT = " NONE";
+static constexpr const char* ITEUFDRS_ORIG_STR_POSTMPINFO_FMT_FAIL =
+    "GetDeviceInfo: Formatted String Buffer fails.";
+static constexpr const char* ITEUFDRS_ORIG_STR_POSTMPINFO_MSG1 =
+    "DoRepairDevice No System (!ISPLoad)";
+static constexpr const char* ITEUFDRS_ORIG_STR_POSTMPINFO_MSG2 =
+    "DoRepairDevice System Yes bISPLoaded";
+static constexpr const char* ITEUFDRS_ORIG_STR_DEVICE_DISPLAY_FMT_MAIN =
+    " %s%s , ( %C )\n%s";
+static constexpr const char* ITEUFDRS_ORIG_STR_DEVICE_DISPLAY_FMT_EXTRA = "( %C )";
+static constexpr const char* ITEUFDRS_ORIG_STR_DEVICE_DISPLAY_APPEND_FAIL =
+    "GetDeviceInfo: Cat String Buffer fails.";
 static constexpr size_t ITEUFDRS_MAX_SCANNED_DRIVES = 24;
 static constexpr char ITEUFDRS_DRIVE_LETTERS[ITEUFDRS_MAX_SCANNED_DRIVES + 1] =
     "CDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -117,21 +130,46 @@ static void CopyNullTerminatedStringFixed(char* dst, const char* src, size_t dst
     dst[i] = '\0';
 }
 
+static void NormalizePrintfFormatForVsnprintf(char* dst, size_t dstSize, const char* src) {
+    if(! dst || dstSize == 0) {
+        return;
+    }
+
+    dst[0] = '\0';
+    if(! src) {
+        return;
+    }
+
+    size_t out = 0;
+    for(size_t i = 0; src[i] != '\0' && out + 1 < dstSize; ++i) {
+        if(src[i] == '%' && src[i + 1] == 'C') {
+            dst[out++] = '%';
+            if(out + 1 < dstSize) {
+                dst[out++] = 'c';
+            }
+            ++i;
+            continue;
+        }
+
+        dst[out++] = src[i];
+    }
+
+    dst[out] = '\0';
+}
+
 static int AppendToFixedBuffer(char* dst, size_t dstSize, const char* src) {
     if(! dst || dstSize == 0 || ! src) {
         return ITEUFDRS_HRESULT_INVALID_ARG;
     }
 
     size_t dstLen = 0;
-    for(; dstLen < dstSize && dst[dstLen] != '\0'; ++dstLen) {
-    }
+    for(; dstLen < dstSize && dst[dstLen] != '\0'; ++dstLen) {}
     if(dstLen >= dstSize) {
         return ITEUFDRS_HRESULT_INVALID_ARG;
     }
 
     size_t srcLen = 0;
-    for(; src[srcLen] != '\0'; ++srcLen) {
-    }
+    for(; src[srcLen] != '\0'; ++srcLen) {}
 
     const size_t remaining = dstSize - dstLen - 1;
     if(srcLen > remaining) {
@@ -162,53 +200,43 @@ static void UpdatePostMpInfoState(char mpInfoResult) {
             reinterpret_cast<char*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_MPINFO_TEXT);
 
         if(mpInfoResult != 0) {
-            const DWORD mpParam = *reinterpret_cast<const DWORD*>(
-                instanceBytes + ITEUFDRS_OFFSET_INSTANCE_MPINFO_PARAM);
-            const BYTE* mpExtra = instanceBytes + ITEUFDRS_OFFSET_INSTANCE_MPINFO_EXTRA;
+            // Ghidra calls 0x004094a0 with format pointer 0x0048D018 (" %s - %s ")
+            char fmtNormalized[64] = {};
+            NormalizePrintfFormatForVsnprintf(
+                fmtNormalized, sizeof(fmtNormalized), ITEUFDRS_ORIG_STR_POSTMPINFO_FMT);
 
-            // Ghidra calls 0x004094a0 with format pointer 0x0048D018.
+            const char* mpParamAsString = reinterpret_cast<const char*>(
+                instanceBytes + ITEUFDRS_OFFSET_INSTANCE_MPINFO_PARAM);
+            const char* mpExtraAsString = reinterpret_cast<const char*>(
+                instanceBytes + ITEUFDRS_OFFSET_INSTANCE_MPINFO_EXTRA);
+
             const int formatResult = FormatStringToBuffer(
                 mpText,
                 static_cast<int>(ITEUFDRS_INSTANCE_MPINFO_TEXT_SIZE_BYTES),
-                "MP:%08X %02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
-                mpParam,
-                mpExtra[0],
-                mpExtra[1],
-                mpExtra[2],
-                mpExtra[3],
-                mpExtra[4],
-                mpExtra[5],
-                mpExtra[6],
-                mpExtra[7],
-                mpExtra[8],
-                mpExtra[9],
-                mpExtra[10],
-                mpExtra[11]);
+                fmtNormalized,
+                mpParamAsString,
+                mpExtraAsString);
 
             if(formatResult != 0) {
-                LogMessage(
-                    "PostMPInfo format failed: msg=%p (orig 0x0040d34f)",
-                    (void*) ITEUFDRS_ORIG_MSG_PTR_POSTMPINFO_MSG0);
+                LogMessage("%s", ITEUFDRS_ORIG_STR_POSTMPINFO_FMT_FAIL);
             }
 
             instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_READY_FLAG] = 1;
         } else {
-            // Ghidra copies from 0x0048CFE0 to instance+0x208 (size 0x40)
-            CopyNullTerminatedStringFixed(mpText, "", ITEUFDRS_INSTANCE_MPINFO_TEXT_SIZE_BYTES);
+            CopyNullTerminatedStringFixed(
+                mpText,
+                ITEUFDRS_ORIG_STR_POSTMPINFO_DEFAULT,
+                ITEUFDRS_INSTANCE_MPINFO_TEXT_SIZE_BYTES);
             instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_READY_FLAG] = 0;
         }
 
         // 0x0040d3aa..0x0040d3dc
         const BYTE dl = instanceBytes[ITEUFDRS_OFFSET_INSTANCE_CONNECTION_STATUS];
         if((instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_READY_FLAG] & dl) != 0) {
-            LogMessage(
-                "PostMPInfo: msg=%p (orig 0x0040d3cb)",
-                (void*) ITEUFDRS_ORIG_MSG_PTR_POSTMPINFO_MSG2);
+            LogMessage("%s", ITEUFDRS_ORIG_STR_POSTMPINFO_MSG2);
             instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_MESSAGE_FLAG] = 0;
         } else {
-            LogMessage(
-                "PostMPInfo: msg=%p (orig 0x0040d3b8)",
-                (void*) ITEUFDRS_ORIG_MSG_PTR_POSTMPINFO_MSG1);
+            LogMessage("%s", ITEUFDRS_ORIG_STR_POSTMPINFO_MSG1);
             instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_MESSAGE_FLAG] = 1;
         }
     }
@@ -2324,9 +2352,9 @@ char iTEUFDrs_DetectAndInitializeDevices() {
         instanceBytes[ITEUFDRS_OFFSET_INSTANCE_ACTIVE_DEVICE_INDEX] = 0xFF;
 
         for(BYTE deviceIndex = 0; deviceIndex < deviceInfo.volumeCount; ++deviceIndex) {
-            BYTE* deviceStructBase = reinterpret_cast<BYTE*>(g_iTEUFDrs_instance)
-                                     + static_cast<size_t>(deviceIndex)
-                                           * ITEUFDRS_DEVICE_STRIDE_BYTES;
+            BYTE* deviceStructBase =
+                reinterpret_cast<BYTE*>(g_iTEUFDrs_instance)
+                + static_cast<size_t>(deviceIndex) * ITEUFDRS_DEVICE_STRIDE_BYTES;
             if(deviceStructBase[ITEUFDRS_OFFSET_DEVICE_PROCESSED_FLAG] != 0) {
                 instanceBytes[ITEUFDRS_OFFSET_INSTANCE_ACTIVE_DEVICE_INDEX] = deviceIndex;
                 break;
@@ -2339,21 +2367,23 @@ char iTEUFDrs_DetectAndInitializeDevices() {
         // 0x0040d44a..0x0040d4c2 (format display string + copy 8 bytes)
         if constexpr(
             ITEUFDRS_OFFSET_INSTANCE_DISPLAY_TEXT + ITEUFDRS_INSTANCE_DISPLAY_TEXT_SIZE_BYTES
-                    <= sizeof(iTEUFDrs)
+                <= sizeof(iTEUFDrs)
             && ITEUFDRS_OFFSET_VOLUME_DRIVE_LETTER_BASE < sizeof(iTEUFDrs)
             && ITEUFDRS_OFFSET_VOLUME_STRING_PRIMARY < sizeof(iTEUFDrs)
             && ITEUFDRS_OFFSET_VOLUME_STRING_SECONDARY < sizeof(iTEUFDrs)
             && ITEUFDRS_OFFSET_VOLUME_ID_BYTES + ITEUFDRS_INSTANCE_DEVICE_ID_BYTES_LEN
-                    <= sizeof(iTEUFDrs)
+                   <= sizeof(iTEUFDrs)
             && ITEUFDRS_OFFSET_INSTANCE_DEVICE_ID_BYTES + ITEUFDRS_INSTANCE_DEVICE_ID_BYTES_LEN
-                    <= sizeof(iTEUFDrs)) {
-            const BYTE activeDeviceIndex = instanceBytes[ITEUFDRS_OFFSET_INSTANCE_ACTIVE_DEVICE_INDEX];
+                   <= sizeof(iTEUFDrs)) {
+            const BYTE activeDeviceIndex =
+                instanceBytes[ITEUFDRS_OFFSET_INSTANCE_ACTIVE_DEVICE_INDEX];
             if(activeDeviceIndex != 0xFF) {
-                const BYTE* deviceStructBase = instanceBytes
-                                               + static_cast<size_t>(activeDeviceIndex)
-                                                     * ITEUFDRS_DEVICE_STRIDE_BYTES;
+                const BYTE* deviceStructBase =
+                    instanceBytes
+                    + static_cast<size_t>(activeDeviceIndex) * ITEUFDRS_DEVICE_STRIDE_BYTES;
                 const BYTE volumeKey = deviceStructBase[ITEUFDRS_OFFSET_DEVICE_SELECTED_VOLUME_KEY];
-                const size_t volumeOffset = static_cast<size_t>(volumeKey) * ITEUFDRS_VOLUME_STRIDE_BYTES;
+                const size_t volumeOffset =
+                    static_cast<size_t>(volumeKey) * ITEUFDRS_VOLUME_STRIDE_BYTES;
 
                 const char driveLetter = *reinterpret_cast<const char*>(
                     instanceBytes + ITEUFDRS_OFFSET_VOLUME_DRIVE_LETTER_BASE + volumeOffset);
@@ -2362,22 +2392,24 @@ char iTEUFDrs_DetectAndInitializeDevices() {
                 const char* secondaryString = reinterpret_cast<const char*>(
                     instanceBytes + ITEUFDRS_OFFSET_VOLUME_STRING_SECONDARY + volumeOffset);
 
-                char* displayText = reinterpret_cast<char*>(
-                    instanceBytes + ITEUFDRS_OFFSET_INSTANCE_DISPLAY_TEXT);
+                char* displayText =
+                    reinterpret_cast<char*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_DISPLAY_TEXT);
 
-                (void) ITEUFDRS_ORIG_MSG_PTR_POSTMPINFO_MSG0;
+                char fmtMainNormalized[64] = {};
+                NormalizePrintfFormatForVsnprintf(
+                    fmtMainNormalized,
+                    sizeof(fmtMainNormalized),
+                    ITEUFDRS_ORIG_STR_DEVICE_DISPLAY_FMT_MAIN);
+
                 const int formatResult = FormatStringToBuffer(
                     displayText,
                     static_cast<int>(ITEUFDRS_INSTANCE_DISPLAY_TEXT_SIZE_BYTES),
-                    "Vol:%c %s %s Size:%s",
-                    driveLetter,
                     primaryString,
                     secondaryString,
+                    driveLetter,
                     deviceSizeLabel);
                 if(formatResult != 0) {
-                    LogMessage(
-                        "Display format failed: fmt=%p (orig 0x004094a0)",
-                        (void*) ITEUFDRS_ORIG_MSG_PTR_DEVICE_DISPLAY_FMT_MAIN);
+                    LogMessage("%s", ITEUFDRS_ORIG_STR_POSTMPINFO_FMT_FAIL);
                 }
 
                 const BYTE* idBytesSrc =
@@ -2388,8 +2420,8 @@ char iTEUFDrs_DetectAndInitializeDevices() {
                 // 0x0040d4c4..0x0040d5e1 (append up to 3 additional volume keys)
                 for(size_t controllerIndex = 1; controllerIndex < ITEUFDRS_DEVICE_VOLUME_KEYS_COUNT;
                     ++controllerIndex) {
-                    const BYTE extraVolumeKey =
-                        deviceStructBase[ITEUFDRS_OFFSET_DEVICE_SELECTED_VOLUME_KEY + controllerIndex];
+                    const BYTE extraVolumeKey = deviceStructBase
+                        [ITEUFDRS_OFFSET_DEVICE_SELECTED_VOLUME_KEY + controllerIndex];
                     if(extraVolumeKey == 0xFF) {
                         break;
                     }
@@ -2397,13 +2429,21 @@ char iTEUFDrs_DetectAndInitializeDevices() {
                     const size_t extraVolumeOffset =
                         static_cast<size_t>(extraVolumeKey) * ITEUFDRS_VOLUME_STRIDE_BYTES;
                     const char extraDriveLetter = *reinterpret_cast<const char*>(
-                        instanceBytes + ITEUFDRS_OFFSET_VOLUME_DRIVE_LETTER_BASE + extraVolumeOffset);
+                        instanceBytes + ITEUFDRS_OFFSET_VOLUME_DRIVE_LETTER_BASE
+                        + extraVolumeOffset);
 
                     char extraPart[0x100] = {};
+
+                    char fmtExtraNormalized[32] = {};
+                    NormalizePrintfFormatForVsnprintf(
+                        fmtExtraNormalized,
+                        sizeof(fmtExtraNormalized),
+                        ITEUFDRS_ORIG_STR_DEVICE_DISPLAY_FMT_EXTRA);
+
                     const int extraFormatResult = FormatStringToBuffer(
                         extraPart,
                         static_cast<int>(sizeof(extraPart)),
-                        " %c",
+                        fmtExtraNormalized,
                         extraDriveLetter);
                     if(extraFormatResult != 0) {
                         LogMessage(
@@ -2415,10 +2455,7 @@ char iTEUFDrs_DetectAndInitializeDevices() {
                     const int appendResult = AppendToFixedBuffer(
                         displayText, ITEUFDRS_INSTANCE_DISPLAY_TEXT_SIZE_BYTES, extraPart);
                     if(appendResult != 0) {
-                        LogMessage(
-                            "Display append failed: msg=%p (orig 0x00406170), hr=0x%08X",
-                            (void*) ITEUFDRS_ORIG_MSG_PTR_DEVICE_DISPLAY_APPEND_FAIL,
-                            static_cast<unsigned int>(appendResult));
+                        LogMessage("%s", ITEUFDRS_ORIG_STR_DEVICE_DISPLAY_APPEND_FAIL);
                         break;
                     }
                 }
@@ -3411,9 +3448,8 @@ void AssignDeviceSizeString(BYTE* buffer) {
         return;
     }
 
-    const BYTE* deviceStructBase = instanceBytes
-                                   + static_cast<size_t>(activeDeviceIndex)
-                                         * ITEUFDRS_DEVICE_STRIDE_BYTES;
+    const BYTE* deviceStructBase =
+        instanceBytes + static_cast<size_t>(activeDeviceIndex) * ITEUFDRS_DEVICE_STRIDE_BYTES;
 
     float sizeValueFloat = 0.0f;
     memcpy(&sizeValueFloat, deviceStructBase + ITEUFDRS_OFFSET_DEVICE_SIZE_FLOAT, sizeof(float));
@@ -3425,20 +3461,10 @@ void AssignDeviceSizeString(BYTE* buffer) {
     };
 
     static constexpr SizeLabelEntry sizeLabels[] = {
-        { 0x80, "128M" },
-        { 0x100, "256M" },
-        { 0x200, "512M" },
-        { 0x400, "1G" },
-        { 0x800, "2G" },
-        { 0x1000, "4G" },
-        { 0x2000, "8G" },
-        { 0x4000, "16G" },
-        { 0x8000, "32G" },
-        { 0x10000, "64G" },
-        { 0x20000, "128G" },
-        { 0x40000, "256G" },
-        { 0x80000, "512G" },
-        { 0x100000, "1T" },
+        { 0x80, "128M" },    { 0x100, "256M" },  { 0x200, "512M" },   { 0x400, "1G" },
+        { 0x800, "2G" },     { 0x1000, "4G" },   { 0x2000, "8G" },    { 0x4000, "16G" },
+        { 0x8000, "32G" },   { 0x10000, "64G" }, { 0x20000, "128G" }, { 0x40000, "256G" },
+        { 0x80000, "512G" }, { 0x100000, "1T" },
     };
 
     int selectedIndex = 0;
