@@ -89,6 +89,20 @@ static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_POSTMPINFO_MSG2 = 0x0048CF94;
 static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_DEVICE_DISPLAY_FMT_MAIN = 0x0048CF80;
 static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_DEVICE_DISPLAY_FMT_EXTRA = 0x0048CF78;
 static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_DEVICE_DISPLAY_APPEND_FAIL = 0x0048CF50;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_SIZE_LABEL_128MB = 0x0048CA04;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_SIZE_LABEL_256MB = 0x0048C9FC;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_SIZE_LABEL_512MB = 0x0048C9F4;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_SIZE_LABEL_1GB = 0x0048C9F0;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_SIZE_LABEL_2GB = 0x0048C9EC;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_SIZE_LABEL_4GB = 0x0048C9E8;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_SIZE_LABEL_8GB = 0x0048C9E4;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_SIZE_LABEL_16GB = 0x0048C9DC;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_SIZE_LABEL_32GB = 0x0048C9D4;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_SIZE_LABEL_64GB = 0x0048C9CC;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_SIZE_LABEL_128GB = 0x0048C9C4;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_SIZE_LABEL_256GB = 0x0048C9BC;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_SIZE_LABEL_512GB = 0x0048C9B4;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_SIZE_LABEL_1TB = 0x0048C9B0;
 static constexpr const char* ITEUFDRS_ORIG_STR_POSTMPINFO_FMT = " %s - %s ";
 static constexpr const char* ITEUFDRS_ORIG_STR_POSTMPINFO_DEFAULT = " NONE";
 static constexpr const char* ITEUFDRS_ORIG_STR_POSTMPINFO_FMT_FAIL =
@@ -102,6 +116,20 @@ static constexpr const char* ITEUFDRS_ORIG_STR_DEVICE_DISPLAY_FMT_MAIN =
 static constexpr const char* ITEUFDRS_ORIG_STR_DEVICE_DISPLAY_FMT_EXTRA = "( %C )";
 static constexpr const char* ITEUFDRS_ORIG_STR_DEVICE_DISPLAY_APPEND_FAIL =
     "GetDeviceInfo: Cat String Buffer fails.";
+static constexpr const char* ITEUFDRS_ORIG_STR_SIZE_LABEL_128MB = "128MB";
+static constexpr const char* ITEUFDRS_ORIG_STR_SIZE_LABEL_256MB = "256MB";
+static constexpr const char* ITEUFDRS_ORIG_STR_SIZE_LABEL_512MB = "512MB";
+static constexpr const char* ITEUFDRS_ORIG_STR_SIZE_LABEL_1GB = "1GB";
+static constexpr const char* ITEUFDRS_ORIG_STR_SIZE_LABEL_2GB = "2GB";
+static constexpr const char* ITEUFDRS_ORIG_STR_SIZE_LABEL_4GB = "4GB";
+static constexpr const char* ITEUFDRS_ORIG_STR_SIZE_LABEL_8GB = "8GB";
+static constexpr const char* ITEUFDRS_ORIG_STR_SIZE_LABEL_16GB = "16GB";
+static constexpr const char* ITEUFDRS_ORIG_STR_SIZE_LABEL_32GB = "32GB";
+static constexpr const char* ITEUFDRS_ORIG_STR_SIZE_LABEL_64GB = "64GB";
+static constexpr const char* ITEUFDRS_ORIG_STR_SIZE_LABEL_128GB = "128GB";
+static constexpr const char* ITEUFDRS_ORIG_STR_SIZE_LABEL_256GB = "256GB";
+static constexpr const char* ITEUFDRS_ORIG_STR_SIZE_LABEL_512GB = "512GB";
+static constexpr const char* ITEUFDRS_ORIG_STR_SIZE_LABEL_1TB = "1TB";
 static constexpr size_t ITEUFDRS_MAX_SCANNED_DRIVES = 24;
 static constexpr char ITEUFDRS_DRIVE_LETTERS[ITEUFDRS_MAX_SCANNED_DRIVES + 1] =
     "CDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -3460,7 +3488,8 @@ void AssignDeviceSizeString(BYTE* buffer) {
 
     float sizeValueFloat = 0.0f;
     memcpy(&sizeValueFloat, deviceStructBase + ITEUFDRS_OFFSET_DEVICE_SIZE_FLOAT, sizeof(float));
-    const int sizeValue = static_cast<int>(std::lround(static_cast<double>(sizeValueFloat)));
+    // Matches 0x00454b40 (CVTTSD2SI): truncation toward zero.
+    const int sizeValue = static_cast<int>(sizeValueFloat);
 
     struct SizeLabelEntry {
         int value;
@@ -3468,10 +3497,20 @@ void AssignDeviceSizeString(BYTE* buffer) {
     };
 
     static constexpr SizeLabelEntry sizeLabels[] = {
-        { 0x80, "128M" },    { 0x100, "256M" },  { 0x200, "512M" },   { 0x400, "1G" },
-        { 0x800, "2G" },     { 0x1000, "4G" },   { 0x2000, "8G" },    { 0x4000, "16G" },
-        { 0x8000, "32G" },   { 0x10000, "64G" }, { 0x20000, "128G" }, { 0x40000, "256G" },
-        { 0x80000, "512G" }, { 0x100000, "1T" },
+        { 0x80, ITEUFDRS_ORIG_STR_SIZE_LABEL_128MB },
+        { 0x100, ITEUFDRS_ORIG_STR_SIZE_LABEL_256MB },
+        { 0x200, ITEUFDRS_ORIG_STR_SIZE_LABEL_512MB },
+        { 0x400, ITEUFDRS_ORIG_STR_SIZE_LABEL_1GB },
+        { 0x800, ITEUFDRS_ORIG_STR_SIZE_LABEL_2GB },
+        { 0x1000, ITEUFDRS_ORIG_STR_SIZE_LABEL_4GB },
+        { 0x2000, ITEUFDRS_ORIG_STR_SIZE_LABEL_8GB },
+        { 0x4000, ITEUFDRS_ORIG_STR_SIZE_LABEL_16GB },
+        { 0x8000, ITEUFDRS_ORIG_STR_SIZE_LABEL_32GB },
+        { 0x10000, ITEUFDRS_ORIG_STR_SIZE_LABEL_64GB },
+        { 0x20000, ITEUFDRS_ORIG_STR_SIZE_LABEL_128GB },
+        { 0x40000, ITEUFDRS_ORIG_STR_SIZE_LABEL_256GB },
+        { 0x80000, ITEUFDRS_ORIG_STR_SIZE_LABEL_512GB },
+        { 0x100000, ITEUFDRS_ORIG_STR_SIZE_LABEL_1TB },
     };
 
     int selectedIndex = 0;
