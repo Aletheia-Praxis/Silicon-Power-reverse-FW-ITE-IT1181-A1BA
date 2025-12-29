@@ -27,11 +27,13 @@ void HandleCriticalError(DWORD errorCode, LPCSTR errorMessage) {
         errorCode,
         errorMessage ? errorMessage : "Unknown error");
 
-    // Display error message
-    MessageBoxA(NULL, errorMessage, "Critical Error", MB_OK | MB_ICONERROR);
+    if(errorMessage && errorMessage[0] != '\0') {
+        fprintf(stderr, "Critical Error: %s (code=%lu)\n", errorMessage, errorCode);
+    } else {
+        fprintf(stderr, "Critical Error: code=%lu\n", errorCode);
+    }
 
-    // Terminate the program
-    ExitProcess(errorCode);
+    std::exit((errorCode != 0) ? (int) errorCode : 1);
 }
 
 // Function to handle an IO error (decompiled from FUN_00457171)
@@ -42,8 +44,7 @@ void HandleIOError(DWORD errorCode, LPCSTR operation) {
 
     LogError("%s", errorMessage);
 
-    // Display error message
-    MessageBoxA(NULL, errorMessage, "IO Error", MB_OK | MB_ICONWARNING);
+    fprintf(stderr, "%s\n", errorMessage);
 }
 
 // Function to handle a memory error (decompiled from FUN_0045f280)
@@ -57,8 +58,7 @@ void HandleMemoryError(DWORD errorCode, LPCSTR operation) {
 
     LogError("%s", errorMessage);
 
-    // Display error message
-    MessageBoxA(NULL, errorMessage, "Memory Error", MB_OK | MB_ICONWARNING);
+    fprintf(stderr, "%s\n", errorMessage);
 }
 
 // Function to handle a firmware error (decompiled from FUN_0045f2b0)
@@ -72,8 +72,7 @@ void HandleFirmwareError(DWORD errorCode, LPCSTR operation) {
 
     LogError("%s", errorMessage);
 
-    // Display error message
-    MessageBoxA(NULL, errorMessage, "Firmware Error", MB_OK | MB_ICONWARNING);
+    fprintf(stderr, "%s\n", errorMessage);
 }
 
 // Function to check and handle an error
