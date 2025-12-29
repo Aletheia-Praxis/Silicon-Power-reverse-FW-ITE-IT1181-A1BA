@@ -23,6 +23,9 @@ static iTEUFDrs* g_iTEUFDrs_instance = nullptr;
 static constexpr size_t ITEUFDRS_OFFSET_USE_PHYSICAL_DRIVE_HANDLE = 0x8A0;
 static constexpr size_t ITEUFDRS_OFFSET_VOLUME_DRIVE_LETTER_BASE = 0x62A2;
 static constexpr size_t ITEUFDRS_OFFSET_VOLUME_DEVICE_HANDLE_BASE = 0x62A3;
+static constexpr size_t ITEUFDRS_OFFSET_VOLUME_STRING_PRIMARY = 0x62A7;
+static constexpr size_t ITEUFDRS_OFFSET_VOLUME_STRING_SECONDARY = 0x62B0;
+static constexpr size_t ITEUFDRS_OFFSET_VOLUME_ID_BYTES = 0x62EB;
 static constexpr size_t ITEUFDRS_VOLUME_STRIDE_BYTES = 0x57;
 static constexpr size_t ITEUFDRS_DEVICE_STRIDE_BYTES = 0x1DAA;
 static constexpr size_t ITEUFDRS_OFFSET_DEVICE_CTRL_BUFFER = 0xA26;
@@ -56,6 +59,10 @@ static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_MPINFO_EXTRA = 0x88F;
 static constexpr size_t ITEUFDRS_INSTANCE_MPINFO_EXTRA_SIZE_BYTES = 0x0C;
 static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_MPINFO_EXTRA_FLAG = 0x89B;
 static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_FLAG_106B71 = 0x106B71;
+static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_DISPLAY_TEXT = 0x8;
+static constexpr size_t ITEUFDRS_INSTANCE_DISPLAY_TEXT_SIZE_BYTES = 0x200;
+static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_DEVICE_ID_BYTES = 0x107338;
+static constexpr size_t ITEUFDRS_INSTANCE_DEVICE_ID_BYTES_LEN = 8;
 static constexpr size_t ITEUFDRS_OFFSET_DEVICE_FW_SEGMENT_NOTIFIED = 0x9FB;
 static constexpr size_t ITEUFDRS_OFFSET_DEVICE_PROCESSED_FLAG = 0x9A4;
 static constexpr size_t ITEUFDRS_OFFSET_DEVICE_SELECTED_VOLUME_KEY = 0x9A6;
@@ -79,10 +86,16 @@ static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_POSTMPINFO_DEFAULT = 0x0048CFE0;
 static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_POSTMPINFO_MSG0 = 0x0048CFE8;
 static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_POSTMPINFO_MSG1 = 0x0048CFBC;
 static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_POSTMPINFO_MSG2 = 0x0048CF94;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_DEVICE_DISPLAY_FMT_MAIN = 0x0048CF80;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_DEVICE_DISPLAY_FMT_EXTRA = 0x0048CF78;
+static constexpr UINT_PTR ITEUFDRS_ORIG_MSG_PTR_DEVICE_DISPLAY_APPEND_FAIL = 0x0048CF50;
 static constexpr size_t ITEUFDRS_MAX_SCANNED_DRIVES = 24;
 static constexpr char ITEUFDRS_DRIVE_LETTERS[ITEUFDRS_MAX_SCANNED_DRIVES + 1] =
     "CDEFGHIJKLMNOPQRSTUVWXYZ";
 static constexpr size_t ITEUFDRS_DEVICE_SIZE_LABEL_MAX_BYTES = 6;
+static constexpr size_t ITEUFDRS_DEVICE_VOLUME_KEYS_COUNT = 4;
+static constexpr int ITEUFDRS_HRESULT_INVALID_ARG = static_cast<int>(0x80070057);
+static constexpr int ITEUFDRS_HRESULT_INSUFFICIENT_BUFFER = static_cast<int>(0x8007007A);
 // clang-format on
 
 int FormatStringToBuffer(void* buffer, int size, const char* format, ...);
@@ -102,6 +115,32 @@ static void CopyNullTerminatedStringFixed(char* dst, const char* src, size_t dst
         dst[i] = src[i];
     }
     dst[i] = '\0';
+}
+
+static int AppendToFixedBuffer(char* dst, size_t dstSize, const char* src) {
+    if(! dst || dstSize == 0 || ! src) {
+        return ITEUFDRS_HRESULT_INVALID_ARG;
+    }
+
+    size_t dstLen = 0;
+    for(; dstLen < dstSize && dst[dstLen] != '\0'; ++dstLen) {
+    }
+    if(dstLen >= dstSize) {
+        return ITEUFDRS_HRESULT_INVALID_ARG;
+    }
+
+    size_t srcLen = 0;
+    for(; src[srcLen] != '\0'; ++srcLen) {
+    }
+
+    const size_t remaining = dstSize - dstLen - 1;
+    if(srcLen > remaining) {
+        return ITEUFDRS_HRESULT_INSUFFICIENT_BUFFER;
+    }
+
+    memcpy(dst + dstLen, src, srcLen);
+    dst[dstLen + srcLen] = '\0';
+    return 0;
 }
 
 static void UpdatePostMpInfoState(char mpInfoResult) {
@@ -2296,6 +2335,95 @@ char iTEUFDrs_DetectAndInitializeDevices() {
 
         char deviceSizeLabel[ITEUFDRS_DEVICE_SIZE_LABEL_MAX_BYTES] = {};
         AssignDeviceSizeString(reinterpret_cast<BYTE*>(deviceSizeLabel));
+
+        // 0x0040d44a..0x0040d4c2 (format display string + copy 8 bytes)
+        if constexpr(
+            ITEUFDRS_OFFSET_INSTANCE_DISPLAY_TEXT + ITEUFDRS_INSTANCE_DISPLAY_TEXT_SIZE_BYTES
+                    <= sizeof(iTEUFDrs)
+            && ITEUFDRS_OFFSET_VOLUME_DRIVE_LETTER_BASE < sizeof(iTEUFDrs)
+            && ITEUFDRS_OFFSET_VOLUME_STRING_PRIMARY < sizeof(iTEUFDrs)
+            && ITEUFDRS_OFFSET_VOLUME_STRING_SECONDARY < sizeof(iTEUFDrs)
+            && ITEUFDRS_OFFSET_VOLUME_ID_BYTES + ITEUFDRS_INSTANCE_DEVICE_ID_BYTES_LEN
+                    <= sizeof(iTEUFDrs)
+            && ITEUFDRS_OFFSET_INSTANCE_DEVICE_ID_BYTES + ITEUFDRS_INSTANCE_DEVICE_ID_BYTES_LEN
+                    <= sizeof(iTEUFDrs)) {
+            const BYTE activeDeviceIndex = instanceBytes[ITEUFDRS_OFFSET_INSTANCE_ACTIVE_DEVICE_INDEX];
+            if(activeDeviceIndex != 0xFF) {
+                const BYTE* deviceStructBase = instanceBytes
+                                               + static_cast<size_t>(activeDeviceIndex)
+                                                     * ITEUFDRS_DEVICE_STRIDE_BYTES;
+                const BYTE volumeKey = deviceStructBase[ITEUFDRS_OFFSET_DEVICE_SELECTED_VOLUME_KEY];
+                const size_t volumeOffset = static_cast<size_t>(volumeKey) * ITEUFDRS_VOLUME_STRIDE_BYTES;
+
+                const char driveLetter = *reinterpret_cast<const char*>(
+                    instanceBytes + ITEUFDRS_OFFSET_VOLUME_DRIVE_LETTER_BASE + volumeOffset);
+                const char* primaryString = reinterpret_cast<const char*>(
+                    instanceBytes + ITEUFDRS_OFFSET_VOLUME_STRING_PRIMARY + volumeOffset);
+                const char* secondaryString = reinterpret_cast<const char*>(
+                    instanceBytes + ITEUFDRS_OFFSET_VOLUME_STRING_SECONDARY + volumeOffset);
+
+                char* displayText = reinterpret_cast<char*>(
+                    instanceBytes + ITEUFDRS_OFFSET_INSTANCE_DISPLAY_TEXT);
+
+                (void) ITEUFDRS_ORIG_MSG_PTR_POSTMPINFO_MSG0;
+                const int formatResult = FormatStringToBuffer(
+                    displayText,
+                    static_cast<int>(ITEUFDRS_INSTANCE_DISPLAY_TEXT_SIZE_BYTES),
+                    "Vol:%c %s %s Size:%s",
+                    driveLetter,
+                    primaryString,
+                    secondaryString,
+                    deviceSizeLabel);
+                if(formatResult != 0) {
+                    LogMessage(
+                        "Display format failed: fmt=%p (orig 0x004094a0)",
+                        (void*) ITEUFDRS_ORIG_MSG_PTR_DEVICE_DISPLAY_FMT_MAIN);
+                }
+
+                const BYTE* idBytesSrc =
+                    instanceBytes + ITEUFDRS_OFFSET_VOLUME_ID_BYTES + volumeOffset;
+                BYTE* idBytesDst = instanceBytes + ITEUFDRS_OFFSET_INSTANCE_DEVICE_ID_BYTES;
+                memcpy(idBytesDst, idBytesSrc, ITEUFDRS_INSTANCE_DEVICE_ID_BYTES_LEN);
+
+                // 0x0040d4c4..0x0040d5e1 (append up to 3 additional volume keys)
+                for(size_t controllerIndex = 1; controllerIndex < ITEUFDRS_DEVICE_VOLUME_KEYS_COUNT;
+                    ++controllerIndex) {
+                    const BYTE extraVolumeKey =
+                        deviceStructBase[ITEUFDRS_OFFSET_DEVICE_SELECTED_VOLUME_KEY + controllerIndex];
+                    if(extraVolumeKey == 0xFF) {
+                        break;
+                    }
+
+                    const size_t extraVolumeOffset =
+                        static_cast<size_t>(extraVolumeKey) * ITEUFDRS_VOLUME_STRIDE_BYTES;
+                    const char extraDriveLetter = *reinterpret_cast<const char*>(
+                        instanceBytes + ITEUFDRS_OFFSET_VOLUME_DRIVE_LETTER_BASE + extraVolumeOffset);
+
+                    char extraPart[0x100] = {};
+                    const int extraFormatResult = FormatStringToBuffer(
+                        extraPart,
+                        static_cast<int>(sizeof(extraPart)),
+                        " %c",
+                        extraDriveLetter);
+                    if(extraFormatResult != 0) {
+                        LogMessage(
+                            "Extra display format failed: fmt=%p (orig 0x004094a0)",
+                            (void*) ITEUFDRS_ORIG_MSG_PTR_DEVICE_DISPLAY_FMT_EXTRA);
+                        continue;
+                    }
+
+                    const int appendResult = AppendToFixedBuffer(
+                        displayText, ITEUFDRS_INSTANCE_DISPLAY_TEXT_SIZE_BYTES, extraPart);
+                    if(appendResult != 0) {
+                        LogMessage(
+                            "Display append failed: msg=%p (orig 0x00406170), hr=0x%08X",
+                            (void*) ITEUFDRS_ORIG_MSG_PTR_DEVICE_DISPLAY_APPEND_FAIL,
+                            static_cast<unsigned int>(appendResult));
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     (void) usePhysicalDriveHandle;
