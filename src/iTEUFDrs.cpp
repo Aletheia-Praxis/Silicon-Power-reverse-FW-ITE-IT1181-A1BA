@@ -1838,8 +1838,7 @@ void UpdateDeviceCapacityOrCalculate(BYTE controllerIndex) {
       - Track active device count and current selection
 
    SECURITY NOTE: Implements self-copying mechanism and SDK loading verification.
-   ERROR HANDLING: Comprehensive error checking with specific AfxMessageBox alerts for different
-   failure modes.
+    ERROR HANDLING: Comprehensive error checking for different failure modes.
    UI INTEGRATION: Prepares all data structures needed for device list display in main dialog.
 */
 /**
