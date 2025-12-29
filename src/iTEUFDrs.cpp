@@ -158,26 +158,36 @@ static void NormalizePrintfFormatForVsnprintf(char* dst, size_t dstSize, const c
 }
 
 static int AppendToFixedBuffer(char* dst, size_t dstSize, const char* src) {
+    // Matches 0x0040d54a..0x0040d5c0 semantics:
+    // - dst must be NUL-terminated within dstSize, otherwise E_INVALIDARG
+    // - copy as much of src as possible while preserving a trailing NUL
+    // - if src doesn't fully fit, truncate and return E_INSUFFICIENT_BUFFER
     if(! dst || dstSize == 0 || ! src) {
         return ITEUFDRS_HRESULT_INVALID_ARG;
     }
 
-    size_t dstLen = 0;
-    for(; dstLen < dstSize && dst[dstLen] != '\0'; ++dstLen) {}
-    if(dstLen >= dstSize) {
+    size_t remaining = dstSize;
+    char* dstCursor = dst;
+    while(remaining != 0 && *dstCursor != '\0') {
+        ++dstCursor;
+        --remaining;
+    }
+    if(remaining == 0) {
         return ITEUFDRS_HRESULT_INVALID_ARG;
     }
 
-    size_t srcLen = 0;
-    for(; src[srcLen] != '\0'; ++srcLen) {}
+    size_t capacity = remaining - 1;
+    const char* srcCursor = src;
+    while(capacity != 0 && *srcCursor != '\0') {
+        *dstCursor++ = *srcCursor++;
+        --capacity;
+    }
 
-    const size_t remaining = dstSize - dstLen - 1;
-    if(srcLen > remaining) {
+    *dstCursor = '\0';
+    if(*srcCursor != '\0') {
         return ITEUFDRS_HRESULT_INSUFFICIENT_BUFFER;
     }
 
-    memcpy(dst + dstLen, src, srcLen);
-    dst[dstLen + srcLen] = '\0';
     return 0;
 }
 
@@ -2404,6 +2414,7 @@ char iTEUFDrs_DetectAndInitializeDevices() {
                 const int formatResult = FormatStringToBuffer(
                     displayText,
                     static_cast<int>(ITEUFDRS_INSTANCE_DISPLAY_TEXT_SIZE_BYTES),
+                    fmtMainNormalized,
                     primaryString,
                     secondaryString,
                     driveLetter,
@@ -2446,17 +2457,13 @@ char iTEUFDrs_DetectAndInitializeDevices() {
                         fmtExtraNormalized,
                         extraDriveLetter);
                     if(extraFormatResult != 0) {
-                        LogMessage(
-                            "Extra display format failed: fmt=%p (orig 0x004094a0)",
-                            (void*) ITEUFDRS_ORIG_MSG_PTR_DEVICE_DISPLAY_FMT_EXTRA);
-                        continue;
+                        LogMessage("%s", ITEUFDRS_ORIG_STR_POSTMPINFO_FMT_FAIL);
                     }
 
                     const int appendResult = AppendToFixedBuffer(
                         displayText, ITEUFDRS_INSTANCE_DISPLAY_TEXT_SIZE_BYTES, extraPart);
                     if(appendResult != 0) {
                         LogMessage("%s", ITEUFDRS_ORIG_STR_DEVICE_DISPLAY_APPEND_FAIL);
-                        break;
                     }
                 }
             }
