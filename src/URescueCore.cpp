@@ -30,6 +30,28 @@ static URESCUE_CONTEXT g_urescueContext;
 static BOOL g_bInitialized = FALSE;
 static HMODULE g_hSdk = NULL;
 
+static BOOL IsBlockedDevicePathA(const char* devicePath) {
+    if(! devicePath || ! devicePath[0]) {
+        return FALSE;
+    }
+
+    const char* kPhysicalDrivePrefix = "\\\\.\\PHYSICALDRIVE";
+    if(_strnicmp(devicePath, kPhysicalDrivePrefix, strlen(kPhysicalDrivePrefix)) == 0) {
+        return TRUE;
+    }
+
+    if(_strnicmp(devicePath, "\\\\.\\", 4) == 0 && strlen(devicePath) >= 6 && devicePath[4] >= 'A'
+       && devicePath[4] <= 'Z' && devicePath[5] == ':') {
+        return TRUE;
+    }
+
+    if(_strnicmp(devicePath, "\\\\?\\Volume", 9) == 0) {
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
 // Program initialization function (decompiled from the main function)
 BOOL InitializeURescue() {
     LogMessage("Initializing URescue application");
@@ -81,6 +103,12 @@ BOOL InitializeURescue() {
     // Load SDK
     if(! Load181FlashSDK(g_urescueContext.moduleDir, &g_hSdk)) {
         LogWarning("181FlashSDK.dll not loaded; some features may be unavailable");
+    } else {
+        if(! InitializeFlashSDK(g_hSdk)) {
+            LogWarning("181FlashSDK.dll loaded but API initialization failed; disabling SDK");
+            Unload181FlashSDK(g_hSdk);
+            g_hSdk = NULL;
+        }
     }
 
     // Initializing the program state
@@ -223,6 +251,15 @@ BOOL ConnectToDevice(LPCSTR devicePath) {
 
     if(! g_bInitialized) {
         LogError("URescue not initialized");
+        return FALSE;
+    }
+
+    if(IsBlockedDevicePathA(devicePath)) {
+        SetURescueError(ERROR_CALL_NOT_IMPLEMENTED);
+        LogError(
+            "ConnectToDevice: blocked device path until SCSI/vendor command protocol is "
+            "implemented: %s",
+            devicePath);
         return FALSE;
     }
 
