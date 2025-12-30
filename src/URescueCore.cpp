@@ -400,7 +400,7 @@ int LoadFirmwareFromFile(const char* filename, void** buffer, unsigned long* siz
         return 0;
     }
 
-    if(loadedSize > std::numeric_limits<unsigned long>::max()) {
+    if(loadedSize > (std::numeric_limits<unsigned long>::max)()) {
         LogError("Firmware file too large for current API: %s", filename);
         FreeMemory(loadedBuffer);
         return 0;
