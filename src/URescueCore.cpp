@@ -419,8 +419,10 @@ int WriteFirmwareToDevice(void* device, const void* firmware, unsigned long size
         return 0;
     }
 
-    // Stub implementation
-    return 1;
+    SetURescueError(ERROR_CALL_NOT_IMPLEMENTED);
+    LogError(
+        "WriteFirmwareToDevice: not implemented (USB transport write protocol not reconstructed)");
+    return 0;
 }
 
 int VerifyFirmwareOnDevice(void* device, const void* firmware, unsigned long size) {
@@ -431,8 +433,11 @@ int VerifyFirmwareOnDevice(void* device, const void* firmware, unsigned long siz
         return 0;
     }
 
-    // Stub implementation
-    return 1;
+    SetURescueError(ERROR_CALL_NOT_IMPLEMENTED);
+    LogError(
+        "VerifyFirmwareOnDevice: not implemented (USB transport verify protocol not "
+        "reconstructed)");
+    return 0;
 }
 
 void BuildDatabasePathsA(
