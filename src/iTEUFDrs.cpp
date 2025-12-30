@@ -43,9 +43,11 @@ static constexpr size_t ITEUFDRS_OFFSET_DEVICE_FLASH_PARAMS_TABLE2_DST = 0x2172;
 static constexpr size_t ITEUFDRS_DEVICE_FLASH_PARAMS_TABLE_DWORD_COUNT = 0x100;
 static constexpr size_t ITEUFDRS_OFFSET_DEVICE_LUN_DATA = 0x9AE;
 static constexpr size_t ITEUFDRS_DEVICE_LUN_DATA_SIZE_BYTES = 0x40;
+static constexpr size_t ITEUFDRS_OFFSET_DEVICE_ISP_CODE_INITIALIZED = 0x9F9;
 static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_DEVICE_CONNECTED = 0x881;
 static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_CONNECTION_STATUS = 0x882;
 static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_ACTIVE_DEVICE_INDEX = 0x9A3;
+static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_FIRMWARE_PATH = 0x570;
 static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_MPINFO_READY_FLAG = 0x880;
 static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_MPINFO_MESSAGE_FLAG = 0x883;
 static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_MPINFO_TEXT = 0x208;
@@ -354,6 +356,7 @@ void PrepareFirmwareFilePath();
 void ReadBinaryFileVersion();
 char CheckNeedLoadBank(BYTE deviceIndex, DWORD deviceHandle);
 BYTE InitializeISPCode(int deviceIndex, DWORD deviceHandle);
+BYTE CreateSystemAndTestUnitReady(int deviceIndex, DWORD deviceHandle);
 void SetDatabasePathAndOpen();
 void UpdateBankStatusFlags(BYTE deviceIndex);
 void AssignDeviceFlagFromBank(BYTE deviceIndex, DWORD deviceParam);
@@ -4046,4 +4049,149 @@ void EraseDeviceAndResetCPU(int deviceIndex, DWORD deviceHandle) {
     }
 
     LogMessage("Erase Good CPUReset...");
+}
+
+BYTE CreateSystemAndTestUnitReady(int deviceIndex, DWORD deviceHandle) {
+    if(! g_iTEUFDrs_instance) {
+        return 0;
+    }
+
+    BYTE* instanceBytes = reinterpret_cast<BYTE*>(g_iTEUFDrs_instance);
+    const BYTE activeDeviceIndex = instanceBytes[ITEUFDRS_OFFSET_INSTANCE_ACTIVE_DEVICE_INDEX];
+    const size_t activeDeviceOffset =
+        static_cast<size_t>(activeDeviceIndex) * ITEUFDRS_DEVICE_STRIDE_BYTES;
+
+    BYTE* activeDeviceBase = instanceBytes + activeDeviceOffset;
+    BYTE* bcmBase = activeDeviceBase + ITEUFDRS_OFFSET_DEVICE_CTRL_BUFFER;
+    BYTE* systemMapBase = instanceBytes + ITEUFDRS_OFFSET_INSTANCE_ERASE_MARKERS_BASE;
+
+    if(activeDeviceIndex == 0xFF) {
+        return 0;
+    }
+
+    if(activeDeviceBase[ITEUFDRS_OFFSET_DEVICE_ISP_CODE_INITIALIZED] == 0) {
+        const BYTE ispOk = InitializeISPCode(deviceIndex, deviceHandle);
+        if(ispOk == 0) {
+            return 0;
+        }
+    }
+
+    if(g_pFLH_FindRootTable) {
+#pragma pack(push, 1)
+        struct FindRootTableOut {
+            BYTE header[4];
+            DWORD blockIndices[5];
+            BYTE chipIndices[4];
+        };
+#pragma pack(pop)
+
+        static constexpr size_t ITEUFDRS_OFFSET_BCM_FLAGS = 0x0C;
+        static constexpr DWORD ITEUFDRS_MARKER_STRIDE_64K = 0x10000;
+        static constexpr DWORD ITEUFDRS_MARKER_STRIDE_128K = 0x20000;
+
+        typedef BYTE(__cdecl * PFN_FLH_FindRootTable_SystemPhase)(DWORD, void*, BYTE*, int);
+        PFN_FLH_FindRootTable_SystemPhase findRoot =
+            reinterpret_cast<PFN_FLH_FindRootTable_SystemPhase>(g_pFLH_FindRootTable);
+
+        FindRootTableOut out = {};
+
+        for(;;) {
+            const BYTE entryCount = findRoot(deviceHandle, &out.header[0], bcmBase, 1);
+            if(entryCount == 0) {
+                break;
+            }
+
+            DWORD clearCount = entryCount;
+            if(clearCount > (sizeof(out.blockIndices) / sizeof(out.blockIndices[0]))) {
+                clearCount =
+                    static_cast<DWORD>(sizeof(out.blockIndices) / sizeof(out.blockIndices[0]));
+            }
+            if(clearCount > sizeof(out.chipIndices)) {
+                clearCount = sizeof(out.chipIndices);
+            }
+
+            for(DWORD i = 0; i < clearCount; ++i) {
+                const DWORD blockIndex = out.blockIndices[i];
+                const BYTE chipIndex = out.chipIndices[i];
+
+                systemMapBase[static_cast<size_t>(chipIndex) * ITEUFDRS_MARKER_STRIDE_128K
+                              + blockIndex] = 0;
+
+                if((bcmBase[ITEUFDRS_OFFSET_BCM_FLAGS] & 0x80) != 0) {
+                    const DWORD shifted = blockIndex >> 1;
+                    const size_t pairIndex =
+                        (static_cast<size_t>(chipIndex) * ITEUFDRS_MARKER_STRIDE_64K + shifted) * 2;
+
+                    systemMapBase[pairIndex] = 0;
+                    systemMapBase[pairIndex + 1] = 0;
+                }
+            }
+        }
+    }
+
+    if(! g_pMP_EraseSystemTable || ! g_pMP_CreateSystem) {
+        return 0;
+    }
+
+    typedef int(__cdecl * PFN_MP_EraseSystemTable_Full)(DWORD, BYTE*, BYTE*);
+    const int eraseResult =
+        (reinterpret_cast<PFN_MP_EraseSystemTable_Full>(g_pMP_EraseSystemTable))(
+            deviceHandle,
+            bcmBase,
+            systemMapBase);
+
+    if(eraseResult != ITEUFDRS_SDK_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    const char* firmwarePath = reinterpret_cast<const char*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_FIRMWARE_PATH);
+
+    typedef int(__cdecl * PFN_MP_CreateSystem_Full)(DWORD, BYTE*, BYTE*, const char*, int);
+    const int createResult =
+        (reinterpret_cast<PFN_MP_CreateSystem_Full>(g_pMP_CreateSystem))(
+            deviceHandle,
+            bcmBase,
+            systemMapBase,
+            firmwarePath,
+            1);
+
+    if(createResult != ITEUFDRS_SDK_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    static constexpr DWORD ITEUFDRS_SYSREADY_SLEEP_MS = 500;
+    static constexpr int ITEUFDRS_SYSREADY_MAX_TRIES = 10;
+    Sleep(ITEUFDRS_SYSREADY_SLEEP_MS);
+
+    PFN_VDR_CheckSYSReady testUnitReady = nullptr;
+    if(g_sdk_api.STD_TestUnitReady) {
+        testUnitReady = reinterpret_cast<PFN_VDR_CheckSYSReady>(g_sdk_api.STD_TestUnitReady);
+    } else if(g_pSTD_TestUnitReady) {
+        testUnitReady = reinterpret_cast<PFN_VDR_CheckSYSReady>(g_pSTD_TestUnitReady);
+    }
+
+    if(! testUnitReady) {
+        return 0;
+    }
+
+    BYTE sysReadyBuffer[0xE40];
+    memset(sysReadyBuffer, 0, sizeof(sysReadyBuffer));
+
+    for(int attempt = 0; attempt < ITEUFDRS_SYSREADY_MAX_TRIES; ++attempt) {
+        const int ready = testUnitReady(
+            deviceHandle,
+            sysReadyBuffer,
+            static_cast<DWORD>(sizeof(sysReadyBuffer)),
+            0,
+            bcmBase,
+            1);
+
+        if(ready != 0) {
+            return 1;
+        }
+
+        Sleep(ITEUFDRS_SYSREADY_SLEEP_MS);
+    }
+
+    return 0;
 }
