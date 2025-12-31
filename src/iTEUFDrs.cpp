@@ -53,6 +53,7 @@ static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_ACTIVE_DEVICE_INDEX = 0x9A3;
 static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_FIRMWARE_PATH = 0x570;
 static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_MPINFO_READY_FLAG = 0x880;
 static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_MPINFO_MESSAGE_FLAG = 0x883;
+static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_DEVICE_LOCKED_FLAG = 0x884;
 static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_MPINFO_TEXT = 0x208;
 static constexpr size_t ITEUFDRS_INSTANCE_MPINFO_TEXT_SIZE_BYTES = 0x40;
 static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_MPINFO_BYTE1 = 0x887;
@@ -3701,6 +3702,63 @@ void CloseDeviceHandle(UINT volumeKey) {
     *handleStorage = NULL;
 }
 
+static void DismountAndUnlockDevice_408C30(HANDLE deviceHandle) {
+    if(! g_iTEUFDrs_instance) {
+        return;
+    }
+
+    if(deviceHandle == NULL || deviceHandle == INVALID_HANDLE_VALUE) {
+        return;
+    }
+
+    BYTE* instanceBytes = reinterpret_cast<BYTE*>(g_iTEUFDrs_instance);
+    if(instanceBytes[ITEUFDRS_OFFSET_INSTANCE_DEVICE_LOCKED_FLAG] != 1) {
+        return;
+    }
+
+    static constexpr DWORD ITEUFDRS_IOCTL_DISMOUNT_VOLUME = 0x90020;
+    static constexpr DWORD ITEUFDRS_IOCTL_UNLOCK_DEVICE = 0x9001C;
+
+    DWORD bytesReturned = 0;
+    const DWORD handleValue = static_cast<DWORD>((UINT_PTR) deviceHandle);
+
+    const BOOL dismountOk =
+        DeviceIoControl(
+            deviceHandle,
+            ITEUFDRS_IOCTL_DISMOUNT_VOLUME,
+            nullptr,
+            0,
+            nullptr,
+            0,
+            &bytesReturned,
+            nullptr);
+
+    if(! dismountOk) {
+        LogMessage("Can't DISMOUNT_VOLUME (handle = 0x%x)..", handleValue);
+    } else {
+        LogMessage("DISMOUNT_VOLUME (handle = 0x%x)-----command access", handleValue);
+    }
+
+    bytesReturned = 0;
+    const BOOL unlockOk =
+        DeviceIoControl(
+            deviceHandle,
+            ITEUFDRS_IOCTL_UNLOCK_DEVICE,
+            nullptr,
+            0,
+            nullptr,
+            0,
+            &bytesReturned,
+            nullptr);
+
+    if(! unlockOk) {
+        LogMessage("Can't unlock device (handle = 0x%x)..", handleValue);
+    } else {
+        LogMessage("UnLock (handle = 0x%x) -----vendor command access", handleValue);
+        instanceBytes[ITEUFDRS_OFFSET_INSTANCE_DEVICE_LOCKED_FLAG] = 0;
+    }
+ }
+
 void AssignDeviceSizeString(BYTE* buffer) {
     if(! buffer || ! g_iTEUFDrs_instance) {
         return;
@@ -4727,6 +4785,7 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
 
     BYTE orchestratorResult = 0;
     bool hasOpenedDevice = false;
+    bool shouldClearStateFlag = false;
     DWORD deviceHandleDword = 0;
     BYTE volumeKey = 0xFF;
     BYTE* bcmBase = nullptr;
@@ -4910,40 +4969,34 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
     }
 
     orchestratorResult = 1;
+    shouldClearStateFlag = true;
     goto cleanup_success;
 
 cleanup_failure:
-    if(hasOpenedDevice && g_pSTD_TestUnitReady) {
-        static constexpr DWORD COMM_BUFFER_SIZE = 0xE40;
-        BYTE* commBuffer = reinterpret_cast<BYTE*>(malloc(COMM_BUFFER_SIZE));
-        if(commBuffer) {
-            memset(commBuffer, 0, COMM_BUFFER_SIZE);
-            typedef int(__stdcall * PFN_VDR_CheckSYSReady_Exact)(
-                DWORD, BYTE*, DWORD, BYTE, BYTE*, BYTE);
-            const int testUnitOk =
-                (reinterpret_cast<PFN_VDR_CheckSYSReady_Exact>(g_pSTD_TestUnitReady))(
-                    deviceHandleDword, commBuffer, COMM_BUFFER_SIZE, 0, commBuffer + 512, 1);
+    if(hasOpenedDevice && g_pSTD_TestUnitReady && bcmBase) {
+        typedef int(__cdecl * PFN_VDR_CheckSYSReady_Short)(BYTE*, DWORD);
+        const int testUnitOk =
+            (reinterpret_cast<PFN_VDR_CheckSYSReady_Short>(g_pSTD_TestUnitReady))(
+                bcmBase, deviceHandleDword);
 
-            if(testUnitOk == 0 && g_pFLH_CPUReset && bcmBase) {
-                typedef void(__cdecl * PFN_FLH_CPUReset_Orchestrator)(DWORD, BYTE*, DWORD);
-                (reinterpret_cast<PFN_FLH_CPUReset_Orchestrator>(g_pFLH_CPUReset))(
-                    1, bcmBase, deviceHandleDword);
-            }
-
-            free(commBuffer);
+        if(testUnitOk == 0 && g_pFLH_CPUReset) {
+            typedef void(__cdecl * PFN_FLH_CPUReset_Orchestrator)(DWORD, BYTE*, DWORD);
+            (reinterpret_cast<PFN_FLH_CPUReset_Orchestrator>(g_pFLH_CPUReset))(
+                1, bcmBase, deviceHandleDword);
         }
     }
     goto cleanup_exit;
 
 cleanup_success:
-    if(hasOpenedDevice) {
-        instanceBytes[5] = 0;
-    }
     goto cleanup_exit;
 
 cleanup_exit:
     if(hasOpenedDevice) {
+        DismountAndUnlockDevice_408C30(reinterpret_cast<HANDLE>((UINT_PTR) deviceHandleDword));
         CloseDeviceHandle(volumeKey);
+    }
+    if(shouldClearStateFlag) {
+        instanceBytes[5] = 0;
     }
     *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0x64;
     return orchestratorResult;
