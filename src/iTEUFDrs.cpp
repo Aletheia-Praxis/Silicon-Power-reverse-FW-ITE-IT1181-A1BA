@@ -4491,6 +4491,7 @@ static void UpdateCISBBuffer_40A350(const DWORD* configBuffer16Dwords) {
     static constexpr DWORD CISB_HEADER_DWORD1 = 0x0000001F;
     static constexpr DWORD CISB_ID_IT11 = 0x31315449;
     static constexpr DWORD CISB_ID_VARIANT_DEFAULT = 0x20203138;
+    static constexpr DWORD CISB_ID_VARIANT_76 = 0x20203637;
     static constexpr DWORD CISB_ID_USB = 0x20425355;
     static constexpr DWORD CISB_ID_Flas = 0x73616c46;
     static constexpr DWORD CISB_ID_hDi = 0x69442068;
@@ -4498,13 +4499,36 @@ static void UpdateCISBBuffer_40A350(const DWORD* configBuffer16Dwords) {
     static constexpr DWORD CISB_ID_0_0 = 0x30302e30;
     static constexpr DWORD CISB_ID_ITEU = 0x75455449;
     static constexpr DWORD CISB_ID_1001 = 0x31303031;
+    static constexpr DWORD CISB_ID_1176 = 0x36373131;
     static constexpr DWORD CISB_ID_1181 = 0x31383131;
+    static constexpr DWORD CISB_ID_A0AA = 0x41413041;
     static constexpr DWORD CISB_ID_A1BA = 0x41423141;
+
+    static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_DEVICE_ID_BYTES_8 = 0x107338;
+
+    DWORD cisbVariant = CISB_ID_VARIANT_DEFAULT;
+    DWORD cisbDeviceId = CISB_ID_1181;
+    DWORD cisbDeviceSuffix = CISB_ID_A1BA;
+
+    const BYTE* deviceIdBytes8 = instanceBytes + ITEUFDRS_OFFSET_INSTANCE_DEVICE_ID_BYTES_8;
+    if(memcmp(deviceIdBytes8, "1176A0AA", 8) == 0) {
+        cisbVariant = CISB_ID_VARIANT_76;
+        cisbDeviceId = CISB_ID_1176;
+        cisbDeviceSuffix = CISB_ID_A0AA;
+    } else if(memcmp(deviceIdBytes8, "1181A1BA", 8) == 0) {
+        cisbVariant = CISB_ID_VARIANT_DEFAULT;
+        cisbDeviceId = CISB_ID_1181;
+        cisbDeviceSuffix = CISB_ID_A1BA;
+    } else if(memcmp(deviceIdBytes8, "1181A0AA", 8) == 0) {
+        cisbVariant = CISB_ID_VARIANT_DEFAULT;
+        cisbDeviceId = CISB_ID_1181;
+        cisbDeviceSuffix = CISB_ID_A0AA;
+    }
 
     *reinterpret_cast<DWORD*>(instanceBytes + 0x106B38) = CISB_HEADER_DWORD0;
     *reinterpret_cast<DWORD*>(instanceBytes + 0x106B3C) = CISB_HEADER_DWORD1;
     *reinterpret_cast<DWORD*>(instanceBytes + 0x106B40) = CISB_ID_IT11;
-    *reinterpret_cast<DWORD*>(instanceBytes + 0x106B44) = CISB_ID_VARIANT_DEFAULT;
+    *reinterpret_cast<DWORD*>(instanceBytes + 0x106B44) = cisbVariant;
     *reinterpret_cast<DWORD*>(instanceBytes + 0x106B48) = CISB_ID_USB;
     *reinterpret_cast<DWORD*>(instanceBytes + 0x106B4C) = CISB_ID_Flas;
     *reinterpret_cast<DWORD*>(instanceBytes + 0x106B50) = CISB_ID_hDi;
@@ -4512,8 +4536,8 @@ static void UpdateCISBBuffer_40A350(const DWORD* configBuffer16Dwords) {
     *reinterpret_cast<DWORD*>(instanceBytes + 0x106B58) = CISB_ID_0_0;
     *reinterpret_cast<DWORD*>(instanceBytes + 0x106B5C) = CISB_ID_ITEU;
     *reinterpret_cast<DWORD*>(instanceBytes + 0x106B60) = CISB_ID_1001;
-    *reinterpret_cast<DWORD*>(instanceBytes + 0x106B64) = CISB_ID_1181;
-    *reinterpret_cast<DWORD*>(instanceBytes + 0x106B68) = CISB_ID_A1BA;
+    *reinterpret_cast<DWORD*>(instanceBytes + 0x106B64) = cisbDeviceId;
+    *reinterpret_cast<DWORD*>(instanceBytes + 0x106B68) = cisbDeviceSuffix;
     *reinterpret_cast<DWORD*>(instanceBytes + 0x106B6C) = 0;
 
     if(configBuffer16Dwords) {
