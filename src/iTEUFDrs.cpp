@@ -12,6 +12,7 @@
 #include "../include/SDKGlobals.h"
 #include "../include/Utilities.h"
 #include "../include/WindowsHeaders.h"
+#include <winver.h>
 #include <cstdio>
 #include <cstring>
 #include <cstdarg>
@@ -4318,7 +4319,7 @@ static BYTE ReadAndAnalyzeFlashBlocks_40A150(DWORD deviceHandle) {
     return 1;
 }
 
-static BYTE FinalizeRepairWrite_40AC70(DWORD deviceHandle) {
+static BYTE FinalizeRepairWrite_40AC70(DWORD deviceHandle, const DWORD* formatArgs16Dwords) {
     if(! g_iTEUFDrs_instance) {
         return 0;
     }
@@ -4336,7 +4337,8 @@ static BYTE FinalizeRepairWrite_40AC70(DWORD deviceHandle) {
 
     BYTE outLenByte = 0;
     BYTE outBuffer[0x54] = {};
-    DWORD formatArgs[16] = {};
+    DWORD zeroArgs[16] = {};
+    const DWORD* args = formatArgs16Dwords ? formatArgs16Dwords : zeroArgs;
 
     typedef int(__cdecl * PFN_FMT_Format_Exact)(
         void* outBuffer,
@@ -4347,7 +4349,7 @@ static BYTE FinalizeRepairWrite_40AC70(DWORD deviceHandle) {
     const PFN_FMT_Format_Exact fmtFormat =
         reinterpret_cast<PFN_FMT_Format_Exact>(g_pFMT_Format);
 
-    const int formatOk = fmtFormat(outBuffer, formatArgs, &outLenByte, bcmBase, deviceHandle);
+    const int formatOk = fmtFormat(outBuffer, args, &outLenByte, bcmBase, deviceHandle);
     return (formatOk == 1) ? 1 : 0;
 }
 
@@ -4355,18 +4357,95 @@ static void SetThreadLocalRandSeed_40A350(int seed) {
     srand(seed);
 }
 
+struct ModuleVersionInfo_40A350 {
+    bool hasFixedInfo;
+    VS_FIXEDFILEINFO fixed;
+    std::vector<BYTE> versionBlob;
+};
+
+static ModuleVersionInfo_40A350 g_moduleVersionInfo_40A350 = {false, {}, {}};
+
 static int GetModuleFileVersionInfo_40A350(int) {
-    return 0;
+    g_moduleVersionInfo_40A350.hasFixedInfo = false;
+    g_moduleVersionInfo_40A350.versionBlob.clear();
+    memset(&g_moduleVersionInfo_40A350.fixed, 0, sizeof(g_moduleVersionInfo_40A350.fixed));
+
+    WCHAR modulePath[MAX_PATH] = {};
+    const DWORD modulePathLen = GetModuleFileNameW(NULL, modulePath, ARRAYSIZE(modulePath));
+    if(modulePathLen == 0 || modulePathLen >= ARRAYSIZE(modulePath)) {
+        return 0;
+    }
+
+    DWORD handle = 0;
+    const DWORD versionInfoSize = GetFileVersionInfoSizeW(modulePath, &handle);
+    if(versionInfoSize == 0) {
+        return 0;
+    }
+
+    g_moduleVersionInfo_40A350.versionBlob.resize(versionInfoSize);
+    if(! GetFileVersionInfoW(
+           modulePath,
+           0,
+           versionInfoSize,
+           reinterpret_cast<LPVOID>(g_moduleVersionInfo_40A350.versionBlob.data()))) {
+        g_moduleVersionInfo_40A350.versionBlob.clear();
+        return 0;
+    }
+
+    VS_FIXEDFILEINFO* fixedInfo = nullptr;
+    UINT fixedInfoLen = 0;
+    if(! VerQueryValueW(
+           reinterpret_cast<LPCVOID>(g_moduleVersionInfo_40A350.versionBlob.data()),
+           L"\\",
+           reinterpret_cast<LPVOID*>(&fixedInfo),
+           &fixedInfoLen)) {
+        g_moduleVersionInfo_40A350.versionBlob.clear();
+        return 0;
+    }
+
+    if(! fixedInfo || fixedInfoLen < sizeof(VS_FIXEDFILEINFO)) {
+        g_moduleVersionInfo_40A350.versionBlob.clear();
+        return 0;
+    }
+
+    static constexpr DWORD VS_FIXEDFILEINFO_SIGNATURE = 0xFEEF04BD;
+    if(fixedInfo->dwSignature != VS_FIXEDFILEINFO_SIGNATURE) {
+        g_moduleVersionInfo_40A350.versionBlob.clear();
+        return 0;
+    }
+
+    g_moduleVersionInfo_40A350.fixed = *fixedInfo;
+    g_moduleVersionInfo_40A350.hasFixedInfo = true;
+    return 1;
 }
 
-static WORD GetUshortFieldByIndex_40A350(int) {
-    return 0;
+static WORD GetUshortFieldByIndex_40A350(int index) {
+    if(! g_moduleVersionInfo_40A350.hasFixedInfo) {
+        return 0;
+    }
+
+    switch(index) {
+        case 0:
+            return LOWORD(g_moduleVersionInfo_40A350.fixed.dwFileVersionLS);
+        case 1:
+            return HIWORD(g_moduleVersionInfo_40A350.fixed.dwFileVersionLS);
+        case 2:
+            return LOWORD(g_moduleVersionInfo_40A350.fixed.dwFileVersionMS);
+        case 3:
+            return HIWORD(g_moduleVersionInfo_40A350.fixed.dwFileVersionMS);
+        default:
+            return 0;
+    }
 }
 
 static void FileVersionInfoDestructor_40A350() {
+    g_moduleVersionInfo_40A350.hasFixedInfo = false;
+    g_moduleVersionInfo_40A350.versionBlob.clear();
+    memset(&g_moduleVersionInfo_40A350.fixed, 0, sizeof(g_moduleVersionInfo_40A350.fixed));
 }
 
 static void CFileVersionInfoInitAndAssignStrings_40A350(UINT_PTR) {
+    FileVersionInfoDestructor_40A350();
 }
 
 static void DebugLogMessage_40A350(const char* message) {
@@ -4769,6 +4848,8 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
 
     *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0x46;
 
+    DWORD finalizeArgs[16] = {};
+
     if(instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_MESSAGE_FLAG] != 0) {
         UpdateFirmwareBankInfo(activeDeviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle));
         GetMPInfoAndUpdateBuffers(activeDeviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle));
@@ -4777,6 +4858,8 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
         (void) PatchLunConfigBuffer_409210(
             static_cast<DWORD>((UINT_PTR) deviceHandle),
             cisConfigBuffer);
+
+        memcpy(finalizeArgs, cisConfigBuffer, sizeof(finalizeArgs));
         UpdateCISBBuffer_40A350(cisConfigBuffer);
     } else {
         UpdateCISBVersionOnly_40AA70();
@@ -4813,8 +4896,26 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
             static_cast<DWORD>((UINT_PTR) deviceHandle));
     }
 
+    {
+        HWND hWnd = FindWindowA("#32770", "Microsoft Windows");
+        if(hWnd != NULL) {
+            (void) SendMessageA(hWnd, 0x10, 0, 0);
+        }
+    }
+
+    *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0x50;
+    if(instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_MESSAGE_FLAG] == 0) {
+        if(instanceBytes[ITEUFDRS_OFFSET_INSTANCE_DEVICE_CONNECTED] == 0) {
+            (void) GetLunArrayData(activeDeviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle));
+            memcpy(finalizeArgs, deviceStructBase + ITEUFDRS_OFFSET_DEVICE_LUN_DATA, sizeof(finalizeArgs));
+            reinterpret_cast<BYTE*>(finalizeArgs)[0] = 0x60;
+        } else {
+            memcpy(finalizeArgs, deviceStructBase + ITEUFDRS_OFFSET_DEVICE_LUN_DATA, sizeof(finalizeArgs));
+        }
+    }
+
     *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0x5A;
-    if(FinalizeRepairWrite_40AC70(static_cast<DWORD>((UINT_PTR) deviceHandle)) == 0) {
+    if(FinalizeRepairWrite_40AC70(static_cast<DWORD>((UINT_PTR) deviceHandle), finalizeArgs) == 0) {
         CloseDeviceHandle(volumeKey);
         return 0;
     }
