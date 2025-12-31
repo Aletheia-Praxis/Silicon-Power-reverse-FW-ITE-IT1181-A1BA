@@ -365,7 +365,7 @@ char NotifyFwSegmentInfo(int deviceIndex, DWORD deviceHandle);
 void LoadAndVerifyFirmwareSegments(int deviceIndex, DWORD deviceHandle);
 void UpdateFirmwareBankInfo(int deviceIndex, DWORD deviceHandle);
 void GetMPInfoAndUpdateBuffers(int deviceIndex, DWORD deviceHandle);
-void EraseDeviceAndResetCPU(int deviceIndex, DWORD deviceHandle);
+BYTE EraseDeviceAndResetCPU(int deviceIndex, DWORD deviceHandle);
 char GetLunArrayData(int deviceIndex, DWORD deviceHandle);
 void CalculateDeviceCapacity(int deviceIndex);
 void UpdateDeviceCapacityOrCalculate(int deviceIndex);
@@ -3870,9 +3870,9 @@ char GetMPInfo(int deviceIndex, DWORD deviceHandle) {
     return 1;
 }
 
-void EraseDeviceAndResetCPU(int deviceIndex, DWORD deviceHandle) {
+BYTE EraseDeviceAndResetCPU(int deviceIndex, DWORD deviceHandle) {
     if(! g_iTEUFDrs_instance) {
-        return;
+        return 0;
     }
 
     (void) deviceIndex;
@@ -4049,6 +4049,396 @@ void EraseDeviceAndResetCPU(int deviceIndex, DWORD deviceHandle) {
     }
 
     LogMessage("Erase Good CPUReset...");
+    return 1;
+}
+
+static BYTE ReadAndAnalyzeFlashBlocks_40A150(DWORD deviceHandle) {
+    if(! g_iTEUFDrs_instance) {
+        return 0;
+    }
+
+    if(! g_pFLH_HandleMassBlocksPerChip || ! g_pFLH_BlockIsGap || ! g_pCCBAddress2RawAddress
+        || ! g_pFLH_ReadSpare) {
+        return 0;
+    }
+
+    BYTE* instanceBytes = reinterpret_cast<BYTE*>(g_iTEUFDrs_instance);
+    const BYTE activeDeviceIndex = instanceBytes[ITEUFDRS_OFFSET_INSTANCE_ACTIVE_DEVICE_INDEX];
+    const size_t activeDeviceOffset =
+        static_cast<size_t>(activeDeviceIndex) * ITEUFDRS_DEVICE_STRIDE_BYTES;
+    BYTE* deviceStructBase = instanceBytes + activeDeviceOffset;
+    BYTE* bcmBase = deviceStructBase + ITEUFDRS_OFFSET_DEVICE_CTRL_BUFFER;
+
+    static constexpr size_t ITEUFDRS_OFFSET_DEVICE_CHANNEL_COUNT = 0xA78;
+    static constexpr size_t ITEUFDRS_OFFSET_BCM_CHIP_SELECT_COUNT = 0x53;
+    static constexpr size_t ITEUFDRS_OFFSET_BCM_BLOCK_COUNT_DWORD = 0x298;
+
+    const BYTE channelCount = deviceStructBase[ITEUFDRS_OFFSET_DEVICE_CHANNEL_COUNT];
+    const BYTE chipSelectCount = bcmBase[ITEUFDRS_OFFSET_BCM_CHIP_SELECT_COUNT];
+    const DWORD blockCount = *reinterpret_cast<DWORD*>(bcmBase + ITEUFDRS_OFFSET_BCM_BLOCK_COUNT_DWORD);
+
+    const DWORD totalPasses = static_cast<DWORD>(channelCount) * static_cast<DWORD>(chipSelectCount);
+    if(channelCount == 0 || chipSelectCount == 0 || totalPasses == 0) {
+        return 1;
+    }
+
+    struct FlashAddressForSdk {
+        BYTE chipSelect;
+        BYTE channel;
+        WORD reserved;
+        DWORD blockIndex;
+    };
+
+    const auto getCurrentSystemTimeHash_4092A0 = []() -> DWORD {
+        SYSTEMTIME systemTime = {};
+        GetLocalTime(&systemTime);
+        const DWORD hour = static_cast<DWORD>(systemTime.wHour);
+        const DWORD year = static_cast<DWORD>(systemTime.wYear);
+        const DWORD minute = static_cast<DWORD>(systemTime.wMinute);
+        const DWORD second = static_cast<DWORD>(systemTime.wSecond);
+        const DWORD month = static_cast<DWORD>(systemTime.wMonth);
+        const DWORD day = static_cast<DWORD>(systemTime.wDay);
+        const DWORD msDiv10 = static_cast<DWORD>(systemTime.wMilliseconds / 10);
+
+        return (((hour * 0x100 + year + minute) * 0x100 + second + month) * 0x100 + msDiv10 + day);
+    };
+
+    const auto checkBlockBadMarkers_408D60 = [&](
+        BYTE channel,
+        BYTE chipSelect,
+        DWORD blockIndex) -> BYTE {
+        typedef int(__cdecl * PFN_FLH_ReadSpare_Alt_Exact)(
+            void* address,
+            int page,
+            void* controllerData,
+            void* spareBuffer,
+            int bufferSize,
+            DWORD deviceHandle);
+
+        PFN_FLH_ReadSpare_Alt_Exact readSpare =
+            reinterpret_cast<PFN_FLH_ReadSpare_Alt_Exact>(g_pFLH_ReadSpare);
+
+        FlashAddressForSdk address = {};
+        address.chipSelect = chipSelect;
+        address.channel = channel;
+        address.reserved = 0;
+        address.blockIndex = blockIndex;
+
+        DWORD spareWords[4] = {};
+        const int readOk = readSpare(&address, 1, bcmBase, spareWords, 0x10, deviceHandle);
+        if(readOk == 0) {
+            return 1;
+        }
+
+        const BYTE marker = static_cast<BYTE>((spareWords[1] >> 8) & 0xFF);
+        if(marker == static_cast<BYTE>('h')) {
+            static constexpr DWORD ITEUFDRS_SIGNATURE_ROOT = 0x544F4F52; // "ROOT"
+            static constexpr DWORD ITEUFDRS_SIGNATURE_CISB = 0x42534943; // "CISB"
+            if(spareWords[0] == ITEUFDRS_SIGNATURE_ROOT) {
+                return 0x11;
+            }
+            if(spareWords[0] == ITEUFDRS_SIGNATURE_CISB) {
+                return 0x12;
+            }
+            return 0x10;
+        }
+
+        if(marker == static_cast<BYTE>('U') || marker == 0xFF) {
+            return 0;
+        }
+
+        if(marker == 0x11 || marker == 0x33) {
+            return 0x19;
+        }
+
+        return 1;
+    };
+
+    typedef int(__cdecl * PFN_FLH_HandleMassBlocksPerChip_Exact)(
+        DWORD deviceHandle,
+        DWORD channel,
+        DWORD chipSelect,
+        BYTE* controllerData,
+        void* outBlockBuffer,
+        DWORD zero,
+        BYTE* outByte,
+        DWORD* outDword);
+    const PFN_FLH_HandleMassBlocksPerChip_Exact handleMassBlocks =
+        reinterpret_cast<PFN_FLH_HandleMassBlocksPerChip_Exact>(g_pFLH_HandleMassBlocksPerChip);
+
+    typedef int(__cdecl * PFN_FLH_BlockIsGap_Exact)(BYTE* controllerData, DWORD blockIndex);
+    const PFN_FLH_BlockIsGap_Exact blockIsGap =
+        reinterpret_cast<PFN_FLH_BlockIsGap_Exact>(g_pFLH_BlockIsGap);
+
+    typedef DWORD(__cdecl * PFN_CCBAddress2RawAddress_Exact)(BYTE* controllerData, void* address);
+    const PFN_CCBAddress2RawAddress_Exact ccbAddress2RawAddress =
+        reinterpret_cast<PFN_CCBAddress2RawAddress_Exact>(g_pCCBAddress2RawAddress);
+
+    DWORD progressUnitsCompleted = 0;
+    DWORD totalBadBlocks = 0;
+    BYTE tmpOutByte = 0;
+    DWORD tmpOutDword = 0;
+
+    for(BYTE channel = 0; channel < channelCount; ++channel) {
+        for(BYTE chipSelect = 0; chipSelect < chipSelectCount; ++chipSelect) {
+            ++progressUnitsCompleted;
+            const DWORD progressValue = ((progressUnitsCompleted * 5) / totalPasses) + 10;
+            *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) =
+                progressValue;
+
+            const DWORD bufferIndex = static_cast<DWORD>(chipSelect) + static_cast<DWORD>(channel) * 2;
+            BYTE* blockBuffer =
+                instanceBytes + ITEUFDRS_OFFSET_INSTANCE_ERASE_SCRATCH_BASE + (bufferIndex << 16);
+
+            const int scanOk = handleMassBlocks(
+                deviceHandle,
+                channel,
+                chipSelect,
+                bcmBase,
+                blockBuffer,
+                0,
+                &tmpOutByte,
+                &tmpOutDword);
+            if(scanOk == 0) {
+                return 0;
+            }
+
+            for(DWORD blockIndex = 0; blockIndex < blockCount; ++blockIndex) {
+                if(blockIsGap(bcmBase, blockIndex) != 0) {
+                    continue;
+                }
+
+                if(blockBuffer[blockIndex] == 0) {
+                    continue;
+                }
+
+                FlashAddressForSdk address = {};
+                address.chipSelect = chipSelect;
+                address.channel = channel;
+                address.reserved = 0;
+                address.blockIndex = blockIndex;
+
+                const DWORD rawAddress = ccbAddress2RawAddress(bcmBase, &address);
+                const BYTE classification = checkBlockBadMarkers_408D60(channel, chipSelect, blockIndex);
+                blockBuffer[blockIndex] = classification;
+
+                if(classification == 1) {
+                    ++totalBadBlocks;
+                    LogMessage(
+                        "TotalBadBlockx = %lu, Ch = %u, Ce = %u, Block = %lu",
+                        totalBadBlocks,
+                        static_cast<unsigned>(chipSelect),
+                        static_cast<unsigned>(channel),
+                        static_cast<unsigned long>(blockIndex));
+                }
+
+                (void) rawAddress;
+            }
+        }
+    }
+
+    (void) getCurrentSystemTimeHash_4092A0;
+    return 1;
+}
+
+static BYTE FinalizeRepairWrite_40AC70(DWORD deviceHandle) {
+    if(! g_iTEUFDrs_instance) {
+        return 0;
+    }
+
+    if(! g_pFMT_Format) {
+        return 0;
+    }
+
+    BYTE* instanceBytes = reinterpret_cast<BYTE*>(g_iTEUFDrs_instance);
+    const BYTE activeDeviceIndex = instanceBytes[ITEUFDRS_OFFSET_INSTANCE_ACTIVE_DEVICE_INDEX];
+    const size_t activeDeviceOffset =
+        static_cast<size_t>(activeDeviceIndex) * ITEUFDRS_DEVICE_STRIDE_BYTES;
+    BYTE* deviceStructBase = instanceBytes + activeDeviceOffset;
+    BYTE* bcmBase = deviceStructBase + ITEUFDRS_OFFSET_DEVICE_CTRL_BUFFER;
+
+    BYTE outLenByte = 0;
+    BYTE outBuffer[0x54] = {};
+    DWORD formatArgs[16] = {};
+
+    typedef int(__cdecl * PFN_FMT_Format_Exact)(
+        void* outBuffer,
+        const void* args16,
+        void* outLenByte,
+        void* controllerData,
+        DWORD deviceHandle);
+    const PFN_FMT_Format_Exact fmtFormat =
+        reinterpret_cast<PFN_FMT_Format_Exact>(g_pFMT_Format);
+
+    const int formatOk = fmtFormat(outBuffer, formatArgs, &outLenByte, bcmBase, deviceHandle);
+    return (formatOk == 1) ? 1 : 0;
+}
+
+BYTE RunRepairDevice_Orchestrator_40EC60() {
+    if(! g_iTEUFDrs_instance) {
+        return 0;
+    }
+
+    BYTE* instanceBytes = reinterpret_cast<BYTE*>(g_iTEUFDrs_instance);
+    *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0;
+
+    const BYTE activeDeviceIndex = instanceBytes[ITEUFDRS_OFFSET_INSTANCE_ACTIVE_DEVICE_INDEX];
+    if(activeDeviceIndex == 0xFF) {
+        return 0;
+    }
+
+    const size_t activeDeviceOffset =
+        static_cast<size_t>(activeDeviceIndex) * ITEUFDRS_DEVICE_STRIDE_BYTES;
+    BYTE* deviceStructBase = instanceBytes + activeDeviceOffset;
+    BYTE* bcmBase = deviceStructBase + ITEUFDRS_OFFSET_DEVICE_CTRL_BUFFER;
+
+    static constexpr size_t ITEUFDRS_OFFSET_DEVICE_SELECTED_VOLUME_KEY = 0x9A6;
+    const BYTE volumeKey = deviceStructBase[ITEUFDRS_OFFSET_DEVICE_SELECTED_VOLUME_KEY];
+    const size_t volumeOffset = static_cast<size_t>(volumeKey) * ITEUFDRS_VOLUME_STRIDE_BYTES;
+
+    if(OpenLogicalDriveHandle(volumeKey) == 0) {
+        return 0;
+    }
+
+    HANDLE deviceHandle = *reinterpret_cast<HANDLE*>(
+        instanceBytes + ITEUFDRS_OFFSET_VOLUME_DEVICE_HANDLE_BASE + volumeOffset);
+    if(deviceHandle == NULL || deviceHandle == INVALID_HANDLE_VALUE) {
+        CloseDeviceHandle(volumeKey);
+        return 0;
+    }
+
+    if(InitializeISPCode(activeDeviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle)) == 0) {
+        CloseDeviceHandle(volumeKey);
+        return 0;
+    }
+
+    static constexpr size_t ITEUFDRS_OFFSET_DEVICE_BANK_MODE_FLAG = 0xA1D;
+    if(deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BANK_MODE_FLAG] != 0) {
+        CloseDeviceHandle(volumeKey);
+        if(OpenPhysicalDriveHandle(volumeKey) == 0) {
+            return 0;
+        }
+        deviceHandle = *reinterpret_cast<HANDLE*>(
+            instanceBytes + ITEUFDRS_OFFSET_VOLUME_DEVICE_HANDLE_BASE + volumeOffset);
+        if(deviceHandle == NULL || deviceHandle == INVALID_HANDLE_VALUE) {
+            CloseDeviceHandle(volumeKey);
+            return 0;
+        }
+    }
+
+    *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 5;
+
+    static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_SCAN_COMPLETE = 0x886;
+    static constexpr size_t ITEUFDRS_OFFSET_DEVICE_FLAG_3F8 = 0x3F8;
+    static constexpr size_t ITEUFDRS_OFFSET_DEVICE_FLAG_2A5 = 0x2A5;
+    if(instanceBytes[ITEUFDRS_OFFSET_INSTANCE_SCAN_COMPLETE] != 0) {
+        bcmBase[ITEUFDRS_OFFSET_DEVICE_FLAG_3F8] = 1;
+        bcmBase[ITEUFDRS_OFFSET_DEVICE_FLAG_2A5] = 1;
+    }
+
+    BYTE outText200[0x200] = {};
+    DWORD outValue = 0;
+    DWORD reserved = 0;
+
+    memset(
+        instanceBytes + ITEUFDRS_OFFSET_INSTANCE_ERASE_SCRATCH_BASE,
+        0,
+        ITEUFDRS_INSTANCE_ERASE_SCRATCH_SIZE_BYTES);
+    memset(
+        instanceBytes + ITEUFDRS_OFFSET_INSTANCE_ERASE_MARKERS_BASE,
+        1,
+        ITEUFDRS_INSTANCE_ERASE_SCRATCH_SIZE_BYTES);
+
+    if(! g_pDG_GetBlockPageMapFromFlash) {
+        CloseDeviceHandle(volumeKey);
+        return 0;
+    }
+
+    typedef int(__cdecl * PFN_DG_GetBlockPageMapFromFlash_Orchestrator)(
+        DWORD,
+        BYTE*,
+        BYTE*,
+        BYTE*,
+        DWORD*,
+        DWORD);
+    const PFN_DG_GetBlockPageMapFromFlash_Orchestrator getMap =
+        reinterpret_cast<PFN_DG_GetBlockPageMapFromFlash_Orchestrator>(
+            g_pDG_GetBlockPageMapFromFlash);
+
+    const int mapOk = getMap(
+        static_cast<DWORD>((UINT_PTR) deviceHandle),
+        bcmBase,
+        instanceBytes + ITEUFDRS_OFFSET_INSTANCE_ERASE_MARKERS_BASE,
+        outText200,
+        &outValue,
+        0);
+    if(mapOk != 1) {
+        CloseDeviceHandle(volumeKey);
+        return 0;
+    }
+
+    *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 10;
+    if(ReadAndAnalyzeFlashBlocks_40A150(static_cast<DWORD>((UINT_PTR) deviceHandle)) == 0) {
+        CloseDeviceHandle(volumeKey);
+        return 0;
+    }
+
+    *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0x0F;
+    UpdateBankStatusFlags(activeDeviceIndex);
+
+    *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0x14;
+    if(EraseDeviceAndResetCPU(activeDeviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle)) == 0) {
+        CloseDeviceHandle(volumeKey);
+        return 0;
+    }
+
+    if(CreateSystemAndTestUnitReady(activeDeviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle)) == 0) {
+        CloseDeviceHandle(volumeKey);
+        return 0;
+    }
+
+    *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0x46;
+
+    if(! g_pFLH_WriteCISTable) {
+        CloseDeviceHandle(volumeKey);
+        return 0;
+    }
+
+    typedef int(__cdecl * PFN_FLH_WriteCISTable_Orchestrator)(DWORD, void*, DWORD, DWORD);
+    const PFN_FLH_WriteCISTable_Orchestrator writeCis =
+        reinterpret_cast<PFN_FLH_WriteCISTable_Orchestrator>(g_pFLH_WriteCISTable);
+
+    int writeAttempt = 0;
+    while(writeAttempt < 2) {
+        const int writeOk = writeCis(
+            static_cast<DWORD>((UINT_PTR) deviceHandle),
+            instanceBytes + ITEUFDRS_OFFSET_INSTANCE_CIS_CACHE,
+            0,
+            0);
+        if(writeOk == 0) {
+            CloseDeviceHandle(volumeKey);
+            return 0;
+        }
+        ++writeAttempt;
+    }
+
+    if(g_pFLH_CPUReset) {
+        typedef void(__cdecl * PFN_FLH_CPUReset_Orchestrator)(DWORD, BYTE*, DWORD);
+        (reinterpret_cast<PFN_FLH_CPUReset_Orchestrator>(g_pFLH_CPUReset))(
+            1,
+            bcmBase,
+            static_cast<DWORD>((UINT_PTR) deviceHandle));
+    }
+
+    *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0x5A;
+    if(FinalizeRepairWrite_40AC70(static_cast<DWORD>((UINT_PTR) deviceHandle)) == 0) {
+        CloseDeviceHandle(volumeKey);
+        return 0;
+    }
+
+    CloseDeviceHandle(volumeKey);
+    *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0x64;
+    return 1;
 }
 
 BYTE CreateSystemAndTestUnitReady(int deviceIndex, DWORD deviceHandle) {
