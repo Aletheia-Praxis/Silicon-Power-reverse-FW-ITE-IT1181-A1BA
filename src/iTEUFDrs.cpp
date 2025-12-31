@@ -4935,7 +4935,7 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
     if(deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BANK_MODE_FLAG] != 0) {
         CloseDeviceHandle(volumeKey);
         if(OpenPhysicalDriveHandle(volumeKey) == 0) {
-            goto cleanup_exit;
+            goto cleanup_failure;
         }
         deviceHandle = *reinterpret_cast<HANDLE*>(
             instanceBytes + ITEUFDRS_OFFSET_VOLUME_DEVICE_HANDLE_BASE + volumeOffset);
