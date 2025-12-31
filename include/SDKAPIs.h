@@ -61,7 +61,7 @@ typedef BOOL (*PFN_FLH_WriteRootTable)(LPVOID pBuffer);
 typedef BYTE (
     *PFN_FLH_FindRootTable_Alt)(HANDLE hDevice, DWORD* pSegmentIDs, LPVOID pBcmBuffer, DWORD mode);
 typedef BOOL (*PFN_FLH_ReadCISTable)(LPVOID pBuffer);
-typedef BOOL (*PFN_FLH_WriteCISTable)(LPVOID pBuffer);
+typedef int(__cdecl * PFN_FLH_WriteCISTable)(DWORD deviceHandle, LPVOID pCisCache, DWORD zero, DWORD arg);
 typedef BOOL (*PFN_FLH_ReadISPData)(LPVOID pBuffer);
 typedef BOOL (*PFN_FLH_WriteISPData)(LPVOID pBuffer);
 typedef BOOL (*PFN_FLH_ReadLatestWBT)(LPVOID pBuffer);
@@ -85,7 +85,7 @@ typedef BOOL (*PFN_FLH_ReadSpare)(DWORD dwAddr, LPVOID pBuffer);
 typedef BOOL (*PFN_FLH_ReadID)(LPVOID pBuffer);
 typedef BOOL (*PFN_FLH_BlockErase)(DWORD dwBlockAddr);
 typedef BOOL (*PFN_FLH_SetSLCFlag)(BOOL bEnable);
-typedef BOOL (*PFN_FLH_CPUReset)(void);
+typedef void(__cdecl * PFN_FLH_CPUReset)(DWORD mode, BYTE* bcmInfo, DWORD deviceHandle);
 typedef int (*PFN_FLH_InitCTRL)(HANDLE hDevice, BYTE* pSegmentParams, LPVOID pBcmBuffer);
 typedef BOOL (*PFN_FLH_WriteRootTableWithIspPath)(LPVOID pBuffer);
 typedef BOOL (*PFN_FLH_ScanE2NANDBlockPerChip)(LPVOID pParams);
@@ -185,7 +185,13 @@ typedef DWORD (*PFN_GetLastestPage)(void);
 typedef BOOL (*PFN_MP_CreateSystem)(LPVOID pParams);
 typedef BOOL (*PFN_MP_EraseSystemTable)(void);
 
-typedef BOOL (*PFN_DG_GetBlockPageMapFromFlash)(LPVOID pMap);
+typedef int(__cdecl * PFN_DG_GetBlockPageMapFromFlash)(
+    DWORD deviceHandle,
+    BYTE* bcmInfo,
+    BYTE* blockPageMap,
+    BYTE* outText200,
+    DWORD* outValue,
+    DWORD zero);
 typedef BOOL (*PFN_DG_SearchReadBadTBlk)(LPVOID pParams);
 typedef DWORD (*PFN_DG_CalBlkRequire)(LPVOID pParams);
 
