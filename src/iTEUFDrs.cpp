@@ -83,6 +83,8 @@ static constexpr size_t ITEUFDRS_OFFSET_DEVICE_SIZE_FLOAT = 0x9F2;
 static constexpr size_t ITEUFDRS_OFFSET_DEVICE_SEGMENT_INFO = 0x1866;
 static constexpr size_t ITEUFDRS_SEGMENT_PARAMS_SIZE_BYTES = 0x80;
 static constexpr size_t ITEUFDRS_OFFSET_DEVICE_PARAM_A78 = 0xA78;
+static constexpr size_t ITEUFDRS_OFFSET_DEVICE_PARAM_A79 = 0xA79;
+static constexpr size_t ITEUFDRS_OFFSET_DEVICE_PARAM_CBE = 0xCBE;
 static constexpr int ITEUFDRS_SDK_RESULT_SUCCESS = 1;
 static constexpr int ITEUFDRS_BCM_MAX_ERROR_CODE = 0x74;
 static constexpr int ITEUFDRS_BCM_ERROR_CODE_DEVICE_NOT_FOUND = 0x00;
@@ -2720,11 +2722,10 @@ static BYTE OpenDriveHandle_40AF70(const BYTE activeDeviceIndex, BYTE* outVolume
         }
     }
 
-    const bool usePhysicalHandle =
-        instanceBytes[ITEUFDRS_OFFSET_USE_PHYSICAL_DRIVE_HANDLE] != 0;
+    const bool usePhysicalHandle = instanceBytes[ITEUFDRS_OFFSET_USE_PHYSICAL_DRIVE_HANDLE] != 0;
 
-    const BYTE openOk = usePhysicalHandle ? OpenPhysicalDriveHandle(volumeKey)
-                                          : OpenLogicalDriveHandle(volumeKey);
+    const BYTE openOk =
+        usePhysicalHandle ? OpenPhysicalDriveHandle(volumeKey) : OpenLogicalDriveHandle(volumeKey);
     if(openOk == 0) {
         return 0;
     }
@@ -3035,6 +3036,50 @@ void UpdateBankStatusFlags(BYTE deviceIndex) {
     // 1. Check each bank's operational status
     // 2. Update bank ready/error flags
     // 3. Set overall device bank status
+}
+
+static void UpdateDeviceBankStatus_408E70() {
+    if(! g_iTEUFDrs_instance) {
+        return;
+    }
+
+    BYTE* instanceBytes = reinterpret_cast<BYTE*>(g_iTEUFDrs_instance);
+    const BYTE activeDeviceIndex = instanceBytes[ITEUFDRS_OFFSET_INSTANCE_ACTIVE_DEVICE_INDEX];
+    if(activeDeviceIndex == 0xFF) {
+        return;
+    }
+
+    const size_t activeDeviceOffset =
+        static_cast<size_t>(activeDeviceIndex) * ITEUFDRS_DEVICE_STRIDE_BYTES;
+    const BYTE* deviceStructBase = instanceBytes + activeDeviceOffset;
+
+    const BYTE outerCount = deviceStructBase[ITEUFDRS_OFFSET_DEVICE_PARAM_A78];
+    const BYTE midCount = deviceStructBase[ITEUFDRS_OFFSET_DEVICE_PARAM_A79];
+    const DWORD innerCount =
+        *reinterpret_cast<const DWORD*>(deviceStructBase + ITEUFDRS_OFFSET_DEVICE_PARAM_CBE);
+
+    if(outerCount == 0 || midCount == 0 || innerCount == 0) {
+        return;
+    }
+
+    for(DWORD outerIndex = 0; outerIndex < outerCount; ++outerIndex) {
+        for(DWORD midIndex = 0; midIndex < midCount; ++midIndex) {
+            const DWORD regionIndex = midIndex + outerIndex * 2;
+            const size_t regionOffset = static_cast<size_t>(regionIndex) << 16;
+            BYTE* regionBase = instanceBytes + regionOffset;
+
+            for(DWORD innerIndex = 0; innerIndex < innerCount; ++innerIndex) {
+                BYTE* markerByte =
+                    regionBase + ITEUFDRS_OFFSET_INSTANCE_ERASE_MARKERS_BASE + innerIndex;
+                const BYTE markerValue = *markerByte;
+                if(markerValue != 6) {
+                    const BYTE scratchValue =
+                        *(regionBase + ITEUFDRS_OFFSET_INSTANCE_ERASE_SCRATCH_BASE + innerIndex);
+                    *markerByte = static_cast<BYTE>(scratchValue | markerValue);
+                }
+            }
+        }
+    }
 }
 
 /*
@@ -5043,7 +5088,7 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
     }
 
     *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0x0F;
-    UpdateBankStatusFlags(activeDeviceIndex);
+    UpdateDeviceBankStatus_408E70();
 
     *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0x14;
     if(EraseDeviceAndResetCPU(activeDeviceIndex, deviceHandleDword) == 0) {
@@ -5117,8 +5162,14 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
 
     int writeAttempt = 0;
     while(writeAttempt < 2) {
-        const int writeOk =
-            writeCis(deviceHandleDword, instanceBytes + ITEUFDRS_OFFSET_INSTANCE_CIS_CACHE, 0, 0);
+        const DWORD writeAttemptDword = static_cast<DWORD>(writeAttempt);
+        const DWORD bcmBaseDword = reinterpret_cast<DWORD>(bcmBase);
+
+        const int writeOk = writeCis(
+            deviceHandleDword,
+            instanceBytes + ITEUFDRS_OFFSET_INSTANCE_CIS_CACHE,
+            writeAttemptDword,
+            bcmBaseDword);
         if(writeOk == 0) {
             goto cleanup_failure;
         }
