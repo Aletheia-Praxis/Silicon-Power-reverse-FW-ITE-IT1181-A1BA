@@ -4937,10 +4937,9 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
     *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0;
 
     BYTE orchestratorResult = 0;
-    bool hasOpenedDevice = false;
     bool shouldClearStateFlag = false;
     DWORD deviceHandleDword = 0;
-    BYTE volumeKey = 0xFF;
+    BYTE volumeKey = 0;
     BYTE* bcmBase = nullptr;
 
     const BYTE activeDeviceIndex = instanceBytes[ITEUFDRS_OFFSET_INSTANCE_ACTIVE_DEVICE_INDEX];
@@ -4951,13 +4950,10 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
     const size_t activeDeviceOffset =
         static_cast<size_t>(activeDeviceIndex) * ITEUFDRS_DEVICE_STRIDE_BYTES;
     BYTE* deviceStructBase = instanceBytes + activeDeviceOffset;
-    bcmBase = deviceStructBase + ITEUFDRS_OFFSET_DEVICE_CTRL_BUFFER;
 
     if(OpenDriveHandle_40AF70(activeDeviceIndex, &volumeKey) == 0) {
         goto cleanup_failure;
     }
-
-    hasOpenedDevice = true;
     const size_t volumeOffset = static_cast<size_t>(volumeKey) * ITEUFDRS_VOLUME_STRIDE_BYTES;
 
     HANDLE deviceHandle = *reinterpret_cast<HANDLE*>(
@@ -5169,7 +5165,7 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
     goto cleanup_success;
 
 cleanup_failure:
-    if(hasOpenedDevice && g_pSTD_TestUnitReady && bcmBase) {
+    if(g_pSTD_TestUnitReady && bcmBase) {
         typedef int(__cdecl * PFN_VDR_CheckSYSReady_Short)(BYTE*, DWORD);
         const int testUnitOk =
             (reinterpret_cast<PFN_VDR_CheckSYSReady_Short>(g_pSTD_TestUnitReady))(
@@ -5187,10 +5183,8 @@ cleanup_success:
     goto cleanup_exit;
 
 cleanup_exit:
-    if(hasOpenedDevice) {
-        DismountAndUnlockDevice_408C30(reinterpret_cast<HANDLE>((UINT_PTR) deviceHandleDword));
-        CloseDeviceHandle(volumeKey);
-    }
+    DismountAndUnlockDevice_408C30(reinterpret_cast<HANDLE>((UINT_PTR) deviceHandleDword));
+    CloseDeviceHandle(volumeKey);
     if(shouldClearStateFlag) {
         instanceBytes[5] = 0;
     }
