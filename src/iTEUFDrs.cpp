@@ -4056,6 +4056,8 @@ BYTE CreateSystemAndTestUnitReady(int deviceIndex, DWORD deviceHandle) {
         return 0;
     }
 
+    (void) deviceIndex;
+
     BYTE* instanceBytes = reinterpret_cast<BYTE*>(g_iTEUFDrs_instance);
     const BYTE activeDeviceIndex = instanceBytes[ITEUFDRS_OFFSET_INSTANCE_ACTIVE_DEVICE_INDEX];
     const size_t activeDeviceOffset =
@@ -4069,11 +4071,9 @@ BYTE CreateSystemAndTestUnitReady(int deviceIndex, DWORD deviceHandle) {
         return 0;
     }
 
-    if(activeDeviceBase[ITEUFDRS_OFFSET_DEVICE_ISP_CODE_INITIALIZED] == 0) {
-        const BYTE ispOk = InitializeISPCode(deviceIndex, deviceHandle);
-        if(ispOk == 0) {
-            return 0;
-        }
+    const BYTE ispOk = InitializeISPCode(activeDeviceIndex, deviceHandle);
+    if(ispOk == 0) {
+        return 0;
     }
 
     if(g_pFLH_FindRootTable) {
@@ -4133,65 +4133,92 @@ BYTE CreateSystemAndTestUnitReady(int deviceIndex, DWORD deviceHandle) {
         return 0;
     }
 
+    static constexpr size_t ITEUFDRS_OFFSET_BCM_CREATE_RETRY_COUNTER = 0x3EF;
+    static constexpr size_t ITEUFDRS_OFFSET_BCM_BANK_VALUE = 0x3FC;
+    static constexpr int ITEUFDRS_MP_CREATE_SYSTEM_RESULT_FAIL_3F = 0x3F;
+    static constexpr int ITEUFDRS_MP_CREATE_SYSTEM_RESULT_OK = 1;
+    static constexpr BYTE ITEUFDRS_MP_CREATE_SYSTEM_MAX_RETRIES = 5;
+
     typedef int(__cdecl * PFN_MP_EraseSystemTable_Full)(DWORD, BYTE*, BYTE*);
-    const int eraseResult =
-        (reinterpret_cast<PFN_MP_EraseSystemTable_Full>(g_pMP_EraseSystemTable))(
-            deviceHandle,
-            bcmBase,
-            systemMapBase);
+    typedef int(__cdecl * PFN_MP_CreateSystem_Full)(DWORD, BYTE*, BYTE*, char*, int);
 
-    if(eraseResult != ITEUFDRS_SDK_RESULT_SUCCESS) {
-        return 0;
-    }
+    PFN_MP_EraseSystemTable_Full eraseSystemTable =
+        reinterpret_cast<PFN_MP_EraseSystemTable_Full>(g_pMP_EraseSystemTable);
+    PFN_MP_CreateSystem_Full createSystem =
+        reinterpret_cast<PFN_MP_CreateSystem_Full>(g_pMP_CreateSystem);
 
-    const char* firmwarePath = reinterpret_cast<const char*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_FIRMWARE_PATH);
+    BYTE createRetryCounter = 0;
+    int createResult = 0;
+    int bankMode = 1;
+    BYTE bankValueRetryIndex = 0;
 
-    typedef int(__cdecl * PFN_MP_CreateSystem_Full)(DWORD, BYTE*, BYTE*, const char*, int);
-    const int createResult =
-        (reinterpret_cast<PFN_MP_CreateSystem_Full>(g_pMP_CreateSystem))(
-            deviceHandle,
-            bcmBase,
-            systemMapBase,
-            firmwarePath,
-            1);
-
-    if(createResult != ITEUFDRS_SDK_RESULT_SUCCESS) {
-        return 0;
-    }
-
-    static constexpr DWORD ITEUFDRS_SYSREADY_SLEEP_MS = 500;
-    static constexpr int ITEUFDRS_SYSREADY_MAX_TRIES = 10;
-    Sleep(ITEUFDRS_SYSREADY_SLEEP_MS);
-
-    PFN_VDR_CheckSYSReady testUnitReady = nullptr;
-    if(g_sdk_api.STD_TestUnitReady) {
-        testUnitReady = reinterpret_cast<PFN_VDR_CheckSYSReady>(g_sdk_api.STD_TestUnitReady);
-    } else if(g_pSTD_TestUnitReady) {
-        testUnitReady = reinterpret_cast<PFN_VDR_CheckSYSReady>(g_pSTD_TestUnitReady);
-    }
-
-    if(! testUnitReady) {
-        return 0;
-    }
-
-    BYTE sysReadyBuffer[0xE40];
-    memset(sysReadyBuffer, 0, sizeof(sysReadyBuffer));
-
-    for(int attempt = 0; attempt < ITEUFDRS_SYSREADY_MAX_TRIES; ++attempt) {
-        const int ready = testUnitReady(
-            deviceHandle,
-            sysReadyBuffer,
-            static_cast<DWORD>(sizeof(sysReadyBuffer)),
-            0,
-            bcmBase,
-            1);
-
-        if(ready != 0) {
-            return 1;
+    do {
+        const int eraseResult = eraseSystemTable(deviceHandle, bcmBase, systemMapBase);
+        if(eraseResult == 0) {
+            return 0;
         }
 
-        Sleep(ITEUFDRS_SYSREADY_SLEEP_MS);
+        LogMessage("mp_CreateSystem start");
+
+        if(bankMode == 1) {
+            *reinterpret_cast<DWORD*>(bcmBase + ITEUFDRS_OFFSET_BCM_BANK_VALUE) = 0;
+        } else if(bankMode == 0x11) {
+            ++bankValueRetryIndex;
+            if(bankValueRetryIndex < 3) {
+                *reinterpret_cast<DWORD*>(bcmBase + ITEUFDRS_OFFSET_BCM_BANK_VALUE) = 0;
+            } else {
+                *reinterpret_cast<DWORD*>(bcmBase + ITEUFDRS_OFFSET_BCM_BANK_VALUE) = 0;
+            }
+        }
+
+        char* firmwarePath = reinterpret_cast<char*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_FIRMWARE_PATH);
+        createResult = createSystem(deviceHandle, bcmBase, systemMapBase, firmwarePath, 1);
+
+        if(createResult == ITEUFDRS_MP_CREATE_SYSTEM_RESULT_FAIL_3F) {
+            break;
+        }
+
+        if(createResult == ITEUFDRS_MP_CREATE_SYSTEM_RESULT_OK) {
+            break;
+        }
+
+        ++createRetryCounter;
+        *(bcmBase + ITEUFDRS_OFFSET_BCM_CREATE_RETRY_COUNTER) = createRetryCounter;
+    } while(createRetryCounter < ITEUFDRS_MP_CREATE_SYSTEM_MAX_RETRIES);
+
+    if(createResult != ITEUFDRS_MP_CREATE_SYSTEM_RESULT_OK) {
+        return 0;
     }
 
-    return 0;
+    *(bcmBase + ITEUFDRS_OFFSET_BCM_CREATE_RETRY_COUNTER) = 0;
+    LogMessage("mp_CreateSystem complete");
+
+    static constexpr DWORD ITEUFDRS_SYSREADY_SLEEP_MS = 0x1F4;
+    Sleep(ITEUFDRS_SYSREADY_SLEEP_MS);
+
+    if(! g_pSTD_TestUnitReady) {
+        return 0;
+    }
+
+    typedef int(__cdecl * PFN_VDR_CheckSYSReady_Short)(BYTE*, DWORD);
+    PFN_VDR_CheckSYSReady_Short checkSysReady =
+        reinterpret_cast<PFN_VDR_CheckSYSReady_Short>(g_pSTD_TestUnitReady);
+
+    int sysReadyAttempt = 0;
+    int sysReadyOk = checkSysReady(bcmBase, deviceHandle);
+    while(sysReadyOk == 0) {
+        ++sysReadyAttempt;
+        Sleep(ITEUFDRS_SYSREADY_SLEEP_MS);
+        if(10 < sysReadyAttempt) {
+            return 0;
+        }
+        sysReadyOk = checkSysReady(bcmBase, deviceHandle);
+    }
+
+    HWND hWnd = FindWindowA("#32770", "Microsoft Windows");
+    if(hWnd != nullptr) {
+        (void) SendMessageA(hWnd, 0x10, 0, 0);
+    }
+
+    return 1;
 }
