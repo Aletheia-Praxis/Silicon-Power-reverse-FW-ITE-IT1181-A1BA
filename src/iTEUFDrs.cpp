@@ -16,6 +16,8 @@
 #include <cstring>
 #include <cstdarg>
 #include <cmath>
+#include <ctime>
+#include <cstdlib>
 
 // Global instance pointer for iTEUFDrs_DetectAndInitializeDevices access
 iTEUFDrs* g_iTEUFDrs_instance = nullptr;
@@ -3389,7 +3391,82 @@ void LoadAndVerifyFirmwareSegments(int deviceIndex, DWORD deviceHandle) {
 }
 
 void UpdateFirmwareBankInfo(int deviceIndex, DWORD deviceHandle) {
-    LogMessage("UpdateFirmwareBankInfo: Updating firmware bank info for device %d", deviceIndex);
+    if(! g_iTEUFDrs_instance) {
+        return;
+    }
+
+    if(! g_pVDR_ReadSysAddr || ! g_pBlkAddr2RawAddr) {
+        return;
+    }
+
+    BYTE* instanceBytes = reinterpret_cast<BYTE*>(g_iTEUFDrs_instance);
+    if(deviceIndex < 0 || deviceIndex >= MAX_VOLUMES) {
+        (void) deviceHandle;
+        return;
+    }
+
+    const size_t activeDeviceOffset =
+        static_cast<size_t>(static_cast<BYTE>(deviceIndex)) * ITEUFDRS_DEVICE_STRIDE_BYTES;
+    BYTE* deviceStructBase = instanceBytes + activeDeviceOffset;
+    BYTE* bcmBase = deviceStructBase + ITEUFDRS_OFFSET_DEVICE_CTRL_BUFFER;
+
+    DWORD sysAddrBuffer[16] = {};
+    typedef int(__cdecl * PFN_VDR_ReadSysAddr_Exact)(DWORD* outBuffer, BYTE* controllerData, DWORD);
+    const PFN_VDR_ReadSysAddr_Exact readSysAddr =
+        reinterpret_cast<PFN_VDR_ReadSysAddr_Exact>(g_pVDR_ReadSysAddr);
+
+    const int readOk = readSysAddr(sysAddrBuffer, bcmBase, deviceHandle);
+    if(readOk == 0) {
+        return;
+    }
+
+    typedef DWORD(__cdecl * PFN_BlkAddr2RawAddr)(BYTE*, WORD);
+    const PFN_BlkAddr2RawAddr blkAddr2Raw =
+        reinterpret_cast<PFN_BlkAddr2RawAddr>(g_pBlkAddr2RawAddr);
+
+    static constexpr size_t ITEUFDRS_OFFSET_DEVICE_BANKINFO_DWORD_BASE_A = 0x26B6;
+    static constexpr size_t ITEUFDRS_OFFSET_DEVICE_BANKINFO_DWORD_BASE_B = 0x26C0;
+    static constexpr size_t ITEUFDRS_OFFSET_DEVICE_BANKINFO_DWORD_BASE_C = 0x26CA;
+    static constexpr size_t ITEUFDRS_OFFSET_DEVICE_BANKINFO_DWORD_BASE_D = 0x26D2;
+    static constexpr size_t ITEUFDRS_OFFSET_DEVICE_BANKINFO_FLAG_BASE_A = 0x26BE;
+    static constexpr size_t ITEUFDRS_OFFSET_DEVICE_BANKINFO_FLAG_BASE_B = 0x26C8;
+    static constexpr size_t ITEUFDRS_OFFSET_DEVICE_BANKINFO_FLAG_BASE_C = 0x26DA;
+    static constexpr size_t ITEUFDRS_OFFSET_DEVICE_BANKINFO_FLAG_BASE_D = 0x26DC;
+
+    const BYTE* sysAddrBytes = reinterpret_cast<const BYTE*>(sysAddrBuffer);
+
+    for(int i = 0; i < 2; ++i) {
+        *reinterpret_cast<DWORD*>(
+            deviceStructBase + ITEUFDRS_OFFSET_DEVICE_BANKINFO_DWORD_BASE_A
+            + static_cast<size_t>(i) * sizeof(DWORD)) = SwapEndianness32(sysAddrBuffer[i]);
+        deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BANKINFO_FLAG_BASE_A + static_cast<size_t>(i)] =
+            1;
+
+        *reinterpret_cast<DWORD*>(
+            deviceStructBase + ITEUFDRS_OFFSET_DEVICE_BANKINFO_DWORD_BASE_B
+            + static_cast<size_t>(i) * sizeof(DWORD)) = SwapEndianness32(sysAddrBuffer[i + 2]);
+        deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BANKINFO_FLAG_BASE_B + static_cast<size_t>(i)] =
+            1;
+
+        const WORD wordA =
+            *reinterpret_cast<const WORD*>(sysAddrBytes + 0x28 + static_cast<size_t>(i) * 2);
+        const WORD wordB =
+            *reinterpret_cast<const WORD*>(sysAddrBytes + 0x2C + static_cast<size_t>(i) * 2);
+
+        const DWORD rawA = blkAddr2Raw(bcmBase, SwapEndianness16(wordA));
+        *reinterpret_cast<DWORD*>(
+            deviceStructBase + ITEUFDRS_OFFSET_DEVICE_BANKINFO_DWORD_BASE_C
+            + static_cast<size_t>(i) * sizeof(DWORD)) = rawA;
+        deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BANKINFO_FLAG_BASE_C + static_cast<size_t>(i)] =
+            1;
+
+        const DWORD rawB = blkAddr2Raw(bcmBase, SwapEndianness16(wordB));
+        *reinterpret_cast<DWORD*>(
+            deviceStructBase + ITEUFDRS_OFFSET_DEVICE_BANKINFO_DWORD_BASE_D
+            + static_cast<size_t>(i) * sizeof(DWORD)) = rawB;
+        deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BANKINFO_FLAG_BASE_D + static_cast<size_t>(i)] =
+            1;
+    }
 }
 
 void GetMPInfoAndUpdateBuffers(int deviceIndex, DWORD deviceHandle) {
@@ -4274,6 +4351,275 @@ static BYTE FinalizeRepairWrite_40AC70(DWORD deviceHandle) {
     return (formatOk == 1) ? 1 : 0;
 }
 
+static void SetThreadLocalRandSeed_40A350(int seed) {
+    srand(seed);
+}
+
+static int GetModuleFileVersionInfo_40A350(int) {
+    return 0;
+}
+
+static WORD GetUshortFieldByIndex_40A350(int) {
+    return 0;
+}
+
+static void FileVersionInfoDestructor_40A350() {
+}
+
+static void CFileVersionInfoInitAndAssignStrings_40A350(UINT_PTR) {
+}
+
+static void DebugLogMessage_40A350(const char* message) {
+    if(message) {
+        LogMessage("%s", message);
+    }
+}
+
+static int PatchLunConfigBuffer_409210(DWORD deviceHandle, DWORD* configBuffer16Dwords) {
+    if(! g_iTEUFDrs_instance || ! configBuffer16Dwords) {
+        return 0;
+    }
+
+    if(! g_pVDR_ReadWriteLUNConfig) {
+        return 0;
+    }
+
+    BYTE* instanceBytes = reinterpret_cast<BYTE*>(g_iTEUFDrs_instance);
+    const BYTE activeDeviceIndex = instanceBytes[ITEUFDRS_OFFSET_INSTANCE_ACTIVE_DEVICE_INDEX];
+    const size_t activeDeviceOffset =
+        static_cast<size_t>(activeDeviceIndex) * ITEUFDRS_DEVICE_STRIDE_BYTES;
+    BYTE* deviceStructBase = instanceBytes + activeDeviceOffset;
+    BYTE* bcmBase = deviceStructBase + ITEUFDRS_OFFSET_DEVICE_CTRL_BUFFER;
+
+    typedef int(__cdecl * PFN_VDR_ReadWriteLUNConfig_Exact)(
+        int, DWORD*, BYTE*, DWORD);
+    const PFN_VDR_ReadWriteLUNConfig_Exact readWriteLunConfig =
+        reinterpret_cast<PFN_VDR_ReadWriteLUNConfig_Exact>(g_pVDR_ReadWriteLUNConfig);
+
+    const int ok = readWriteLunConfig(0, configBuffer16Dwords, bcmBase, deviceHandle);
+    if(ok == 0) {
+        return 0;
+    }
+
+    configBuffer16Dwords[0] = 0x60606060;
+    reinterpret_cast<BYTE*>(configBuffer16Dwords)[6] = 0x82;
+    reinterpret_cast<BYTE*>(configBuffer16Dwords)[7] = 0x82;
+
+    static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_20734C = 0x20734C;
+    static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_207354 = 0x207354;
+
+    const DWORD value20734C = *reinterpret_cast<const DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_20734C);
+    const DWORD value207354 = *reinterpret_cast<const DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_207354);
+
+    configBuffer16Dwords[3] = value20734C;
+
+    const DWORD sum = configBuffer16Dwords[0x0B] + value207354 + value20734C;
+    configBuffer16Dwords[8] = sum;
+    configBuffer16Dwords[9] = sum;
+    configBuffer16Dwords[0x0C] = sum;
+
+    const DWORD derived = sum + configBuffer16Dwords[10];
+    configBuffer16Dwords[7] = value207354;
+    configBuffer16Dwords[6] = value207354;
+
+    if(configBuffer16Dwords[0x0D] < derived) {
+        configBuffer16Dwords[0x0D] = derived;
+    }
+
+    return 1;
+}
+
+static void UpdateCISBVersionOnly_40AA70() {
+    if(! g_iTEUFDrs_instance) {
+        return;
+    }
+
+    BYTE* instanceBytes = reinterpret_cast<BYTE*>(g_iTEUFDrs_instance);
+
+    CFileVersionInfoInitAndAssignStrings_40A350(0);
+
+    __time64_t now = 0;
+    _time64(&now);
+    tm nowLocal = {};
+    _localtime64_s(&nowLocal, &now);
+
+    char dateMmdd[8] = {};
+    strftime(dateMmdd, sizeof(dateMmdd), "%m%d", &nowLocal);
+
+    char versionString[0x20] = {};
+    const int hasVersion = GetModuleFileVersionInfo_40A350(0);
+
+    int formatResult = 0;
+    if(hasVersion == 0) {
+        formatResult =
+            FormatStringToBuffer(versionString, sizeof(versionString), "81.0.X.X-%s", dateMmdd);
+    } else {
+        const DWORD v0 = GetUshortFieldByIndex_40A350(0);
+        const DWORD v1 = GetUshortFieldByIndex_40A350(1);
+        const DWORD v2 = GetUshortFieldByIndex_40A350(2);
+        const DWORD v3 = GetUshortFieldByIndex_40A350(3);
+        formatResult = FormatStringToBuffer(
+            versionString,
+            sizeof(versionString),
+            "%d.%d.%d.%d-%s",
+            static_cast<int>(v3 & 0xFFFF),
+            static_cast<int>(v2 & 0xFFFF),
+            static_cast<int>(v1 & 0xFFFF),
+            static_cast<int>(v0 & 0xFFFF),
+            dateMmdd);
+    }
+
+    if(formatResult != 0) {
+        DebugLogMessage_40A350("UpdateCISBuf: Formatted String Buffer fails.");
+    }
+
+    memcpy(instanceBytes + 0x106D38, versionString, 0x10);
+
+    FileVersionInfoDestructor_40A350();
+}
+
+static void UpdateCISBBuffer_40A350(const DWORD* configBuffer16Dwords) {
+    if(! g_iTEUFDrs_instance) {
+        return;
+    }
+
+    BYTE* instanceBytes = reinterpret_cast<BYTE*>(g_iTEUFDrs_instance);
+
+    CFileVersionInfoInitAndAssignStrings_40A350(0);
+
+    static constexpr DWORD CISB_HEADER_DWORD0 = 0x02028000;
+    static constexpr DWORD CISB_HEADER_DWORD1 = 0x0000001F;
+    static constexpr DWORD CISB_ID_IT11 = 0x31315449;
+    static constexpr DWORD CISB_ID_VARIANT_DEFAULT = 0x20203138;
+    static constexpr DWORD CISB_ID_USB = 0x20425355;
+    static constexpr DWORD CISB_ID_Flas = 0x73616c46;
+    static constexpr DWORD CISB_ID_hDi = 0x69442068;
+    static constexpr DWORD CISB_ID_sk = 0x20206b73;
+    static constexpr DWORD CISB_ID_0_0 = 0x30302e30;
+    static constexpr DWORD CISB_ID_ITEU = 0x75455449;
+    static constexpr DWORD CISB_ID_1001 = 0x31303031;
+    static constexpr DWORD CISB_ID_1181 = 0x31383131;
+    static constexpr DWORD CISB_ID_A1BA = 0x41423141;
+
+    *reinterpret_cast<DWORD*>(instanceBytes + 0x106B38) = CISB_HEADER_DWORD0;
+    *reinterpret_cast<DWORD*>(instanceBytes + 0x106B3C) = CISB_HEADER_DWORD1;
+    *reinterpret_cast<DWORD*>(instanceBytes + 0x106B40) = CISB_ID_IT11;
+    *reinterpret_cast<DWORD*>(instanceBytes + 0x106B44) = CISB_ID_VARIANT_DEFAULT;
+    *reinterpret_cast<DWORD*>(instanceBytes + 0x106B48) = CISB_ID_USB;
+    *reinterpret_cast<DWORD*>(instanceBytes + 0x106B4C) = CISB_ID_Flas;
+    *reinterpret_cast<DWORD*>(instanceBytes + 0x106B50) = CISB_ID_hDi;
+    *reinterpret_cast<DWORD*>(instanceBytes + 0x106B54) = CISB_ID_sk;
+    *reinterpret_cast<DWORD*>(instanceBytes + 0x106B58) = CISB_ID_0_0;
+    *reinterpret_cast<DWORD*>(instanceBytes + 0x106B5C) = CISB_ID_ITEU;
+    *reinterpret_cast<DWORD*>(instanceBytes + 0x106B60) = CISB_ID_1001;
+    *reinterpret_cast<DWORD*>(instanceBytes + 0x106B64) = CISB_ID_1181;
+    *reinterpret_cast<DWORD*>(instanceBytes + 0x106B68) = CISB_ID_A1BA;
+    *reinterpret_cast<DWORD*>(instanceBytes + 0x106B6C) = 0;
+
+    if(configBuffer16Dwords) {
+        memcpy(instanceBytes + 0x106BC0, reinterpret_cast<const BYTE*>(configBuffer16Dwords), 8);
+
+        for(int i = 0; i < 4; ++i) {
+            *reinterpret_cast<DWORD*>(instanceBytes + 0x106BC8 + static_cast<size_t>(i) * 4) =
+                SwapEndianness32(configBuffer16Dwords[i]);
+            *reinterpret_cast<DWORD*>(instanceBytes + 0x106BD8 + static_cast<size_t>(i) * 4) =
+                SwapEndianness32(configBuffer16Dwords[4 + i]);
+        }
+
+        for(int i = 0; i < 2; ++i) {
+            *reinterpret_cast<DWORD*>(instanceBytes + 0x106BE8 + static_cast<size_t>(i) * 4) =
+                SwapEndianness32(configBuffer16Dwords[8 + i]);
+            *reinterpret_cast<DWORD*>(instanceBytes + 0x106BF0 + static_cast<size_t>(i) * 4) =
+                SwapEndianness32(configBuffer16Dwords[10 + i]);
+        }
+    }
+
+    instanceBytes[0x106B80] = 0x4C;
+
+    const __time64_t seedTime = _time64(nullptr);
+    SetThreadLocalRandSeed_40A350(static_cast<int>(seedTime));
+
+    int r0 = rand();
+    int r1 = rand();
+    SetThreadLocalRandSeed_40A350(r1);
+    int r2 = rand();
+    DWORD serialDwords[4] = {};
+    serialDwords[0] = static_cast<DWORD>(r2 + r0 * 0x10000);
+
+    int r3 = rand();
+    SetThreadLocalRandSeed_40A350(r3 + 1);
+    int r4 = rand();
+    int r5 = rand();
+    SetThreadLocalRandSeed_40A350(r5 + 2);
+    int r6 = rand();
+    serialDwords[1] = static_cast<DWORD>(r6 + r4 * 0x10000);
+
+    int r7 = rand();
+    int r8 = rand();
+    SetThreadLocalRandSeed_40A350(r8 + 3);
+    int r9 = rand();
+    serialDwords[2] = static_cast<DWORD>(r9 + r7 * 0x10000);
+
+    int r10 = rand();
+    int r11 = rand();
+    SetThreadLocalRandSeed_40A350(r11 + 4);
+    int r12 = rand();
+    serialDwords[3] = static_cast<DWORD>(r12 + r10 * 0x10000);
+
+    instanceBytes[0x106C38] = 0x22;
+    instanceBytes[0x106C39] = 3;
+
+    static constexpr char HEX_DIGITS[] = "0123456789abcdef";
+    UINT_PTR nibbleIndex = 0;
+    BYTE* serialCursor = instanceBytes + 0x106C3B;
+    for(int bitShift = 0; bitShift < 0x7C; bitShift += 4) {
+        const DWORD word = serialDwords[nibbleIndex >> 3];
+        const BYTE nibble = static_cast<BYTE>((word >> (bitShift & 0x1F)) & 0x0F);
+        serialCursor[-1] = static_cast<BYTE>(HEX_DIGITS[nibble]);
+        serialCursor[0] = 0;
+        ++nibbleIndex;
+        serialCursor += 2;
+    }
+
+    __time64_t now = 0;
+    _time64(&now);
+    tm nowLocal = {};
+    _localtime64_s(&nowLocal, &now);
+    char dateMmdd[8] = {};
+    strftime(dateMmdd, sizeof(dateMmdd), "%m%d", &nowLocal);
+
+    char versionString[0x20] = {};
+    const int hasVersion = GetModuleFileVersionInfo_40A350(0);
+
+    int formatResult = 0;
+    if(hasVersion == 0) {
+        formatResult =
+            FormatStringToBuffer(versionString, sizeof(versionString), "81.0.X.X-%s", dateMmdd);
+    } else {
+        const DWORD v0 = GetUshortFieldByIndex_40A350(0);
+        const DWORD v1 = GetUshortFieldByIndex_40A350(1);
+        const DWORD v2 = GetUshortFieldByIndex_40A350(2);
+        const DWORD v3 = GetUshortFieldByIndex_40A350(3);
+        formatResult = FormatStringToBuffer(
+            versionString,
+            sizeof(versionString),
+            "%d.%d.%d.%d-%s",
+            static_cast<int>(v3 & 0xFFFF),
+            static_cast<int>(v2 & 0xFFFF),
+            static_cast<int>(v1 & 0xFFFF),
+            static_cast<int>(v0 & 0xFFFF),
+            dateMmdd);
+    }
+
+    if(formatResult != 0) {
+        DebugLogMessage_40A350("UpdateCISBuf: Formatted String Buffer fails.");
+    }
+
+    memcpy(instanceBytes + 0x106D38, versionString, 0x10);
+
+    FileVersionInfoDestructor_40A350();
+}
+
 BYTE RunRepairDevice_Orchestrator_40EC60() {
     if(! g_iTEUFDrs_instance) {
         return 0;
@@ -4398,6 +4744,19 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
     }
 
     *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0x46;
+
+    if(instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_MESSAGE_FLAG] != 0) {
+        UpdateFirmwareBankInfo(activeDeviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle));
+        GetMPInfoAndUpdateBuffers(activeDeviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle));
+
+        DWORD cisConfigBuffer[16] = {};
+        (void) PatchLunConfigBuffer_409210(
+            static_cast<DWORD>((UINT_PTR) deviceHandle),
+            cisConfigBuffer);
+        UpdateCISBBuffer_40A350(cisConfigBuffer);
+    } else {
+        UpdateCISBVersionOnly_40AA70();
+    }
 
     if(! g_pFLH_WriteCISTable) {
         CloseDeviceHandle(volumeKey);
