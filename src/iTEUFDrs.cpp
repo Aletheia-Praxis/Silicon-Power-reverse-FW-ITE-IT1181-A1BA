@@ -3412,7 +3412,8 @@ void UpdateFirmwareBankInfo(int deviceIndex, DWORD deviceHandle) {
     BYTE* bcmBase = deviceStructBase + ITEUFDRS_OFFSET_DEVICE_CTRL_BUFFER;
 
     DWORD sysAddrBuffer[16] = {};
-    typedef int(__cdecl * PFN_VDR_ReadSysAddr_Exact)(DWORD* outBuffer, BYTE* controllerData, DWORD);
+    typedef int(__cdecl * PFN_VDR_ReadSysAddr_Exact)(
+        DWORD * outBuffer, BYTE * controllerData, DWORD);
     const PFN_VDR_ReadSysAddr_Exact readSysAddr =
         reinterpret_cast<PFN_VDR_ReadSysAddr_Exact>(g_pVDR_ReadSysAddr);
 
@@ -3440,14 +3441,12 @@ void UpdateFirmwareBankInfo(int deviceIndex, DWORD deviceHandle) {
         *reinterpret_cast<DWORD*>(
             deviceStructBase + ITEUFDRS_OFFSET_DEVICE_BANKINFO_DWORD_BASE_A
             + static_cast<size_t>(i) * sizeof(DWORD)) = SwapEndianness32(sysAddrBuffer[i]);
-        deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BANKINFO_FLAG_BASE_A + static_cast<size_t>(i)] =
-            1;
+        deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BANKINFO_FLAG_BASE_A + static_cast<size_t>(i)] = 1;
 
         *reinterpret_cast<DWORD*>(
             deviceStructBase + ITEUFDRS_OFFSET_DEVICE_BANKINFO_DWORD_BASE_B
             + static_cast<size_t>(i) * sizeof(DWORD)) = SwapEndianness32(sysAddrBuffer[i + 2]);
-        deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BANKINFO_FLAG_BASE_B + static_cast<size_t>(i)] =
-            1;
+        deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BANKINFO_FLAG_BASE_B + static_cast<size_t>(i)] = 1;
 
         const WORD wordA =
             *reinterpret_cast<const WORD*>(sysAddrBytes + 0x28 + static_cast<size_t>(i) * 2);
@@ -3458,15 +3457,13 @@ void UpdateFirmwareBankInfo(int deviceIndex, DWORD deviceHandle) {
         *reinterpret_cast<DWORD*>(
             deviceStructBase + ITEUFDRS_OFFSET_DEVICE_BANKINFO_DWORD_BASE_C
             + static_cast<size_t>(i) * sizeof(DWORD)) = rawA;
-        deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BANKINFO_FLAG_BASE_C + static_cast<size_t>(i)] =
-            1;
+        deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BANKINFO_FLAG_BASE_C + static_cast<size_t>(i)] = 1;
 
         const DWORD rawB = blkAddr2Raw(bcmBase, SwapEndianness16(wordB));
         *reinterpret_cast<DWORD*>(
             deviceStructBase + ITEUFDRS_OFFSET_DEVICE_BANKINFO_DWORD_BASE_D
             + static_cast<size_t>(i) * sizeof(DWORD)) = rawB;
-        deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BANKINFO_FLAG_BASE_D + static_cast<size_t>(i)] =
-            1;
+        deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BANKINFO_FLAG_BASE_D + static_cast<size_t>(i)] = 1;
     }
 }
 
@@ -4136,7 +4133,7 @@ static BYTE ReadAndAnalyzeFlashBlocks_40A150(DWORD deviceHandle) {
     }
 
     if(! g_pFLH_HandleMassBlocksPerChip || ! g_pFLH_BlockIsGap || ! g_pCCBAddress2RawAddress
-        || ! g_pFLH_ReadSpare) {
+       || ! g_pFLH_ReadSpare) {
         return 0;
     }
 
@@ -4153,9 +4150,11 @@ static BYTE ReadAndAnalyzeFlashBlocks_40A150(DWORD deviceHandle) {
 
     const BYTE channelCount = deviceStructBase[ITEUFDRS_OFFSET_DEVICE_CHANNEL_COUNT];
     const BYTE chipSelectCount = bcmBase[ITEUFDRS_OFFSET_BCM_CHIP_SELECT_COUNT];
-    const DWORD blockCount = *reinterpret_cast<DWORD*>(bcmBase + ITEUFDRS_OFFSET_BCM_BLOCK_COUNT_DWORD);
+    const DWORD blockCount =
+        *reinterpret_cast<DWORD*>(bcmBase + ITEUFDRS_OFFSET_BCM_BLOCK_COUNT_DWORD);
 
-    const DWORD totalPasses = static_cast<DWORD>(channelCount) * static_cast<DWORD>(chipSelectCount);
+    const DWORD totalPasses =
+        static_cast<DWORD>(channelCount) * static_cast<DWORD>(chipSelectCount);
     if(channelCount == 0 || chipSelectCount == 0 || totalPasses == 0) {
         return 1;
     }
@@ -4181,10 +4180,8 @@ static BYTE ReadAndAnalyzeFlashBlocks_40A150(DWORD deviceHandle) {
         return (((hour * 0x100 + year + minute) * 0x100 + second + month) * 0x100 + msDiv10 + day);
     };
 
-    const auto checkBlockBadMarkers_408D60 = [&](
-        BYTE channel,
-        BYTE chipSelect,
-        DWORD blockIndex) -> BYTE {
+    const auto checkBlockBadMarkers_408D60 =
+        [&](BYTE channel, BYTE chipSelect, DWORD blockIndex) -> BYTE {
         typedef int(__cdecl * PFN_FLH_ReadSpare_Alt_Exact)(
             void* address,
             int page,
@@ -4210,8 +4207,8 @@ static BYTE ReadAndAnalyzeFlashBlocks_40A150(DWORD deviceHandle) {
 
         const BYTE marker = static_cast<BYTE>((spareWords[1] >> 8) & 0xFF);
         if(marker == static_cast<BYTE>('h')) {
-            static constexpr DWORD ITEUFDRS_SIGNATURE_ROOT = 0x544F4F52; // "ROOT"
-            static constexpr DWORD ITEUFDRS_SIGNATURE_CISB = 0x42534943; // "CISB"
+            static constexpr DWORD ITEUFDRS_SIGNATURE_ROOT = 0x544F4F52;  // "ROOT"
+            static constexpr DWORD ITEUFDRS_SIGNATURE_CISB = 0x42534943;  // "CISB"
             if(spareWords[0] == ITEUFDRS_SIGNATURE_ROOT) {
                 return 0x11;
             }
@@ -4236,7 +4233,7 @@ static BYTE ReadAndAnalyzeFlashBlocks_40A150(DWORD deviceHandle) {
         DWORD deviceHandle,
         DWORD channel,
         DWORD chipSelect,
-        BYTE* controllerData,
+        BYTE * controllerData,
         void* outBlockBuffer,
         DWORD zero,
         BYTE* outByte,
@@ -4244,11 +4241,11 @@ static BYTE ReadAndAnalyzeFlashBlocks_40A150(DWORD deviceHandle) {
     const PFN_FLH_HandleMassBlocksPerChip_Exact handleMassBlocks =
         reinterpret_cast<PFN_FLH_HandleMassBlocksPerChip_Exact>(g_pFLH_HandleMassBlocksPerChip);
 
-    typedef int(__cdecl * PFN_FLH_BlockIsGap_Exact)(BYTE* controllerData, DWORD blockIndex);
+    typedef int(__cdecl * PFN_FLH_BlockIsGap_Exact)(BYTE * controllerData, DWORD blockIndex);
     const PFN_FLH_BlockIsGap_Exact blockIsGap =
         reinterpret_cast<PFN_FLH_BlockIsGap_Exact>(g_pFLH_BlockIsGap);
 
-    typedef DWORD(__cdecl * PFN_CCBAddress2RawAddress_Exact)(BYTE* controllerData, void* address);
+    typedef DWORD(__cdecl * PFN_CCBAddress2RawAddress_Exact)(BYTE * controllerData, void* address);
     const PFN_CCBAddress2RawAddress_Exact ccbAddress2RawAddress =
         reinterpret_cast<PFN_CCBAddress2RawAddress_Exact>(g_pCCBAddress2RawAddress);
 
@@ -4264,7 +4261,8 @@ static BYTE ReadAndAnalyzeFlashBlocks_40A150(DWORD deviceHandle) {
             *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) =
                 progressValue;
 
-            const DWORD bufferIndex = static_cast<DWORD>(chipSelect) + static_cast<DWORD>(channel) * 2;
+            const DWORD bufferIndex =
+                static_cast<DWORD>(chipSelect) + static_cast<DWORD>(channel) * 2;
             BYTE* blockBuffer =
                 instanceBytes + ITEUFDRS_OFFSET_INSTANCE_ERASE_SCRATCH_BASE + (bufferIndex << 16);
 
@@ -4297,7 +4295,8 @@ static BYTE ReadAndAnalyzeFlashBlocks_40A150(DWORD deviceHandle) {
                 address.blockIndex = blockIndex;
 
                 const DWORD rawAddress = ccbAddress2RawAddress(bcmBase, &address);
-                const BYTE classification = checkBlockBadMarkers_408D60(channel, chipSelect, blockIndex);
+                const BYTE classification =
+                    checkBlockBadMarkers_408D60(channel, chipSelect, blockIndex);
                 blockBuffer[blockIndex] = classification;
 
                 if(classification == 1) {
@@ -4346,8 +4345,7 @@ static BYTE FinalizeRepairWrite_40AC70(DWORD deviceHandle, const DWORD* formatAr
         void* outLenByte,
         void* controllerData,
         DWORD deviceHandle);
-    const PFN_FMT_Format_Exact fmtFormat =
-        reinterpret_cast<PFN_FMT_Format_Exact>(g_pFMT_Format);
+    const PFN_FMT_Format_Exact fmtFormat = reinterpret_cast<PFN_FMT_Format_Exact>(g_pFMT_Format);
 
     const int formatOk = fmtFormat(outBuffer, args, &outLenByte, bcmBase, deviceHandle);
     return (formatOk == 1) ? 1 : 0;
@@ -4363,7 +4361,7 @@ struct ModuleVersionInfo_40A350 {
     std::vector<BYTE> versionBlob;
 };
 
-static ModuleVersionInfo_40A350 g_moduleVersionInfo_40A350 = {false, {}, {}};
+static ModuleVersionInfo_40A350 g_moduleVersionInfo_40A350 = { false, {}, {} };
 
 static int GetModuleFileVersionInfo_40A350(int) {
     g_moduleVersionInfo_40A350.hasFixedInfo = false;
@@ -4425,16 +4423,11 @@ static WORD GetUshortFieldByIndex_40A350(int index) {
     }
 
     switch(index) {
-        case 0:
-            return LOWORD(g_moduleVersionInfo_40A350.fixed.dwFileVersionLS);
-        case 1:
-            return HIWORD(g_moduleVersionInfo_40A350.fixed.dwFileVersionLS);
-        case 2:
-            return LOWORD(g_moduleVersionInfo_40A350.fixed.dwFileVersionMS);
-        case 3:
-            return HIWORD(g_moduleVersionInfo_40A350.fixed.dwFileVersionMS);
-        default:
-            return 0;
+    case 0: return LOWORD(g_moduleVersionInfo_40A350.fixed.dwFileVersionLS);
+    case 1: return HIWORD(g_moduleVersionInfo_40A350.fixed.dwFileVersionLS);
+    case 2: return LOWORD(g_moduleVersionInfo_40A350.fixed.dwFileVersionMS);
+    case 3: return HIWORD(g_moduleVersionInfo_40A350.fixed.dwFileVersionMS);
+    default: return 0;
     }
 }
 
@@ -4470,8 +4463,7 @@ static int PatchLunConfigBuffer_409210(DWORD deviceHandle, DWORD* configBuffer16
     BYTE* deviceStructBase = instanceBytes + activeDeviceOffset;
     BYTE* bcmBase = deviceStructBase + ITEUFDRS_OFFSET_DEVICE_CTRL_BUFFER;
 
-    typedef int(__cdecl * PFN_VDR_ReadWriteLUNConfig_Exact)(
-        int, DWORD*, BYTE*, DWORD);
+    typedef int(__cdecl * PFN_VDR_ReadWriteLUNConfig_Exact)(int, DWORD*, BYTE*, DWORD);
     const PFN_VDR_ReadWriteLUNConfig_Exact readWriteLunConfig =
         reinterpret_cast<PFN_VDR_ReadWriteLUNConfig_Exact>(g_pVDR_ReadWriteLUNConfig);
 
@@ -4487,8 +4479,10 @@ static int PatchLunConfigBuffer_409210(DWORD deviceHandle, DWORD* configBuffer16
     static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_20734C = 0x20734C;
     static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_207354 = 0x207354;
 
-    const DWORD value20734C = *reinterpret_cast<const DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_20734C);
-    const DWORD value207354 = *reinterpret_cast<const DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_207354);
+    const DWORD value20734C =
+        *reinterpret_cast<const DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_20734C);
+    const DWORD value207354 =
+        *reinterpret_cast<const DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_207354);
 
     configBuffer16Dwords[3] = value20734C;
 
@@ -4731,48 +4725,57 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
     BYTE* instanceBytes = reinterpret_cast<BYTE*>(g_iTEUFDrs_instance);
     *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0;
 
+    BYTE orchestratorResult = 0;
+    bool hasOpenedDevice = false;
+    DWORD deviceHandleDword = 0;
+    BYTE volumeKey = 0xFF;
+    BYTE* bcmBase = nullptr;
+
     const BYTE activeDeviceIndex = instanceBytes[ITEUFDRS_OFFSET_INSTANCE_ACTIVE_DEVICE_INDEX];
     if(activeDeviceIndex == 0xFF) {
-        return 0;
+        goto cleanup_exit;
     }
 
     const size_t activeDeviceOffset =
         static_cast<size_t>(activeDeviceIndex) * ITEUFDRS_DEVICE_STRIDE_BYTES;
     BYTE* deviceStructBase = instanceBytes + activeDeviceOffset;
-    BYTE* bcmBase = deviceStructBase + ITEUFDRS_OFFSET_DEVICE_CTRL_BUFFER;
+    bcmBase = deviceStructBase + ITEUFDRS_OFFSET_DEVICE_CTRL_BUFFER;
 
     static constexpr size_t ITEUFDRS_OFFSET_DEVICE_SELECTED_VOLUME_KEY = 0x9A6;
-    const BYTE volumeKey = deviceStructBase[ITEUFDRS_OFFSET_DEVICE_SELECTED_VOLUME_KEY];
+    volumeKey = deviceStructBase[ITEUFDRS_OFFSET_DEVICE_SELECTED_VOLUME_KEY];
     const size_t volumeOffset = static_cast<size_t>(volumeKey) * ITEUFDRS_VOLUME_STRIDE_BYTES;
 
     if(OpenLogicalDriveHandle(volumeKey) == 0) {
-        return 0;
+        goto cleanup_exit;
     }
 
     HANDLE deviceHandle = *reinterpret_cast<HANDLE*>(
         instanceBytes + ITEUFDRS_OFFSET_VOLUME_DEVICE_HANDLE_BASE + volumeOffset);
     if(deviceHandle == NULL || deviceHandle == INVALID_HANDLE_VALUE) {
-        CloseDeviceHandle(volumeKey);
-        return 0;
+        goto cleanup_failure;
     }
 
-    if(InitializeISPCode(activeDeviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle)) == 0) {
-        CloseDeviceHandle(volumeKey);
-        return 0;
+    hasOpenedDevice = true;
+    deviceHandleDword = static_cast<DWORD>((UINT_PTR) deviceHandle);
+    bcmBase = deviceStructBase + ITEUFDRS_OFFSET_DEVICE_CTRL_BUFFER;
+
+    if(InitializeISPCode(activeDeviceIndex, deviceHandleDword) == 0) {
+        goto cleanup_failure;
     }
 
     static constexpr size_t ITEUFDRS_OFFSET_DEVICE_BANK_MODE_FLAG = 0xA1D;
     if(deviceStructBase[ITEUFDRS_OFFSET_DEVICE_BANK_MODE_FLAG] != 0) {
         CloseDeviceHandle(volumeKey);
         if(OpenPhysicalDriveHandle(volumeKey) == 0) {
-            return 0;
+            goto cleanup_exit;
         }
         deviceHandle = *reinterpret_cast<HANDLE*>(
             instanceBytes + ITEUFDRS_OFFSET_VOLUME_DEVICE_HANDLE_BASE + volumeOffset);
         if(deviceHandle == NULL || deviceHandle == INVALID_HANDLE_VALUE) {
-            CloseDeviceHandle(volumeKey);
-            return 0;
+            goto cleanup_failure;
         }
+
+        deviceHandleDword = static_cast<DWORD>((UINT_PTR) deviceHandle);
     }
 
     *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 5;
@@ -4799,51 +4802,41 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
         ITEUFDRS_INSTANCE_ERASE_SCRATCH_SIZE_BYTES);
 
     if(! g_pDG_GetBlockPageMapFromFlash) {
-        CloseDeviceHandle(volumeKey);
-        return 0;
+        goto cleanup_failure;
     }
 
     typedef int(__cdecl * PFN_DG_GetBlockPageMapFromFlash_Orchestrator)(
-        DWORD,
-        BYTE*,
-        BYTE*,
-        BYTE*,
-        DWORD*,
-        DWORD);
+        DWORD, BYTE*, BYTE*, BYTE*, DWORD*, DWORD);
     const PFN_DG_GetBlockPageMapFromFlash_Orchestrator getMap =
         reinterpret_cast<PFN_DG_GetBlockPageMapFromFlash_Orchestrator>(
             g_pDG_GetBlockPageMapFromFlash);
 
     const int mapOk = getMap(
-        static_cast<DWORD>((UINT_PTR) deviceHandle),
+        deviceHandleDword,
         bcmBase,
         instanceBytes + ITEUFDRS_OFFSET_INSTANCE_ERASE_MARKERS_BASE,
         outText200,
         &outValue,
         0);
     if(mapOk != 1) {
-        CloseDeviceHandle(volumeKey);
-        return 0;
+        goto cleanup_failure;
     }
 
     *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 10;
-    if(ReadAndAnalyzeFlashBlocks_40A150(static_cast<DWORD>((UINT_PTR) deviceHandle)) == 0) {
-        CloseDeviceHandle(volumeKey);
-        return 0;
+    if(ReadAndAnalyzeFlashBlocks_40A150(deviceHandleDword) == 0) {
+        goto cleanup_failure;
     }
 
     *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0x0F;
     UpdateBankStatusFlags(activeDeviceIndex);
 
     *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0x14;
-    if(EraseDeviceAndResetCPU(activeDeviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle)) == 0) {
-        CloseDeviceHandle(volumeKey);
-        return 0;
+    if(EraseDeviceAndResetCPU(activeDeviceIndex, deviceHandleDword) == 0) {
+        goto cleanup_failure;
     }
 
-    if(CreateSystemAndTestUnitReady(activeDeviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle)) == 0) {
-        CloseDeviceHandle(volumeKey);
-        return 0;
+    if(CreateSystemAndTestUnitReady(activeDeviceIndex, deviceHandleDword) == 0) {
+        goto cleanup_failure;
     }
 
     *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0x46;
@@ -4851,13 +4844,11 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
     DWORD finalizeArgs[16] = {};
 
     if(instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_MESSAGE_FLAG] != 0) {
-        UpdateFirmwareBankInfo(activeDeviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle));
-        GetMPInfoAndUpdateBuffers(activeDeviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle));
+        UpdateFirmwareBankInfo(activeDeviceIndex, deviceHandleDword);
+        GetMPInfoAndUpdateBuffers(activeDeviceIndex, deviceHandleDword);
 
         DWORD cisConfigBuffer[16] = {};
-        (void) PatchLunConfigBuffer_409210(
-            static_cast<DWORD>((UINT_PTR) deviceHandle),
-            cisConfigBuffer);
+        (void) PatchLunConfigBuffer_409210(deviceHandleDword, cisConfigBuffer);
 
         memcpy(finalizeArgs, cisConfigBuffer, sizeof(finalizeArgs));
         UpdateCISBBuffer_40A350(cisConfigBuffer);
@@ -4866,8 +4857,7 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
     }
 
     if(! g_pFLH_WriteCISTable) {
-        CloseDeviceHandle(volumeKey);
-        return 0;
+        goto cleanup_failure;
     }
 
     typedef int(__cdecl * PFN_FLH_WriteCISTable_Orchestrator)(DWORD, void*, DWORD, DWORD);
@@ -4876,14 +4866,10 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
 
     int writeAttempt = 0;
     while(writeAttempt < 2) {
-        const int writeOk = writeCis(
-            static_cast<DWORD>((UINT_PTR) deviceHandle),
-            instanceBytes + ITEUFDRS_OFFSET_INSTANCE_CIS_CACHE,
-            0,
-            0);
+        const int writeOk =
+            writeCis(deviceHandleDword, instanceBytes + ITEUFDRS_OFFSET_INSTANCE_CIS_CACHE, 0, 0);
         if(writeOk == 0) {
-            CloseDeviceHandle(volumeKey);
-            return 0;
+            goto cleanup_failure;
         }
         ++writeAttempt;
     }
@@ -4891,9 +4877,7 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
     if(g_pFLH_CPUReset) {
         typedef void(__cdecl * PFN_FLH_CPUReset_Orchestrator)(DWORD, BYTE*, DWORD);
         (reinterpret_cast<PFN_FLH_CPUReset_Orchestrator>(g_pFLH_CPUReset))(
-            1,
-            bcmBase,
-            static_cast<DWORD>((UINT_PTR) deviceHandle));
+            1, bcmBase, deviceHandleDword);
     }
 
     {
@@ -4906,23 +4890,63 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
     *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0x50;
     if(instanceBytes[ITEUFDRS_OFFSET_INSTANCE_MPINFO_MESSAGE_FLAG] == 0) {
         if(instanceBytes[ITEUFDRS_OFFSET_INSTANCE_DEVICE_CONNECTED] == 0) {
-            (void) GetLunArrayData(activeDeviceIndex, static_cast<DWORD>((UINT_PTR) deviceHandle));
-            memcpy(finalizeArgs, deviceStructBase + ITEUFDRS_OFFSET_DEVICE_LUN_DATA, sizeof(finalizeArgs));
+            (void) GetLunArrayData(activeDeviceIndex, deviceHandleDword);
+            memcpy(
+                finalizeArgs,
+                deviceStructBase + ITEUFDRS_OFFSET_DEVICE_LUN_DATA,
+                sizeof(finalizeArgs));
             reinterpret_cast<BYTE*>(finalizeArgs)[0] = 0x60;
         } else {
-            memcpy(finalizeArgs, deviceStructBase + ITEUFDRS_OFFSET_DEVICE_LUN_DATA, sizeof(finalizeArgs));
+            memcpy(
+                finalizeArgs,
+                deviceStructBase + ITEUFDRS_OFFSET_DEVICE_LUN_DATA,
+                sizeof(finalizeArgs));
         }
     }
 
     *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0x5A;
-    if(FinalizeRepairWrite_40AC70(static_cast<DWORD>((UINT_PTR) deviceHandle), finalizeArgs) == 0) {
-        CloseDeviceHandle(volumeKey);
-        return 0;
+    if(FinalizeRepairWrite_40AC70(deviceHandleDword, finalizeArgs) == 0) {
+        goto cleanup_failure;
     }
 
-    CloseDeviceHandle(volumeKey);
+    orchestratorResult = 1;
+    goto cleanup_success;
+
+cleanup_failure:
+    if(hasOpenedDevice && g_pSTD_TestUnitReady) {
+        static constexpr DWORD COMM_BUFFER_SIZE = 0xE40;
+        BYTE* commBuffer = reinterpret_cast<BYTE*>(malloc(COMM_BUFFER_SIZE));
+        if(commBuffer) {
+            memset(commBuffer, 0, COMM_BUFFER_SIZE);
+            typedef int(__stdcall * PFN_VDR_CheckSYSReady_Exact)(
+                DWORD, BYTE*, DWORD, BYTE, BYTE*, BYTE);
+            const int testUnitOk =
+                (reinterpret_cast<PFN_VDR_CheckSYSReady_Exact>(g_pSTD_TestUnitReady))(
+                    deviceHandleDword, commBuffer, COMM_BUFFER_SIZE, 0, commBuffer + 512, 1);
+
+            if(testUnitOk == 0 && g_pFLH_CPUReset && bcmBase) {
+                typedef void(__cdecl * PFN_FLH_CPUReset_Orchestrator)(DWORD, BYTE*, DWORD);
+                (reinterpret_cast<PFN_FLH_CPUReset_Orchestrator>(g_pFLH_CPUReset))(
+                    1, bcmBase, deviceHandleDword);
+            }
+
+            free(commBuffer);
+        }
+    }
+    goto cleanup_exit;
+
+cleanup_success:
+    if(hasOpenedDevice) {
+        instanceBytes[5] = 0;
+    }
+    goto cleanup_exit;
+
+cleanup_exit:
+    if(hasOpenedDevice) {
+        CloseDeviceHandle(volumeKey);
+    }
     *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0x64;
-    return 1;
+    return orchestratorResult;
 }
 
 BYTE CreateSystemAndTestUnitReady(int deviceIndex, DWORD deviceHandle) {
@@ -4988,8 +5012,8 @@ BYTE CreateSystemAndTestUnitReady(int deviceIndex, DWORD deviceHandle) {
                 const DWORD blockIndex = out.blockIndices[i];
                 const BYTE chipIndex = out.chipIndices[i];
 
-                systemMapBase[static_cast<size_t>(chipIndex) * ITEUFDRS_MARKER_STRIDE_128K
-                              + blockIndex] = 0;
+                systemMapBase
+                    [static_cast<size_t>(chipIndex) * ITEUFDRS_MARKER_STRIDE_128K + blockIndex] = 0;
 
                 if((bcmBase[ITEUFDRS_OFFSET_BCM_FLAGS] & 0x80) != 0) {
                     const DWORD shifted = blockIndex >> 1;
@@ -5045,7 +5069,8 @@ BYTE CreateSystemAndTestUnitReady(int deviceIndex, DWORD deviceHandle) {
             }
         }
 
-        char* firmwarePath = reinterpret_cast<char*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_FIRMWARE_PATH);
+        char* firmwarePath =
+            reinterpret_cast<char*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_FIRMWARE_PATH);
         createResult = createSystem(deviceHandle, bcmBase, systemMapBase, firmwarePath, 1);
 
         if(createResult == ITEUFDRS_MP_CREATE_SYSTEM_RESULT_FAIL_3F) {
