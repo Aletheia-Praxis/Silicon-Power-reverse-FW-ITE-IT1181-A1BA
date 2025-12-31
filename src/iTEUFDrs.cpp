@@ -65,6 +65,7 @@ static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_MPINFO_EXTRA = 0x88F;
 static constexpr size_t ITEUFDRS_INSTANCE_MPINFO_EXTRA_SIZE_BYTES = 0x0C;
 static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_MPINFO_EXTRA_FLAG = 0x89B;
 static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE = 0x89C;
+static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_ERASE_MARKERS_FLAG_6B37 = 0x6B37;
 static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_ERASE_MARKERS_BASE = 0x6B38;
 static constexpr size_t ITEUFDRS_OFFSET_INSTANCE_ERASE_SCRATCH_BASE = 0x107340;
 static constexpr size_t ITEUFDRS_INSTANCE_ERASE_SCRATCH_SIZE_BYTES = 0x100000;
@@ -2612,8 +2613,79 @@ char OpenPhysicalDriveHandle(BYTE volumeIndex) {
         return 0;
     }
 
-    BYTE result = g_iTEUFDrs_instance->OpenPhysicalDriveHandle(volumeIndex);
-    return result != 0 ? 1 : 0;
+    if(volumeIndex >= ITEUFDRS_MAX_SCANNED_DRIVES) {
+        return 0;
+    }
+
+    BYTE* instanceBytes = reinterpret_cast<BYTE*>(g_iTEUFDrs_instance);
+    const size_t volumeOffset = static_cast<size_t>(volumeIndex) * ITEUFDRS_VOLUME_STRIDE_BYTES;
+
+    char* driveLetterPtr = reinterpret_cast<char*>(
+        instanceBytes + ITEUFDRS_OFFSET_VOLUME_DRIVE_LETTER_BASE + volumeOffset);
+    char driveLetter = *driveLetterPtr;
+    if(driveLetter == '\0') {
+        driveLetter = ITEUFDRS_DRIVE_LETTERS[volumeIndex];
+        *driveLetterPtr = driveLetter;
+    }
+
+    char volumePath[8] = {};
+    sprintf_s(volumePath, sizeof(volumePath), "\\\\.\\%c:", driveLetter);
+
+    HANDLE hVolume = CreateFileA(volumePath, 0, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+
+    if(hVolume == INVALID_HANDLE_VALUE) {
+        const DWORD errorCode = GetLastError();
+        LogMessage("(OpenDiskHandle) from volume fail ... Err=%ld", errorCode);
+        return 0;
+    }
+
+#pragma pack(push, 1)
+    struct VolumeToPhysicalQueryOut {
+        DWORD unused0;
+        DWORD physicalDriveNumber;
+        DWORD unused1;
+    };
+#pragma pack(pop)
+
+    VolumeToPhysicalQueryOut queryOut = {};
+    DWORD bytesReturned = 0;
+    const BOOL ioctlOk = DeviceIoControl(
+        hVolume, 0x2D1080, nullptr, 0, &queryOut, sizeof(queryOut), &bytesReturned, nullptr);
+
+    CloseHandle(hVolume);
+
+    CloseDeviceHandle(volumeIndex);
+
+    if(! ioctlOk) {
+        return 0;
+    }
+
+    char physicalPath[32] = {};
+    sprintf_s(
+        physicalPath,
+        sizeof(physicalPath),
+        "\\\\.\\PHYSICALDRIVE%lu",
+        queryOut.physicalDriveNumber);
+
+    HANDLE hPhysical = CreateFileA(
+        physicalPath,
+        GENERIC_READ | GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        NULL,
+        OPEN_EXISTING,
+        0,
+        NULL);
+
+    if(hPhysical == INVALID_HANDLE_VALUE) {
+        const DWORD errorCode = GetLastError();
+        LogMessage("(OpenDiskHandle) from drive fail ... Err=%ld", errorCode);
+        return 0;
+    }
+
+    HANDLE* handleStorage = reinterpret_cast<HANDLE*>(
+        instanceBytes + ITEUFDRS_OFFSET_VOLUME_DEVICE_HANDLE_BASE + volumeOffset);
+    *handleStorage = hPhysical;
+    return 1;
 }
 
 // Removed duplicate functions - using stubs from above
@@ -3722,16 +3794,15 @@ static void DismountAndUnlockDevice_408C30(HANDLE deviceHandle) {
     DWORD bytesReturned = 0;
     const DWORD handleValue = static_cast<DWORD>((UINT_PTR) deviceHandle);
 
-    const BOOL dismountOk =
-        DeviceIoControl(
-            deviceHandle,
-            ITEUFDRS_IOCTL_DISMOUNT_VOLUME,
-            nullptr,
-            0,
-            nullptr,
-            0,
-            &bytesReturned,
-            nullptr);
+    const BOOL dismountOk = DeviceIoControl(
+        deviceHandle,
+        ITEUFDRS_IOCTL_DISMOUNT_VOLUME,
+        nullptr,
+        0,
+        nullptr,
+        0,
+        &bytesReturned,
+        nullptr);
 
     if(! dismountOk) {
         LogMessage("Can't DISMOUNT_VOLUME (handle = 0x%x)..", handleValue);
@@ -3740,16 +3811,15 @@ static void DismountAndUnlockDevice_408C30(HANDLE deviceHandle) {
     }
 
     bytesReturned = 0;
-    const BOOL unlockOk =
-        DeviceIoControl(
-            deviceHandle,
-            ITEUFDRS_IOCTL_UNLOCK_DEVICE,
-            nullptr,
-            0,
-            nullptr,
-            0,
-            &bytesReturned,
-            nullptr);
+    const BOOL unlockOk = DeviceIoControl(
+        deviceHandle,
+        ITEUFDRS_IOCTL_UNLOCK_DEVICE,
+        nullptr,
+        0,
+        nullptr,
+        0,
+        &bytesReturned,
+        nullptr);
 
     if(! unlockOk) {
         LogMessage("Can't unlock device (handle = 0x%x)..", handleValue);
@@ -3757,7 +3827,45 @@ static void DismountAndUnlockDevice_408C30(HANDLE deviceHandle) {
         LogMessage("UnLock (handle = 0x%x) -----vendor command access", handleValue);
         instanceBytes[ITEUFDRS_OFFSET_INSTANCE_DEVICE_LOCKED_FLAG] = 0;
     }
- }
+}
+
+static BYTE LockVendorCommandAccess_408BB0(HANDLE deviceHandle) {
+    if(! g_iTEUFDrs_instance) {
+        return 0;
+    }
+
+    if(deviceHandle == NULL || deviceHandle == INVALID_HANDLE_VALUE) {
+        return 0;
+    }
+
+    static constexpr DWORD ITEUFDRS_IOCTL_LOCK_VENDOR_COMMAND_ACCESS = 0x90018;
+    static constexpr DWORD ITEUFDRS_LOCK_RETRY_SLEEP_MS = 500;
+    static constexpr int ITEUFDRS_LOCK_MAX_ATTEMPTS = 0x14;
+
+    DWORD bytesReturned = 0;
+
+    for(int attempt = 0; attempt < ITEUFDRS_LOCK_MAX_ATTEMPTS; ++attempt) {
+        const BOOL ok = DeviceIoControl(
+            deviceHandle,
+            ITEUFDRS_IOCTL_LOCK_VENDOR_COMMAND_ACCESS,
+            nullptr,
+            0,
+            nullptr,
+            0,
+            &bytesReturned,
+            nullptr);
+
+        if(ok) {
+            reinterpret_cast<BYTE*>(
+                g_iTEUFDrs_instance)[ITEUFDRS_OFFSET_INSTANCE_DEVICE_LOCKED_FLAG] = 1;
+            return 1;
+        }
+
+        Sleep(ITEUFDRS_LOCK_RETRY_SLEEP_MS);
+    }
+
+    return 0;
+}
 
 void AssignDeviceSizeString(BYTE* buffer) {
     if(! buffer || ! g_iTEUFDrs_instance) {
@@ -4834,6 +4942,7 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
             goto cleanup_failure;
         }
 
+        (void) LockVendorCommandAccess_408BB0(deviceHandle);
         deviceHandleDword = static_cast<DWORD>((UINT_PTR) deviceHandle);
     }
 
@@ -4881,6 +4990,14 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
         goto cleanup_failure;
     }
 
+    {
+        static constexpr size_t ITEUFDRS_OFFSET_BCM_MAP_STATUS_BYTE_D0C = 0xD0C;
+        static constexpr size_t ITEUFDRS_DG_OUTTEXT_STATUS_INDEX = 0x132;
+        static_assert(ITEUFDRS_DG_OUTTEXT_STATUS_INDEX < sizeof(outText200));
+        bcmBase[ITEUFDRS_OFFSET_BCM_MAP_STATUS_BYTE_D0C] =
+            outText200[ITEUFDRS_DG_OUTTEXT_STATUS_INDEX];
+    }
+
     *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 10;
     if(ReadAndAnalyzeFlashBlocks_40A150(deviceHandleDword) == 0) {
         goto cleanup_failure;
@@ -4892,6 +5009,42 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
     *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0x14;
     if(EraseDeviceAndResetCPU(activeDeviceIndex, deviceHandleDword) == 0) {
         goto cleanup_failure;
+    }
+
+    *reinterpret_cast<DWORD*>(instanceBytes + ITEUFDRS_OFFSET_INSTANCE_PROGRESS_VALUE) = 0x3C;
+    if(instanceBytes[ITEUFDRS_OFFSET_INSTANCE_SCAN_COMPLETE] != 0) {
+        static constexpr size_t ITEUFDRS_OFFSET_BCM_STATUS_76 = 0x76;
+        static constexpr size_t ITEUFDRS_OFFSET_BCM_FLAGS_B = 0x0B;
+        static constexpr size_t ITEUFDRS_OFFSET_BCM_BYTE_9 = 0x09;
+        static constexpr size_t ITEUFDRS_OFFSET_BCM_FLAG_3FA = 0x3FA;
+        static constexpr size_t ITEUFDRS_OFFSET_BCM_BYTE_52 = 0x52;
+        static constexpr size_t ITEUFDRS_OFFSET_BCM_FLAG_29D = 0x29D;
+
+        bcmBase[ITEUFDRS_OFFSET_BCM_STATUS_76] &= 0xFE;
+
+        const BYTE controllerMode =
+            static_cast<BYTE>((bcmBase[ITEUFDRS_OFFSET_BCM_FLAGS_B] >> 3) & 7);
+        bcmBase[ITEUFDRS_OFFSET_BCM_FLAG_3FA] = 1;
+
+        if(controllerMode != 2) {
+            bcmBase[ITEUFDRS_OFFSET_BCM_BYTE_9] &= 0xF8;
+        }
+
+        const BYTE flag3f8 = bcmBase[ITEUFDRS_OFFSET_DEVICE_FLAG_3F8];
+        const BYTE byte52 = bcmBase[ITEUFDRS_OFFSET_BCM_BYTE_52];
+
+        if(((byte52 < 2) || (flag3f8 != 2)) && (flag3f8 != 0) && (controllerMode != 2)) {
+            bcmBase[ITEUFDRS_OFFSET_BCM_FLAG_29D] = 1;
+            instanceBytes[ITEUFDRS_OFFSET_INSTANCE_ERASE_MARKERS_FLAG_6B37] = 1;
+        } else {
+            if((byte52 > 1) && (flag3f8 == 2)) {
+                bcmBase[ITEUFDRS_OFFSET_DEVICE_FLAG_3F8] = 0;
+            }
+
+            if(bcmBase[ITEUFDRS_OFFSET_BCM_FLAG_29D] > 1) {
+                instanceBytes[ITEUFDRS_OFFSET_INSTANCE_ERASE_MARKERS_FLAG_6B37] = 0;
+            }
+        }
     }
 
     if(CreateSystemAndTestUnitReady(activeDeviceIndex, deviceHandleDword) == 0) {
