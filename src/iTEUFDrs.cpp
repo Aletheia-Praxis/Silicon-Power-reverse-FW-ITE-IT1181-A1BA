@@ -2652,15 +2652,16 @@ char OpenPhysicalDriveHandle(BYTE volumeIndex) {
     const BOOL ioctlOk = DeviceIoControl(
         hVolume, 0x2D1080, nullptr, 0, &queryOut, sizeof(queryOut), &bytesReturned, nullptr);
 
-    CloseHandle(hVolume);
-
     CloseDeviceHandle(volumeIndex);
 
     if(! ioctlOk) {
-        return 0;
+        HANDLE* handleStorage = reinterpret_cast<HANDLE*>(
+            instanceBytes + ITEUFDRS_OFFSET_VOLUME_DEVICE_HANDLE_BASE + volumeOffset);
+        *handleStorage = hVolume;
+        return 1;
     }
 
-    char physicalPath[32] = {};
+    char physicalPath[0x104] = {};
     sprintf_s(
         physicalPath,
         sizeof(physicalPath),
