@@ -121,6 +121,7 @@ target_link_libraries(URescue PRIVATE
     URescueCore
     kernel32
     advapi32
+    version
     setupapi
     winusb
 )
