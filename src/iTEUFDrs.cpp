@@ -2689,6 +2689,50 @@ char OpenPhysicalDriveHandle(BYTE volumeIndex) {
     return 1;
 }
 
+static BYTE OpenDriveHandle_40AF70(const BYTE activeDeviceIndex, BYTE* outVolumeKey) {
+    if(! g_iTEUFDrs_instance || ! outVolumeKey) {
+        return 0;
+    }
+
+    BYTE* instanceBytes = reinterpret_cast<BYTE*>(g_iTEUFDrs_instance);
+
+    const size_t activeDeviceOffset =
+        static_cast<size_t>(activeDeviceIndex) * ITEUFDRS_DEVICE_STRIDE_BYTES;
+    const BYTE* deviceStructBase = instanceBytes + activeDeviceOffset;
+
+    static constexpr size_t ITEUFDRS_OFFSET_DEVICE_PRIMARY_VOLUME_KEY = 0x9A6;
+    static constexpr size_t ITEUFDRS_OFFSET_DEVICE_ALTERNATE_VOLUME_KEY = 0x9A7;
+    static constexpr size_t ITEUFDRS_OFFSET_DEVICE_VOLUME_COUNT = 0x9AA;
+
+    BYTE volumeKey = deviceStructBase[ITEUFDRS_OFFSET_DEVICE_PRIMARY_VOLUME_KEY];
+
+    if(deviceStructBase[ITEUFDRS_OFFSET_DEVICE_VOLUME_COUNT] > 1) {
+        const size_t volumeOffset = static_cast<size_t>(volumeKey) * ITEUFDRS_VOLUME_STRIDE_BYTES;
+
+        static constexpr size_t ITEUFDRS_OFFSET_VOLUME_DRIVE_TYPE_DWORD = 0x1F;
+        const UINT driveType = *reinterpret_cast<const UINT*>(
+            instanceBytes + ITEUFDRS_OFFSET_VOLUME_DRIVE_LETTER_BASE + volumeOffset
+            + ITEUFDRS_OFFSET_VOLUME_DRIVE_TYPE_DWORD);
+
+        static constexpr UINT ITEUFDRS_DRIVE_TYPE_CDROM = 5;
+        if(driveType == ITEUFDRS_DRIVE_TYPE_CDROM) {
+            volumeKey = deviceStructBase[ITEUFDRS_OFFSET_DEVICE_ALTERNATE_VOLUME_KEY];
+        }
+    }
+
+    const bool usePhysicalHandle =
+        instanceBytes[ITEUFDRS_OFFSET_USE_PHYSICAL_DRIVE_HANDLE] != 0;
+
+    const BYTE openOk = usePhysicalHandle ? OpenPhysicalDriveHandle(volumeKey)
+                                          : OpenLogicalDriveHandle(volumeKey);
+    if(openOk == 0) {
+        return 0;
+    }
+
+    *outVolumeKey = volumeKey;
+    return 1;
+}
+
 // Removed duplicate functions - using stubs from above
 
 /*
@@ -4909,13 +4953,12 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
     BYTE* deviceStructBase = instanceBytes + activeDeviceOffset;
     bcmBase = deviceStructBase + ITEUFDRS_OFFSET_DEVICE_CTRL_BUFFER;
 
-    static constexpr size_t ITEUFDRS_OFFSET_DEVICE_SELECTED_VOLUME_KEY = 0x9A6;
-    volumeKey = deviceStructBase[ITEUFDRS_OFFSET_DEVICE_SELECTED_VOLUME_KEY];
-    const size_t volumeOffset = static_cast<size_t>(volumeKey) * ITEUFDRS_VOLUME_STRIDE_BYTES;
-
-    if(OpenLogicalDriveHandle(volumeKey) == 0) {
-        goto cleanup_exit;
+    if(OpenDriveHandle_40AF70(activeDeviceIndex, &volumeKey) == 0) {
+        goto cleanup_failure;
     }
+
+    hasOpenedDevice = true;
+    const size_t volumeOffset = static_cast<size_t>(volumeKey) * ITEUFDRS_VOLUME_STRIDE_BYTES;
 
     HANDLE deviceHandle = *reinterpret_cast<HANDLE*>(
         instanceBytes + ITEUFDRS_OFFSET_VOLUME_DEVICE_HANDLE_BASE + volumeOffset);
@@ -4923,7 +4966,6 @@ BYTE RunRepairDevice_Orchestrator_40EC60() {
         goto cleanup_failure;
     }
 
-    hasOpenedDevice = true;
     deviceHandleDword = static_cast<DWORD>((UINT_PTR) deviceHandle);
     bcmBase = deviceStructBase + ITEUFDRS_OFFSET_DEVICE_CTRL_BUFFER;
 
